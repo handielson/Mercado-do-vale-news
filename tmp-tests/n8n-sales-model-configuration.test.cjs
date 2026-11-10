@@ -1,5 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {priceCatalogFixture}=require('./n8n-sales-price-catalog-fixture.cjs');
 const {extractCatalogPreferences}=require('../services/autoresponderCatalogPreferences.cjs');
 const original=JSON.parse(fs.readFileSync(process.env.MDV_N8N_SALES_SNAPSHOT||'.local/n8n-payjoy-continuity-active-readback.json','utf8'));
 const migration=process.env.MDV_MODEL_CONFIGURATION_OLD==='1'?{patchWorkflow:x=>structuredClone(x),SCOPED_NODES:[],MARKER:'sales-model-configuration-v1'}:require('./n8n-sales-model-configuration.cjs');
@@ -10,7 +11,7 @@ const clone=x=>structuredClone(x);
 function execute(name,input={},sources={},state={},all=[input]){
  const code=nodes.get(name)?.parameters.jsCode;assert.equal(typeof code,'string',name);
  const lookup=key=>{assert.ok(Object.hasOwn(sources,key),`Unmocked node ${key} from ${name}`);const items=Array.isArray(sources[key])?sources[key]:[sources[key]];return {first:()=>({json:items[0]}),all:()=>items.map(json=>({json})),item:{json:items[0]}};};
- return new Function('$json','$input','$','$getWorkflowStaticData','$execution','$runIndex','fetch',code)(input,{all:()=>all.map(json=>({json})),first:()=>({json:input})},lookup,()=>state,{id:'synthetic'},0,async()=>({ok:false,json:async()=>({})}));
+ return new Function('$json','$input','$','$getWorkflowStaticData','$execution','$runIndex','fetch','helpers',code)(input,{all:()=>all.map(json=>({json})),first:()=>({json:input})},lookup,()=>state,{id:'synthetic'},0,async()=>({ok:false,json:async()=>({})}),priceCatalogFixture(state));
 }
 function product(id,model,ram=6,storage=128,color='Preto',extra={}){
  return {id,model_id:model,model_name:model,name:model+' '+color,brand:'Xiaomi',category_id:category,status:'active',stock_quantity:1,price_retail:129900,specs:{ram:ram+'GB',storage:storage+'GB',color,network:/5G/i.test(model)?'5G':'4G',rede:/5G/i.test(model)?'5G':'4G'},slug:id,images:[],...extra};

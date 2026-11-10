@@ -1,5 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {priceCatalogFixture}=require('./n8n-sales-price-catalog-fixture.cjs');
 assert.ok(process.env.MDV_PAYJOY_WORKFLOW_SNAPSHOT,'MDV_PAYJOY_WORKFLOW_SNAPSHOT must identify the exact candidate');
 const original=JSON.parse(fs.readFileSync(process.env.MDV_PAYJOY_WORKFLOW_SNAPSHOT,'utf8'));
 const migration=process.env.MDV_TEST_OLD==='1'?{patchWorkflow:x=>structuredClone(x)}:require('./n8n-attendance-sales-fixes.cjs');
@@ -11,7 +12,7 @@ async function run(step,text,semantic={decision:'field_value',confidence:.99}){
  const draft={productId:'fixture',name:'Fixture',memory:'8GB/256GB',color:'Roxo',price:'R$ 1.224,00',unitPriceCents:122400,quantity:1,fulfillment:'delivery',paymentMethod:'pix',customer:{fullName:'Cliente Teste',cpf:'52998224725',birthdate:'01/01/1990'}};
  const state={salesPostList:{[jid]:{flow:'sales_post_list',step,expiresAt:Date.now()+60000,options:[option],orderDraft:draft}}};
  const source={remoteJid:jid,conversation:text,collectionReply:semantic};
- const result=(await new Function('$json','$','$getWorkflowStaticData','fetch',code)({},()=>({first:()=>({json:source})}),()=>state,async()=>{throw new Error('External request blocked by offline fixture');}))[0]?.json;
+ const result=(await new Function('$json','$','$getWorkflowStaticData','fetch','helpers',code)({},()=>({first:()=>({json:source})}),()=>state,async()=>{throw new Error('External request blocked by offline fixture');},priceCatalogFixture(state)))[0]?.json;
  return {result,state:state.salesPostList[jid],draft:state.salesPostList[jid]?.orderDraft};
 }
 test('patch is pure/idempotent and preserves all graph and nodes except existing collection owner',()=>{

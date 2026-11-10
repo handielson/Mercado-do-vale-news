@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const { priceCatalogFixture } = require('./n8n-sales-price-catalog-fixture.cjs');
 const path = require('node:path');
 const { patchWorkflow, restorePersistenceCode } = require('./n8n-sales-conversation-contract.cjs');
 const snapshotPath = process.env.MDV_N8N_SALES_SNAPSHOT || path.join(__dirname, '../.local/n8n-sales-current.json');
@@ -27,7 +28,7 @@ async function post(step, text, semantic = null, extra = {}) {
   const data = { salesPostList: { [JID]: fixture } };
   const source = { remoteJid: JID, conversation: text, collectionReply: semantic };
   const $ = (name) => ({ first: () => ({ json: name === 'Parse Classificacao' ? source : {} }) });
-  const result = await new Function('$json', '$', '$getWorkflowStaticData', nodeCode('Vendas - Verificar Pos Lista'))({}, $, () => data);
+  const result = await new Function('$json', '$', '$getWorkflowStaticData', 'helpers', nodeCode('Vendas - Verificar Pos Lista'))({}, $, () => data, priceCatalogFixture(data));
   return { result: result[0]?.json, state: data.salesPostList[JID], data, source };
 }
 function restore(response, prepared, storage = {}) {
@@ -140,7 +141,7 @@ test('CAS conflict rehydrates canonical state and preserves new inbound for boun
   assert.notEqual(storage.salesPostList[JID], canonical);
   // Rebase must use the replay's source/revision, not the initial Parse Classificacao payload.
   const $ = () => ({ first: () => ({ json: { conversation: 'old', remoteJid: JID, conversationStateRevision: 1 } }) });
-  const rerun = await new Function('$json', '$', '$getWorkflowStaticData', nodeCode('Vendas - Verificar Pos Lista'))(output[0].json, $, () => storage);
+  const rerun = await new Function('$json', '$', '$getWorkflowStaticData', 'helpers', nodeCode('Vendas - Verificar Pos Lista'))(output[0].json, $, () => storage, priceCatalogFixture(storage));
   assert.equal(rerun[0].json.conversationStateRevision, 2);
   assert.equal(rerun[0].json.collectionInterruption, 'product');
 });
@@ -158,7 +159,7 @@ test('FIFO name then CPF rebases the newer field without reusing semantics of th
   const rebased = restore({ control: { conversation_state_revision: 2, conversation_state: { salesPostList: first.state } },
     conversationStateWrite: { applied: false, reason: 'revision_conflict' } }, newer);
   const $ = () => ({ first: () => ({ json: newer }) });
-  const output = await new Function('$json', '$', '$getWorkflowStaticData', nodeCode('Vendas - Verificar Pos Lista'))(rebased.output[0].json, $, () => rebased.storage);
+  const output = await new Function('$json', '$', '$getWorkflowStaticData', 'helpers', nodeCode('Vendas - Verificar Pos Lista'))(rebased.output[0].json, $, () => rebased.storage, priceCatalogFixture(rebased.storage));
   assert.equal(output[0].json.salesPostListStep, 'awaiting_customer_birthdate');
   assert.equal(output[0].json.conversationStateRevision, 2);
   assert.equal(rebased.storage.salesPostList[JID].orderDraft.customer.fullName, 'Cliente Teste Exemplo');
@@ -178,7 +179,7 @@ test('rejected terminal attempt cannot hand off stale summary after rebase requi
     'handoffRequested', 'productSpecialistHandoffRequested', 'orderDraft', 'salesPostListStep']) assert.equal(replay[key], undefined, key);
   const $ = () => ({ first: () => ({ json: staleAttempt }) });
   const postCode = combined.nodes.find((node) => node.name === 'Vendas - Verificar Pos Lista').parameters.jsCode;
-  const output = await new Function('$json', '$', '$getWorkflowStaticData', postCode)(replay, $, () => restored.storage);
+  const output = await new Function('$json', '$', '$getWorkflowStaticData', 'helpers', postCode)(replay, $, () => restored.storage, priceCatalogFixture(restored.storage));
   assert.equal(output[0].json.salesPostListStep, 'awaiting_customer_birthdate');
   assert.equal(output[0].json.salesOrderNeedsHandoff, undefined);
   assert.equal(output[0].json.salesOrderSummary, undefined);

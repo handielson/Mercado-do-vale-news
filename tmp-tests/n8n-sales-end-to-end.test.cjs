@@ -5,6 +5,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const { priceCatalogFixture } = require('./n8n-sales-price-catalog-fixture.cjs');
 const snapshot = process.env.MDV_N8N_SALES_SNAPSHOT;
 assert.ok(snapshot, 'MDV_N8N_SALES_SNAPSHOT must identify the exact exported candidate; no silent skip or auto-patching');
 const workflow = JSON.parse(fs.readFileSync(snapshot, 'utf8'));
@@ -19,8 +20,8 @@ function execute(name, input = {}, sources = {}, state = {}, all = [input]) {
     const values = Array.isArray(sources[source]) ? sources[source] : [sources[source]];
     return { first: () => ({ json: values[0] }), all: () => values.map(json => ({ json })), item: { json: values[0] } };
   };
-  return new Function('$json', '$input', '$', '$getWorkflowStaticData', '$execution', '$runIndex', code)(
-    input, { all: () => all.map(json => ({ json })), first: () => ({ json: input }) }, lookup, () => state, { id: '900001' }, 0);
+  return new Function('$json', '$input', '$', '$getWorkflowStaticData', '$execution', '$runIndex', 'helpers', code)(
+    input, { all: () => all.map(json => ({ json })), first: () => ({ json: input }) }, lookup, () => state, { id: '900001' }, 0, priceCatalogFixture(state, products));
 }
 const product = (id, model, ram, storage, color, price) => ({ id, model_id: model, model_name: model,
   name: `${model} ${color}`, brand: 'Xiaomi', status: 'active', stock_quantity: 1, price_retail: price,
@@ -255,11 +256,11 @@ test('rebase retries are bounded and missing acknowledgement fails closed', () =
   }
 });
 
-test('installment resolver applies fees to selected exact price', () => {
+test('installment resolver applies fees to selected exact price', async () => {
   const state = collecting('awaiting_payment_method');
   const source = { remoteJid: jid, orderDraft: state.salesPostList[jid].orderDraft, needsPaymentOptionsLookup: true };
   const fees = Array.from({ length: 12 }, (_, index) => ({ channel: 'presencial', installments: index + 1, applied_fee_pct: 10 }));
-  const result = execute('Vendas - Resolver Parcelamento', {}, { 'Vendas - Verificar Pos Lista': source }, state, fees)[0].json;
+  const result = (await execute('Vendas - Resolver Parcelamento', {}, { 'Vendas - Verificar Pos Lista': source }, state, fees))[0].json;
   assert.equal(result.orderDraft.unitPriceCents, 122400);
   assert.equal(result.orderDraft.cardBaseCents, 122400);
   assert.equal(result.orderDraft.cardInstallmentOptions.length, 12);

@@ -1,4 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const {priceCatalogFixture}=require('./n8n-sales-price-catalog-fixture.cjs');
 const input=JSON.parse(fs.readFileSync(process.env.MDV_N8N_SALES_SNAPSHOT || '.local/n8n-sales-current.json','utf8'));
 const variant=require('./n8n-sales-variant-contract.cjs'),conversation=require('./n8n-sales-conversation-contract.cjs'),order=require('./n8n-sales-order-contract.cjs');
 const w=order.patchWorkflow(conversation.patchWorkflow(variant.patchWorkflow(input)));
@@ -9,7 +10,7 @@ async function finish(step='awaiting_customer_phone_confirm',data=draft()) {
   const option={number:1,name:'Modelo de teste',memory:'8GB/256GB',price:'R$ 1.224,00',colors:[{productId:'fixture-purple',color:'Roxo',memory:'8GB/256GB',price:'R$ 1.224,00',priceCents:122400}]};
   const state={salesPostList:{[jid]:{flow:'sales_post_list',step,expiresAt:Date.now()+60000,options:[option],orderDraft:data}}};
   const source={remoteJid:jid,conversation:'Sim'};
-  return (await new Function('$json','$','$getWorkflowStaticData',code('Vendas - Verificar Pos Lista'))({},()=>({first:()=>({json:source})}),()=>state))[0].json;
+  return (await new Function('$json','$','$getWorkflowStaticData','helpers',code('Vendas - Verificar Pos Lista'))({},()=>({first:()=>({json:source})}),()=>state,priceCatalogFixture(state)))[0].json;
 }
 test('registration prepares a team review, not an order, and keeps private fields out of admin summary',async()=>{
   const result=await finish();

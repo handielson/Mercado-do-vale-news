@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const { priceCatalogFixture } = require('./n8n-sales-price-catalog-fixture.cjs');
 const { patchWorkflow, resolveVariant } = require('./n8n-sales-variant-contract.cjs');
 const snapshot = process.env.MDV_SALES_VARIANT_SNAPSHOT || process.env.MDV_N8N_SALES_SNAPSHOT || '.local/91688751/workflow-41075.json';
 const before = JSON.parse(fs.readFileSync(snapshot));
@@ -26,7 +27,7 @@ const rows = [product('black128','6GB','128GB','Preto',99900),product('purple256
 async function select(state,text,extra={}) {
   state.salesPostList[jid].selectedOptionNumber ||= 1;
   const source = {remoteJid:jid,conversation:text,salesFlowAction:'indefinido',...extra};
-  const result = (await new Function('$json','$input','$getWorkflowStaticData','$',code('Vendas - Verificar Pos Lista'))({}, {},()=>state,name=>{assert.equal(name,'Parse Classificacao');return {first:()=>({json:source})}}))[0].json;
+  const result = (await new Function('$json','$input','$getWorkflowStaticData','$', 'helpers', code('Vendas - Verificar Pos Lista'))({}, {},()=>state,name=>{assert.equal(name,'Parse Classificacao');return {first:()=>({json:source})}},priceCatalogFixture(state,rows)))[0].json;
   return result;
 }
 test('new catalog numbers each model and physical memory separately and consolidates only colors',()=>{
