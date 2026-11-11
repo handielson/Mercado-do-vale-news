@@ -1,6 +1,6 @@
 # v1.2.844-alerta-bot-por-incidente
 
-Data: 11/11/2026. Branch: `main`. Status: **pendente** (API seletiva + workflow de erros do n8n). Site segue a v1.2.843.
+Data: 11/11/2026. Branch: `main`. Tag: `v1.2.844-alerta-bot-por-incidente` (`8587b23c`). Status: **publicada** (API seletiva, backup `/var/www/mdv-api/backups/evolution-webhook-relay-1794405638723`; workflow de erros `mdvBotError2026a` 7fb811e4…). Site segue a v1.2.843.
 Alerta de falha do bot: um por incidente, falhas iguais agrupadas e resumo quando param. Registro: `docs/versoes/2026-11-11-v1.2.844-alerta-bot-por-incidente.md`.
 
 ---

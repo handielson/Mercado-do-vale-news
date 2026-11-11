@@ -1,7 +1,7 @@
 {
   "version": "v1.2.844-alerta-bot-por-incidente",
   "date": "2026-11-11",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.844-alerta-bot-por-incidente",
   "release_vps": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
@@ -42,7 +42,8 @@
   ],
   "validations": [
     "node --test bot-error-alerts + evolution-webhook-relay (7/7)",
-    "dry run do workflow de erros contra produção: só os nós do alerta mudam"
+    "dry run do workflow de erros contra produção: só os nós do alerta mudam",
+    "após publicar: entity e histórico do workflow de erros = candidato (7fb811e4…); API respondeu ao agrupamento"
   ],
   "site_release": {
     "status": "publicada",
@@ -52,16 +53,22 @@
     "note": "site sem mudança nesta versão (segue a release da v1.2.843)"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "deploy seletivo --evolution-webhook-relay-only (leva botErrorAlerts.cjs)"
+    "status": "publicada",
+    "deployed_at": "2026-11-11T14:00:40Z",
+    "service": "mdv-api",
+    "backup": "/var/www/mdv-api/backups/evolution-webhook-relay-1794405638723",
+    "note": "deploy seletivo --evolution-webhook-relay-only: services/botErrorAlerts.cjs + entradas do servidor; /status 200; relay seguiu ativo; POST /n8n-bot/error-alerts testado pela URL pública com lista vazia de destinatários (nenhuma mensagem enviada)"
   },
   "nginx_release": {
     "status": "sem mudança",
     "note": ""
   },
   "n8n_release": {
-    "status": "pendente",
-    "workflow": "mdvBotError2026a"
+    "status": "publicada",
+    "workflow": "mdvBotError2026a",
+    "before": "bdc4588efd428d584b3ad2eb441e97c1073ab029adca94a98f604f637769f70f",
+    "after": "7fb811e44a0856e4935edf1dedb06459e3cd25e1bba236c4cb0b09260e4cf072",
+    "note": "CAS em workflow_entity + histórico da versão ativa, sem reiniciar o n8n"
   },
   "evolution_release": {
     "status": "publicada",
