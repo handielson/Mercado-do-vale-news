@@ -231,3 +231,50 @@ test('escolha pelo número ou nome retoma fotos por cor e rascunho sem perder a 
     assert.equal(selected.orderDraft.unitPriceCents, 120000);
   }
 });
+
+test('nova aprovação concreta durante escolha de cor cede ao pagamento mesmo com classificação de item incorreta', async () => {
+  const rows = [product('report-white'), product('report-black', 'Redmi 15', 120000, 'Preto')];
+  const state = { payjoyByJid: { [jid]: { status: 'approved', approvedAmountCents: 140000, entryPercentBp: 3000,
+    updatedAt: Date.now(), expiresAt: Date.now() + 86400000 } } };
+  await list(rows, { state });
+  const choose = { remoteJid: jid, conversation: '1', salesFlowAction: 'escolher_item', salesFlowItemNumber: 1 };
+  await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': choose } });
+  assert.equal(state.salesPostList[jid].step, 'awaiting_color');
+  const pendingChoice = structuredClone(state.salesPostList[jid]);
+  const reported = { remoteJid: jid, conversation: 'Fui aprovado na PayJoy em R$ 1.400,00 com entrada de 30%.',
+    salesFlowAction: 'escolher_item', salesFlowItemNumber: 1 };
+  const yielded = (await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': reported } }))[0].json;
+  assert.equal(yielded.salesPostListHandled, false);
+  assert.equal(yielded.metaPayjoyYield, true);
+  assert.deepEqual(state.salesPostList[jid], pendingChoice, 'não muda a seleção antes de validar o novo cálculo');
+  const resolved = (await execute('Resolver Acao de Conversacao', { input: yielded, state, sources: { 'switc Mensagens': reported, 'Parse Classificacao': reported } }))[0].json;
+  assert.equal(resolved.paymentQuestion, true);
+  const payment = (await execute('Pagamento - Politica', { state,
+    input: { store_address: 'Rua de Teste, 100' }, sources: { 'Resolver Acao de Conversacao': resolved },
+  }))[0].json;
+  assert.equal(payment.payjoyCalculation?.amountCents, 140000);
+  assert.equal(payment.payjoyCalculation?.entryCents, 42000);
+  const repeated = await list(rows, { state, input: payment });
+  assert.equal(repeated.state.salesPostList[jid].step, 'awaiting_product_choice');
+  assert.equal(repeated.state.salesPostList[jid].options.length, 1);
+  assert.ok(repeated.composed.output.endsWith(lastMessage));
+});
+
+test('aprovação hipotética com valores durante escolha de cor não cede nem simula cálculo', async () => {
+  const rows = [product('hypothetical-white'), product('hypothetical-black', 'Redmi 15', 120000, 'Preto')];
+  const state = { payjoyByJid: { [jid]: { status: 'approved', approvedAmountCents: 140000, entryPercentBp: 3000,
+    updatedAt: Date.now(), expiresAt: Date.now() + 86400000 } } };
+  await list(rows, { state });
+  await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': {
+    remoteJid: jid, conversation: '1', salesFlowAction: 'escolher_item', salesFlowItemNumber: 1,
+  } } });
+  for (const conversation of ['Se eu for aprovado na PayJoy em R$ 1.400,00 com entrada de 30%?',
+    'Caso a PayJoy aprove R$ 1.400,00 com entrada de 30%, qual cor tem?']) {
+    const result = (await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': {
+      remoteJid: jid, conversation, salesFlowAction: 'escolher_item', salesFlowItemNumber: 1,
+    } } }))[0].json;
+    assert.notEqual(result.metaPayjoyYield, true, conversation);
+    assert.equal(result.payjoyCalculation, undefined);
+    assert.equal(state.salesPostList[jid].step, 'awaiting_color');
+  }
+});

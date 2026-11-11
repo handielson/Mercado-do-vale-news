@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const MARK = 'payjoy-approved-list-v1';
 const ROUTER = 'PayJoy - Lista aprovada?';
 const BYPASS = 'PayJoy - Busca sem preferencias?';
-const NODES = ['Vendas - Preparar Busca', 'Vendas - Contexto Produtos', 'Vendas - Catalogo pronto?', 'Vendas - Catalogo sem IA', 'Pagamento - Politica'];
+const NODES = ['Vendas - Preparar Busca', 'Vendas - Contexto Produtos', 'Vendas - Catalogo pronto?', 'Vendas - Catalogo sem IA', 'Pagamento - Politica', 'Vendas - Verificar Pos Lista'];
 
 function completeCalculation(source) {
   const c = source?.payjoyCalculation;
@@ -29,6 +29,30 @@ function patchFreshResult(params) {
   params.jsCode = code;
 }
 
+function patchApprovalContinuation(params, paymentCode) {
+  const reportStart = paymentCode.indexOf('function payjoyReportedOutcomeV1(raw){');
+  const reportEnd = paymentCode.indexOf('const payjoyReportedV1 =', reportStart);
+  const parseStart = paymentCode.indexOf('const parsePayjoyTextV4=function');
+  const parseEnd = paymentCode.indexOf('const payjoyReplyV4=', parseStart);
+  assert.ok(reportStart >= 0 && reportEnd > reportStart && parseStart >= 0 && parseEnd > parseStart, 'Interpretadores canônicos PayJoy alterados');
+  let code = params.jsCode;
+  code = once(code, ' const currentText=String(source.conversation || source.mensagem || \'\');',
+    '// ' + MARK + ':approval-continuation - concrete new approvals interrupt a pending color choice.\n' +
+    paymentCode.slice(reportStart, reportEnd) + '\n' + paymentCode.slice(parseStart, parseEnd) +
+    ' const currentText=String(source.conversation || source.mensagem || \'\');');
+  code = once(code, ' if(!humanOrOther && (validReply || isPayjoyEntryQuestionV2(currentText,payjoy)))', ` const approvalReportV1=payjoyReportedOutcomeV1(currentText);
+ const approvalFieldsV1=parsePayjoyTextV4(currentText, '');
+ const approvalAtV1=Number(payjoy?.updatedAt || 0), approvalNowV1=Date.now();
+ const approvalContextV1=payjoy && ['approved','awaiting_result'].includes(payjoy.status)
+   && Number.isFinite(approvalAtV1) && approvalAtV1>0 && approvalNowV1>=approvalAtV1
+   && approvalNowV1-approvalAtV1<30*86400000 && (!payjoy.expiresAt || Number(payjoy.expiresAt)>approvalNowV1);
+ const newApprovalV1=approvalReportV1.status==='approved' && (approvalFieldsV1.ambiguous
+   || approvalFieldsV1.approvedAmount!==null || approvalFieldsV1.entryPercent!==null)
+   && (approvalContextV1 || /\\bp\\w{1,3}joy\\b/i.test(currentText));
+ if(!humanOrOther && (newApprovalV1 || validReply || isPayjoyEntryQuestionV2(currentText,payjoy)))`);
+  params.jsCode = code;
+}
+
 function patchWorkflow(workflow) {
   const w = structuredClone(workflow);
   const node = name => {
@@ -41,14 +65,17 @@ function patchWorkflow(workflow) {
   if ([...marked, ...routers].every(Boolean)) { validate(w); return w; }
   // The first live smoke exposed an existing first-approval result not forwarded by payment.
   // Upgrade only that known v1 layout; CAS still pins the exact deployed workflow.
-  if (marked.slice(0, 4).every(Boolean) && !marked[4] && routers.every(Boolean)) {
-    const params = node(NODES[0]).parameters;
-    params.jsCode = once(params.jsCode, '&& /^A PayJoy aprovou /.test(String(source.output || \'\'))',
-      '&& /(?:^|\\|\\|\\||\\[\\[MSG\\]\\])A PayJoy aprovou /.test(String(source.output || \'\'))');
-    const condition = node(ROUTER).parameters.conditions.conditions[0];
-    assert.ok(condition.leftValue.includes('&& /^A PayJoy aprovou /'), 'Guard de aprovação alterado');
-    condition.leftValue = '={{(' + completeCalculation.toString() + ')($json)}}';
-    patchFreshResult(node(NODES[4]).parameters);
+  if (marked.slice(0, 4).every(Boolean) && routers.every(Boolean)) {
+    if (!marked[4]) {
+      const params = node(NODES[0]).parameters;
+      params.jsCode = once(params.jsCode, '&& /^A PayJoy aprovou /.test(String(source.output || \'\'))',
+        '&& /(?:^|\\|\\|\\||\\[\\[MSG\\]\\])A PayJoy aprovou /.test(String(source.output || \'\'))');
+      const condition = node(ROUTER).parameters.conditions.conditions[0];
+      assert.ok(condition.leftValue.includes('&& /^A PayJoy aprovou /'), 'Guard de aprovação alterado');
+      condition.leftValue = '={{(' + completeCalculation.toString() + ')($json)}}';
+      patchFreshResult(node(NODES[4]).parameters);
+    }
+    if (!marked[5]) patchApprovalContinuation(node(NODES[5]).parameters, node(NODES[4]).parameters.jsCode);
     validate(w);
     return w;
   }
@@ -140,6 +167,7 @@ if (source.payjoyApprovedListV1 === true && catalog) return [{ json: { ...source
   w.connections[NODES[0]].main = [[edge(BYPASS)]];
   w.connections[BYPASS] = { main: [[edge('Vendas - Buscar Produtos')], [edge('Vendas - Persistir Preferencias')]] };
   patchFreshResult(node(NODES[4]).parameters);
+  patchApprovalContinuation(node(NODES[5]).parameters, node(NODES[4]).parameters.jsCode);
   validate(w);
   return w;
 }
