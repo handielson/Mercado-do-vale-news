@@ -59,8 +59,10 @@ async function deployEvolutionWebhookRelay({ appDir, apiProc, exec, root, read, 
       healthy = /"ok":\s*true/.test(await exec('curl -s -m 5 http://127.0.0.1:4000/status || true'));
     }
     if (!healthy) throw new Error('API não ficou saudável depois do reinício');
-    const relay = await exec('curl -s -m 5 -o /dev/null -w "%{http_code}" -X POST -H "content-type: application/json" -d "{}" http://127.0.0.1:4000/webhooks/evolution/whatsapp || true');
-    if (!/^4\d\d$/.test(relay.trim())) throw new Error(`Rota do relay não respondeu como esperado (${relay.trim()})`);
+    // Recibo de entrega de teste: tem de ser descartado pela API (não chega ao n8n).
+    const probe = JSON.stringify({ event: 'messages.update', instance: 'botmercadodovale', data: { keyId: 'deploy-probe', status: 'DELIVERY_ACK' } });
+    const relay = await exec(`curl -s -m 5 -X POST -H "content-type: application/json" -d '${probe}' http://127.0.0.1:4000/webhooks/evolution/whatsapp || true`);
+    if (!/"relayed":\s*false/.test(relay)) throw new Error(`Rota do relay não respondeu como esperado (${relay.trim().slice(0, 120)})`);
     console.log(`Evolution webhook relay: ${changes.map(change => change.remote).join(', ')}`);
     console.log(`Evolution webhook relay backup: ${backupDir}`);
   } catch (error) {
