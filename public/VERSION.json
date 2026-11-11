@@ -1,10 +1,10 @@
 {
   "version": "v1.2.840-prompt-midia-promocao",
   "date": "2026-11-11",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.840-prompt-midia-promocao",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261111-113954",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Admin: na Mídia da promoção da versão, quadro \"Prompt para a IA criar as imagens\" com botão Copiar. O texto é montado a partir da promoção atual (produto, versão, cores, de/por, desconto, validade) e traz o tamanho exato da imagem 1080×1350, do banner 1920×823 e do vídeo vertical 1080×1920. Sem mudança na API/n8n.",
   "gestao_mdv_android": {
@@ -26,7 +26,7 @@
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     }
   },
-  "site_source_base": "8d757b87",
+  "site_source_base": "e89f3744",
   "changed_files": [
     "utils/promoMediaPrompt.js",
     "components/products/ModelVersionFinancials.tsx",
@@ -36,10 +36,15 @@
     "docs/versoes/2026-11-11-v1.2.840-prompt-midia-promocao.md"
   ],
   "validations": [
-    "node --test tmp-tests/promo-media-prompt.test.mjs tmp-tests/model-version-financials.test.mjs (12/12)"
+    "node --test tmp-tests/promo-media-prompt.test.mjs tmp-tests/model-version-financials.test.mjs (12/12)",
+    "vite build OK; bundle sem rastros de Supabase",
+    "deploy-vps-site (SKIP_BUILD do commit e89f3744): Site release active /var/www/mdv-site/releases/20261111-113954",
+    "https://www.mercadodovale.com.br/ HTTP 200; /VERSION.json = v1.2.840; chunk ModelProductAggregatorPage contém o quadro do prompt"
   ],
   "site_release": {
-    "status": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261111-113954",
+    "published_at": "2026-11-11T11:39:54-03:00",
     "previous": "/var/www/mdv-site/releases/20261111-001422-v1-2-839-bot-nfc-na-lista"
   },
   "api_release": {

@@ -1,6 +1,6 @@
 # v1.2.840-prompt-midia-promocao
 
-Data: 11/11/2026. Branch: `main`. Status: **pendente** (site). Só site/admin; API e n8n seguem a v1.2.839.
+Data: 11/11/2026. Branch: `main`. Tag: `v1.2.840-prompt-midia-promocao`. Status: **publicada** (site `/var/www/mdv-site/releases/20261111-113954`, commit `e89f3744`). Só site/admin; API e n8n seguem a v1.2.839.
 Mídia da promoção ganhou o "Prompt para a IA criar as imagens" com botão Copiar, montado a partir da promoção atual e com os tamanhos exatos (1080×1350, 1920×823, 1080×1920). Registro: `docs/versoes/2026-11-11-v1.2.840-prompt-midia-promocao.md`.
 
 ---
