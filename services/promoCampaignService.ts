@@ -47,6 +47,11 @@ export interface ProductPromotionSummary {
   media: { image: boolean; video: boolean; banner: boolean };
 }
 
+/** Atalho de edição: a promoção da versão é editada na Página do Produto (rola até a versão). */
+export const productPromotionEditPath = (promo: Pick<ProductPromotionSummary, 'modelId' | 'firstProductId'>) => promo.modelId
+  ? `/admin/products/models/${promo.modelId}#promo-${promo.firstProductId}`
+  : `/admin/products/${promo.firstProductId}`;
+
 export interface PromoCampaignOverview {
   ok: true;
   campaign: PromoCampaign;

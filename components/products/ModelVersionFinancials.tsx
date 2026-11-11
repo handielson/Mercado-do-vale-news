@@ -39,7 +39,7 @@ const MEDIA_SLOTS = [
   // Tamanhos: imagem no formato de post (4:5) do Instagram/WhatsApp; vídeo vertical (9:16) de Status/Reels;
   // banner no formato do carrossel da home (aspect-[21/9] em BannerCarousel.tsx).
   { key: 'image_url', label: 'Imagem da promoção', hint: 'WhatsApp, Status, Instagram e bot', size: promoMediaSizeLabel('image'), accept: 'image/png,image/jpeg,image/webp,image/gif' },
-  { key: 'video_url', label: 'Vídeo da promoção', hint: 'Status, Instagram e bot', size: promoMediaSizeLabel('video'), accept: 'video/mp4' },
+  { key: 'video_url', label: 'Vídeo da promoção (Stories)', hint: 'Formato Stories do Instagram e Status do WhatsApp', size: promoMediaSizeLabel('video'), accept: 'video/mp4' },
   { key: 'banner', label: 'Banner da home', hint: 'Carrossel da página inicial, durante a promoção', size: promoMediaSizeLabel('banner'), accept: 'image/png,image/jpeg,image/webp,image/gif' },
 ] as const;
 

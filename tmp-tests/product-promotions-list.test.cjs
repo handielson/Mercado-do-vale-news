@@ -45,7 +45,9 @@ test('API, tela e deploy ligados', () => {
   assert.match(server, /selectCurrentProductPromotions\(rows\)/);
   const page = fs.readFileSync('pages/admin/promotions/PromotionsPage.tsx', 'utf8');
   assert.match(page, /promoCampaignService\.listProductPromotions\(\)/);
-  assert.match(page, /\/admin\/products\/models\/\$\{promo\.modelId\}#promo-\$\{promo\.firstProductId\}/);
+  assert.match(page, /productPromotionEditPath\(promo\)/);
+  const promoService = fs.readFileSync('services/promoCampaignService.ts', 'utf8');
+  assert.match(promoService, /\/admin\/products\/models\/\$\{promo\.modelId\}#promo-\$\{promo\.firstProductId\}/);
   assert.match(page, /<ProductPromotionsSection \/>/);
   const version = fs.readFileSync('components/products/ModelVersionFinancials.tsx', 'utf8');
   assert.match(version, /window\.location\.hash\.replace\(\/\^#promo-\/, ''\)/);

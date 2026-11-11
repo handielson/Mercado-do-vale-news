@@ -28,6 +28,8 @@ import {
     type MarketingJson,
 } from '../../../../services/marketingApprovalService';
 import { metaMarketingConnectionService } from '../../../../services/metaMarketingConnectionService';
+import MarketingLiveNowPanel from './MarketingLiveNowPanel';
+import { FAILURE_ARCHIVE_DAYS, isArchivedFailure } from '../../../../utils/marketingLiveNow.js';
 
 type ApprovalFilter = MarketingApprovalStatus | 'all';
 
@@ -312,13 +314,21 @@ export default function MarketingApprovalCenterPanel() {
     const [note, setNote] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [retryingId, setRetryingId] = useState<string | null>(null);
+    // marketing-live-now-v1: falhas com mais de 30 dias ficam arquivadas (fora das abas e dos contadores).
+    const [archivedFailures, setArchivedFailures] = useState(0);
+    const [showArchived, setShowArchived] = useState(false);
 
     const load = useCallback(async (quiet = false, requestedFilter: ApprovalFilter = filter) => {
         if (!quiet) setLoading(true);
         try {
-            const response = await marketingApprovalService.list(requestedFilter);
+            const [response, failed] = await Promise.all([
+                marketingApprovalService.list(requestedFilter),
+                requestedFilter === 'failed' ? null : marketingApprovalService.list('failed').catch(() => null),
+            ]);
             setRequests(response.items || []);
             setCounts(response.counts || {});
+            const failedItems = requestedFilter === 'failed' ? response.items || [] : failed?.items || [];
+            setArchivedFailures(failedItems.filter(item => isArchivedFailure(item)).length);
         } catch (error: any) {
             toast.error(error?.message || 'Não foi possível carregar as aprovações.');
         } finally {
@@ -335,9 +345,10 @@ export default function MarketingApprovalCenterPanel() {
     const summary = useMemo(() => ({
         pending: Number(counts.pending || 0),
         running: Number(counts.approved || 0) + Number(counts.executing || 0),
-        failed: Number(counts.failed || 0),
+        failed: Math.max(0, Number(counts.failed || 0) - archivedFailures),
         succeeded: Number(counts.succeeded || 0),
-    }), [counts]);
+    }), [counts, archivedFailures]);
+    const visibleRequests = filter === 'failed' && !showArchived ? requests.filter(request => !isArchivedFailure(request)) : requests;
 
     const openDecision = (request: MarketingApprovalRequest, nextDecision: MarketingApprovalDecision) => {
         setDecisionTarget(request);
@@ -414,6 +425,9 @@ export default function MarketingApprovalCenterPanel() {
                 </div>
             </div>
 
+            <MarketingLiveNowPanel />
+
+            <h3 className="text-sm font-black uppercase tracking-wide text-slate-500">Fila de aprovações</h3>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 {[
                     { label: 'Aguardando você', value: summary.pending, icon: Clock3, color: 'text-amber-600 bg-amber-50' },
@@ -432,14 +446,21 @@ export default function MarketingApprovalCenterPanel() {
             <div className="flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
                 {FILTERS.map((item) => (
                     <button key={item.value} onClick={() => setFilter(item.value)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition ${filter === item.value ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
-                        {item.label}{item.value !== 'all' && counts[item.value] !== undefined ? ` (${counts[item.value]})` : ''}
+                        {item.label}{item.value !== 'all' && counts[item.value] !== undefined ? ` (${item.value === 'failed' ? summary.failed : counts[item.value]})` : ''}
                     </button>
                 ))}
             </div>
 
+            {archivedFailures > 0 && (filter === 'failed' || filter === 'all') && (
+                <p className="-mt-2 text-xs text-slate-500">
+                    {archivedFailures} falha(s) com mais de {FAILURE_ARCHIVE_DAYS} dias arquivada(s){filter === 'all' ? ' — aparecem só aqui em "Todas".' : '.'}
+                    {filter === 'failed' && <button type="button" onClick={() => setShowArchived(value => !value)} className="ml-1 font-bold text-blue-700 underline">{showArchived ? 'Esconder' : 'Mostrar'}</button>}
+                </p>
+            )}
+
             {loading ? (
                 <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-12 text-slate-500"><Loader2 className="h-5 w-5 animate-spin" /> Carregando aprovações...</div>
-            ) : requests.length === 0 ? (
+            ) : visibleRequests.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
                     <ShieldCheck className="mx-auto h-10 w-10 text-slate-300" />
                     <h3 className="mt-3 font-black text-slate-800">Nenhuma ação nesta fila</h3>
@@ -447,7 +468,7 @@ export default function MarketingApprovalCenterPanel() {
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {requests.map((request) => {
+                    {visibleRequests.map((request) => {
                         const status = STATUS_META[request.status];
                         const executor = executionLabel(request);
                         const ExecutorIcon = executor.icon;

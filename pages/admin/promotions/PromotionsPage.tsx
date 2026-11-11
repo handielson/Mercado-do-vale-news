@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldAlert, Plus, Edit2, Calendar, CheckCircle2, XCircle, Tag, Image as ImageIcon, Video, PanelTop } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { promoCampaignService, type ProductPromotionSummary } from '../../../services/promoCampaignService';
+import { productPromotionEditPath, promoCampaignService, type ProductPromotionSummary } from '../../../services/promoCampaignService';
 import { toast } from 'sonner';
 import { promotionService, Promotion, PromotionStatus } from '../../../services/promotionService';
 import { format } from 'date-fns';
@@ -9,11 +9,6 @@ import { ptBR } from 'date-fns/locale';
 
 const moneyBRL = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const promoDate = (iso: string | null) => iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-
-/** Atalho de edição: a promoção da versão é editada na Página do Produto (rola até a versão). */
-export const productPromotionEditPath = (promo: Pick<ProductPromotionSummary, 'modelId' | 'firstProductId'>) => promo.modelId
-    ? `/admin/products/models/${promo.modelId}#promo-${promo.firstProductId}`
-    : `/admin/products/${promo.firstProductId}`;
 
 // product-promotions-list-v1: promoções de preço dos produtos (ativas e agendadas), com atalho para editar.
 const ProductPromotionsSection: React.FC = () => {

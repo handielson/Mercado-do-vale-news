@@ -80,7 +80,7 @@ test('cada mídia mostra o tamanho recomendado', () => {
   assert.match(ui, /size: promoMediaSizeLabel\('video'\)/);
   assert.match(ui, /size: promoMediaSizeLabel\('banner'\)/);
   assert.match(specs, /image: \{ width: 1080, height: 1350, ratio: '4:5'/);
-  assert.match(specs, /video: \{ width: 1080, height: 1920, ratio: '9:16, vertical'/);
+  assert.match(specs, /video: \{ width: 1080, height: 1920, ratio: '9:16, Stories'/);
   assert.match(specs, /banner: \{ width: 1920, height: 823, ratio: '21:9'/, 'banner no formato do carrossel da home (21:9)');
   assert.match(fs.readFileSync('components/catalog/BannerCarousel.tsx', 'utf8'), /aspect-\[21\/9\]/);
   assert.match(ui, /📐 \{slot\.size\}/);

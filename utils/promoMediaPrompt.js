@@ -4,7 +4,8 @@
 
 export const PROMO_MEDIA_SPECS = {
   image: { width: 1080, height: 1350, ratio: '4:5', formats: 'PNG, JPG ou WEBP', maxMb: 15, use: 'WhatsApp, Status, Instagram e bot' },
-  video: { width: 1080, height: 1920, ratio: '9:16, vertical', formats: 'MP4', maxSeconds: 60, maxMb: 500, use: 'Status, Instagram e bot' },
+  // Formato Stories do Instagram e Status do WhatsApp: tela cheia vertical; topo (~250 px) e rodapé (~340 px) ficam cobertos pela interface.
+  video: { width: 1080, height: 1920, ratio: '9:16, Stories', formats: 'MP4 (H.264)', maxSeconds: 60, maxMb: 500, safeTop: 250, safeBottom: 340, use: 'Stories do Instagram e Status do WhatsApp (e bot)' },
   banner: { width: 1920, height: 823, ratio: '21:9', formats: 'PNG, JPG ou WEBP', maxMb: 15, use: 'Carrossel da página inicial do site' },
 };
 
@@ -78,6 +79,6 @@ export function buildPromoMediaPrompt({ modelName, versionLabel = '', colors = [
     'ENTREGUE 3 ARQUIVOS, cada um no tamanho exato:',
     `1) IMAGEM DA PROMOÇÃO — ${image.width} × ${image.height} px (${image.ratio}), ${image.formats}, até ${image.maxMb} MB. Uso: ${image.use}. Produto grande no centro, preço logo abaixo.`,
     `2) BANNER DO SITE — ${banner.width} × ${banner.height} px (${banner.ratio}), ${banner.formats}, até ${banner.maxMb} MB. Uso: ${banner.use}. Layout horizontal: celular de um lado, textos e preço do outro, com bastante respiro nas bordas.`,
-    `3) CAPA/QUADRO PARA VÍDEO VERTICAL — ${video.width} × ${video.height} px (${video.ratio}). Uso: ${video.use}. Mesmo conteúdo da imagem, com o texto entre 15% e 75% da altura (o topo e o rodapé ficam cobertos pelo Status/Instagram). Se você também gerar vídeo: ${video.formats}, até ${video.maxSeconds} s, até ${video.maxMb} MB, mostrando o celular girando e o preço aparecendo no final.`,
+    `3) VÍDEO NO FORMATO STORIES (Instagram e WhatsApp) — ${video.width} × ${video.height} px (${video.ratio}, tela cheia vertical), ${video.formats}, até ${video.maxSeconds} s, até ${video.maxMb} MB. Uso: ${video.use}. Mostre o celular girando ou em destaque e o preço aparecendo no final; textos grandes e curtos, cada um na tela por pelo menos 2 s. Deixe livres os ${video.safeTop} px do topo e os ${video.safeBottom} px de baixo (ficam cobertos pela barra do Stories/Status e pelo campo de resposta). Se a IA não fizer vídeo, entregue a mesma arte como imagem ${video.width} × ${video.height} px para usar no Stories.`,
   ].filter((line, index, lines) => line !== '' || (lines[index - 1] !== '' && index > 0)).join('\n');
 }
