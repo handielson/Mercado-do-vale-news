@@ -1,3 +1,11 @@
+# v1.2.846-bot-payjoy-lista-aprovado
+
+Data: 11/11/2026. Branch: `main`. Tag: `v1.2.846-bot-payjoy-lista-aprovado`. Código: `e9e3ac38`, `3c94a97d` e `d0ae96b6`. Workflow publicado com marcador `payjoy-approved-list-v1`, hash `d15b0b4b…`, backup criptografado e CAS. Site: `/var/www/mdv-site/releases/20261111-165700-v1-2-846-payjoy-lista-aprovado` (manifesto); API sem alteração.
+
+Após a entrada PayJoy, o bot lista os smartphones que cabem no valor aprovado pelo total da maquininha em 12x, em ordem decrescente. Mantém entrada fixa, preço efetivo atual, agrupamento canônico e escolha por número/nome. Nenhum elegível oferece lista completa; cálculo incompleto não consulta catálogo. WhatsApp e Meta compartilham o fluxo. Testes: 14 focados e 144 do gate comercial. Registro: `docs/versoes/2026-11-11-v1.2.846-bot-payjoy-lista-aprovado.md`.
+
+---
+
 # v1.2.845-bot-lista-tablets
 
 Data: 11/11/2026. Branch: `main`. Tag: `v1.2.845-bot-lista-tablets` (`743ce845`). Status: **publicada** (n8n 2fc8c963…, backup `/root/n8n-backups/meta-attendance-2026-11-11T19-05-52-569Z-c16f2064.aes256gcm.json`). Site/API seguem a v1.2.844.

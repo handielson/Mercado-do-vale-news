@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.845-bot-lista-tablets",
+  "version": "v1.2.846-bot-payjoy-lista-aprovado",
   "date": "2026-11-11",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.845-bot-lista-tablets",
-  "release_vps": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
+  "tag": "v1.2.846-bot-payjoy-lista-aprovado",
+  "release_vps": "/var/www/mdv-site/releases/20261111-165700-v1-2-846-payjoy-lista-aprovado",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô do WhatsApp: pedido de tablet sai na lista de tablets em estoque, no mesmo formato da lista de celulares (antes mandava a de celulares). Acessório de tablet não cai mais na lista de celulares. Sem mudança no site/API.",
+  "summary": "Bot WhatsApp e Meta: após calcular a entrada PayJoy sobre o valor aprovado, lista smartphones cujo total em 12x cabe na aprovação; mantém entrada fixa, escolha por número/nome, fotos por cor e fluxo de venda.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,25 +28,27 @@
   },
   "site_source_base": "4babd1e0",
   "changed_files": [
-    "scripts/n8n-tablet-catalog.cjs",
-    "scripts/deploy-n8n-tablet-catalog.cjs",
-    "tmp-tests/n8n-tablet-catalog.test.cjs",
+    "scripts/n8n-payjoy-approved-list.cjs",
+    "scripts/deploy-n8n-payjoy-approved-list.cjs",
+    "scripts/n8n-sales-regression-gate.cjs",
+    "scripts/publish-vps-plan.cjs",
+    "tmp-tests/n8n-payjoy-approved-list.test.cjs",
+    "tmp-tests/n8n-sales-catalog-timeout-guard.test.cjs",
+    "tmp-tests/publish-vps-plan-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-11-v1.2.845-bot-lista-tablets.md"
+    "docs/versoes/2026-11-11-v1.2.846-bot-payjoy-lista-aprovado.md"
   ],
   "validations": [
-    "n8n-tablet-catalog.test 1/1 no candidato",
-    "gate comercial 130/130 (sha256 2fc8c963…)",
-    "dry run: só Vendas - Preparar Busca, Vendas - Contexto Produtos e Vendas - Catalogo pronto? mudam",
-    "após publicar: hash ativo = candidato; teste focado aceita o fluxo publicado (idempotente)"
+    "14/14 testes focados no snapshot ativo; 144/144 no candidato exato (test:n8n-sales)",
+    "Dry run, backup AES-256-GCM, CAS, entidade/histórico alinhados, n8n e runner saudáveis",
+    "Planejador de publicação e guarda de segredos aprovados"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
-    "published_at": "2026-11-11T10:11:00-03:00",
-    "previous": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora",
-    "note": "site sem mudança nesta versão (segue a release da v1.2.843)"
+    "release": "/var/www/mdv-site/releases/20261111-165700-v1-2-846-payjoy-lista-aprovado",
+    "previous": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
+    "note": "Publicação do manifesto da versão PayJoy; API sem mudança."
   },
   "api_release": {
     "status": "publicada",
@@ -62,11 +64,17 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "published_at": "2026-11-11T19:05:52Z",
-    "sha256": "2fc8c963b34de44d693ac4fa3833d945dd74b12966a1491d5ba2b9434de6f644",
-    "before": "5e190afe7b5c11dfbac8c7950618a9062e276e9532f53ee1ef1175c1852a69c6",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-11T19-05-52-569Z-c16f2064.aes256gcm.json",
-    "note": "n8n/runner 1/1, healthz 200. Durante o reinício o relay recebeu 404 do n8n em 2 eventos (um era mensagem-modelo de empresa, sem resposta necessária)."
+    "versionId": "3edc8f23-90f6-4012-aaf5-385eb3aa8934",
+    "published_at": "2026-11-11T20:10:53Z",
+    "before": "2fc8c963b34de44d693ac4fa3833d945dd74b12966a1491d5ba2b9434de6f644",
+    "sha256": "d15b0b4beadef4073e68669d49a6cc8966efce0bca34f4097099c63a844d9331",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-11T20-10-10-854Z-e2059474.aes256gcm.json",
+    "marker": "payjoy-approved-list-v1",
+    "tests": {
+      "focused_passed": 14,
+      "commercial_gate_passed": 144
+    },
+    "code_commit": "d0ae96b6"
   },
   "evolution_release": {
     "status": "publicada",
