@@ -22,9 +22,99 @@ const edge = node => ({ node, type: 'main', index: 0 });
 function patchApprovalIntro(workflow) {
   const params = workflow.nodes.find(n => n.name === NODES[0]).parameters;
   const marker = MARK + ':concise-entry';
-  if (params.jsCode.includes(marker)) return;
-  params.jsCode = once(params.jsCode, 'payjoyApprovalOutputV1: source.output,',
+  if (!params.jsCode.includes(marker)) params.jsCode = once(params.jsCode, 'payjoyApprovalOutputV1: source.output,',
     "payjoyApprovalOutputV1: String(source.output || '').replace(' Qual aparelho você quer escolher dentro do valor aprovado?', ''), /* " + marker + " */");
+  patchAboveApprovedList(workflow);
+}
+
+function payjoyCatalogRequestV1(source, state) {
+  const text = String(source.conversation || source.text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  if (source.intencao === 'pedido_humano' || /\b(?:atendentes?|humanos?|vendedor(?:es)?|pessoa da equipe|capas?|peliculas?|carregador(?:es)?|fones?|cabos?|smartwatch(?:es)?|relogios?|tablets?|ipads?)\b/.test(text)
+    || /\b(?:nao|nem)\b.{0,35}\b(?:quero|preciso|gostaria|ver|mostr|mande|manda|envia|caros|caro)\b/.test(text)
+    || /\b(?:se|caso)\b.{0,50}\b(?:aprov|payjoy)/.test(text)) return null;
+  const above = /\bmais (?:caros?|caras?)\b|\bacima (?:do|de|da) (?:valor |limite |minha |meu )?(?:aprovad[oa]|aprovacao|limite)\b/.test(text);
+  const within = /\b(?:dentro do valor aprovado|(?:os|aparelhos|modelos) que cabem|voltar (?:para |pra )?(?:a lista|os aparelhos) (?:da aprovacao|do valor aprovado))\b/.test(text);
+  if (!above && !within) return null;
+  const id = String(source.remoteJid || '');
+  const approval = state.payjoyByJid?.[id];
+  if (!approval && !state.salesPostList?.[id]?.payjoyCatalogModeV1 && !/\b(?:payjoy|aprovad[oa]|aprovacao)\b/.test(text)) return null;
+  const now = Date.now(), at = Number(approval?.updatedAt || 0);
+  if (approval?.status !== 'approved' || !Number.isFinite(at) || at <= 0 || now < at || now - at >= 30 * 86400000
+    || (approval.expiresAt && (!Number.isFinite(Number(approval.expiresAt)) || Number(approval.expiresAt) <= now))) return { needsConfirmation: true };
+  const calculation = calculatePayjoyEntryV4({}, approval);
+  if (!Number.isSafeInteger(calculation.entryCents)) return { needsConfirmation: true };
+  return { mode: above ? 'above' : 'within', calculation, approvalUpdatedAt: at };
+}
+
+function patchAboveApprovedList(workflow) {
+  const marker = MARK + ':above-approved';
+  const get = name => workflow.nodes.find(n => n.name === name).parameters;
+  const prepare = get(NODES[0]);
+  const targets = [prepare, get(NODES[1]), get(NODES[5]), get('Resolver Acao de Conversacao')];
+  const flags = targets.map(p => p.jsCode.includes(marker));
+  if (flags.every(Boolean)) return;
+  assert.ok(flags.every(v => !v), 'Patch acima do aprovado aplicado parcialmente');
+  const payment = get(NODES[4]).jsCode;
+  const start = payment.indexOf('const calculatePayjoyEntryV4=function');
+  const end = payment.indexOf('const parsePayjoyTextV4=', start);
+  assert.ok(start >= 0 && end > start, 'Cálculo canônico da entrada alterado');
+  const helper = '// ' + marker + '\n' + payment.slice(start, end) + '\n' + payjoyCatalogRequestV1.toString() + '\n';
+  const confirmation = 'Para mostrar os aparelhos com a entrada correta, confirme o valor aprovado pela PayJoy e o percentual de entrada ou envie o print da aprovação. 😊';
+  const post = get(NODES[5]);
+  post.jsCode = once(post.jsCode, 'staticData.salesPostList = staticData.salesPostList || {};',
+    'staticData.salesPostList = staticData.salesPostList || {};\n' + helper + `
+const payjoyCatalogContinuationV1 = payjoyCatalogRequestV1(source, staticData);
+if (payjoyCatalogContinuationV1) return [{ json: { ...source,
+  salesPostListHandled: !!payjoyCatalogContinuationV1.needsConfirmation,
+  payjoyCatalogModeV1: payjoyCatalogContinuationV1.mode || '',
+  output: payjoyCatalogContinuationV1.needsConfirmation ? ${JSON.stringify(confirmation)} : '',
+  needsDeliveryCepLookup: false, needsPaymentOptionsLookup: false, messages: undefined } }];`);
+  const resolver = get('Resolver Acao de Conversacao');
+  resolver.jsCode = once(resolver.jsCode, "const rawOutput = String($json.output || $json.text || $json.response || '').trim();",
+    "const rawOutput = String($json.output || $json.text || $json.response || '').trim();\n" + helper + `
+const payjoyCatalogContinuationV1 = payjoyCatalogRequestV1({ ...source, ...$json }, $getWorkflowStaticData('global'));
+if (payjoyCatalogContinuationV1?.calculation) return [{ json: { ...source, ...$json,
+  remoteJid, conversation: text, conversationAction: 'listar_catalogo', conversationIntent: 'catalogo_payjoy',
+  payjoyCatalogModeV1: payjoyCatalogContinuationV1.mode, payjoyCalculation: payjoyCatalogContinuationV1.calculation,
+  salesRequestKind: 'categoria', salesCategoryName: 'smartphones', salesSearchQuery: 'smartphones',
+  salesPostListAction: '', salesFlowItemNumber: 0, requestedColor: '', requestedMemory: '',
+  productSearchTerm: 'smartphones', paymentQuestion: false, output: '', messages: undefined } }];`);
+  prepare.jsCode = once(prepare.jsCode, 'const source = $json;', 'const source = { ...$json };\n' + helper + `
+const payjoyCatalogContinuationV1 = payjoyCatalogRequestV1(source, $getWorkflowStaticData('global'));
+if (payjoyCatalogContinuationV1?.calculation) Object.assign(source, {
+  payjoyCalculation: payjoyCatalogContinuationV1.calculation, payjoyCatalogModeV1: payjoyCatalogContinuationV1.mode,
+  payjoyApprovalUpdatedAtV1: payjoyCatalogContinuationV1.approvalUpdatedAt, output: '', messages: undefined });`);
+  prepare.jsCode = once(prepare.jsCode, 'if ((function completeCalculation(source) {', 'if (payjoyCatalogContinuationV1?.calculation || (function completeCalculation(source) {');
+  const context = get(NODES[1]);
+  let code = context.jsCode;
+  code = once(code, '&& product.card.totalCents <= base.payjoyCalculation.amountCents)',
+    '&& (base.payjoyCatalogModeV1 === \'above\' ? product.card.totalCents > base.payjoyCalculation.amountCents : product.card.totalCents <= base.payjoyCalculation.amountCents))');
+  code = once(code, 'const buildChunkedQuoteMessages =', `// ${marker}: append the entry to the canonical formatter, without changing card/Pix prices.
+function payjoyAboveQuoteV1(product) {
+  if (!base.payjoyApprovedListV1 || base.payjoyCatalogModeV1 !== 'above') return null;
+  const c = base.payjoyCalculation, totalCents = product.card?.totalCents;
+  if (!Number.isSafeInteger(totalCents) || totalCents <= c.amountCents) return null;
+  const differenceCents = totalCents - c.amountCents;
+  return { ...c, totalCents, differenceCents, entryWithDifferenceCents: c.entryCents + differenceCents,
+    approvalUpdatedAt: base.payjoyApprovalUpdatedAtV1 };
+}
+function payjoyAboveEntryLineV1(product) {
+  const q = payjoyAboveQuoteV1(product);
+  return q ? '💰 Entrada com a diferença: ' + centsToBRL(q.entryWithDifferenceCents)
+    + ' (' + centsToBRL(q.entryCents) + ' + ' + centsToBRL(q.differenceCents) + ').' : '';
+}
+const buildChunkedQuoteMessages =`);
+  for (const [variable, indent] of [['option', '      '], ['product', '   ']]) {
+    const anchor = `if (${variable}.card) chunkLines.push('${indent}💳 Cartão: 12x de ' + ${variable}.card.installment + ' (' + ${variable}.card.total + ')');`;
+    code = once(code, anchor, anchor + `\n      if (payjoyAboveEntryLineV1(${variable})) chunkLines.push('${indent}' + payjoyAboveEntryLineV1(${variable}));`);
+  }
+  code = once(code, "const intro = 'Com a sua aprovação de '", "const intro = base.payjoyCatalogModeV1 === 'above'\n    ? 'Estes aparelhos ficam acima da sua aprovação de ' + centsToBRL(approval.amountCents) + '. A entrada de cada um é a entrada PayJoy de ' + centsToBRL(approval.entryCents) + ' mais a diferença:'\n    : 'Com a sua aprovação de '");
+  code = once(code, "    'Esses são os aparelhos dentro do valor aprovado. Se quiser um mais caro, é só dar a diferença na entrada. Qual você prefere? 😊',",
+    "    base.payjoyCatalogModeV1 === 'above' ? 'A entrada de cada aparelho já inclui a diferença acima do valor aprovado. Qual você prefere? 😊' : 'Esses são os aparelhos dentro do valor aprovado. Se quiser um mais caro, é só dar a diferença na entrada. Qual você prefere? 😊',");
+  code = once(code, "? 'Nenhum aparelho disponível cabe no valor aprovado de '", "? base.payjoyCatalogModeV1 === 'above' ? 'No momento, não há aparelhos disponíveis acima do valor aprovado de ' + centsToBRL(approval.amountCents) + '. Quer que eu envie a lista completa? 😊' : 'Nenhum aparelho disponível cabe no valor aprovado de '");
+  code = once(code, "      flow: 'sales_post_list',", "      flow: 'sales_post_list',\n      ...(base.payjoyApprovedListV1 ? { payjoyCatalogModeV1: base.payjoyCatalogModeV1 || 'within', payjoyCalculation: base.payjoyCalculation } : {}),");
+  code = once(code, "        number: index + 1,", "        number: index + 1,\n        ...(payjoyAboveQuoteV1(product) ? { payjoyQuoteV1: payjoyAboveQuoteV1(product) } : {}),");
+  context.jsCode = code;
 }
 
 function patchFreshResult(params) {

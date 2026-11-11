@@ -44,7 +44,7 @@ async function main() {
     assert.ok(edges.every(name => allowedEdges.includes(name)), 'Unexpected connections changed');
     const changedNodes = after.nodes.filter((node, index) => JSON.stringify(node) !== JSON.stringify(before.nodes[index])).map(node => node.name);
     const alreadyApplied = fingerprint(before) === fingerprint(after);
-    assert.ok(changedNodes.every(name => [...NODES, ROUTER, BYPASS].includes(name)), 'Unexpected workflow nodes changed');
+    assert.ok(changedNodes.every(name => [...NODES, ROUTER, BYPASS, 'Resolver Acao de Conversacao'].includes(name)), 'Unexpected workflow nodes changed');
     validate(after);
     if (alreadyApplied) {
       console.log(JSON.stringify({ workflowId: WORKFLOW_ID, fingerprint: fingerprint(before), alreadyApplied: true, applied: false }));
@@ -53,7 +53,8 @@ async function main() {
     assert.ok(['2fc8c963b34de44d693ac4fa3833d945dd74b12966a1491d5ba2b9434de6f644',
       '5709033b5a7454ef9d7a494d753ff2b3806c36fe235aea52fc2e199c729d7099',
       'a4dd74562874a5ac935da103fa6c282ecb9676ba285b719c19028b1ffaabbf0d',
-      'd15b0b4beadef4073e68669d49a6cc8966efce0bca34f4097099c63a844d9331'].includes(fingerprint(before)), 'Active workflow changed since the approved snapshot');
+      'd15b0b4beadef4073e68669d49a6cc8966efce0bca34f4097099c63a844d9331',
+      '4f965fa07f357f4e6f2df09b986901df93e9ab2e049e493a42a252e705da8f6c'].includes(fingerprint(before)), 'Active workflow changed since the approved snapshot');
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-n8n-payjoy-approved-list-'));
     try {
       const beforeFile = path.join(temp, 'before.json');

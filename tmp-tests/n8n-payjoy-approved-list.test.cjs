@@ -63,7 +63,7 @@ test('patch puro, idempotente, credenciais preservadas e rotas de aprovação an
     const current = workflow.nodes.find(n => n.id === old.id);
     assert.ok(current, old.name);
     assert.deepEqual(current.credentials, old.credentials, old.name);
-    if (![...NODES, ROUTER, BYPASS].includes(old.name)) assert.deepEqual(current, old, old.name);
+    if (![...NODES, ROUTER, BYPASS, 'Resolver Acao de Conversacao'].includes(old.name)) assert.deepEqual(current, old, old.name);
   }
   assert.equal(MARK, 'payjoy-approved-list-v1');
   assert.equal(workflow.connections['PayJoy - Calcular entrada do print'].main[0][0].node, ROUTER);
@@ -291,4 +291,139 @@ test('aprovação hipotética com valores durante escolha de cor não cede nem s
     assert.equal(result.payjoyCalculation, undefined);
     assert.equal(state.salesPostList[jid].step, 'awaiting_color');
   }
+});
+
+function approvedState(remoteJid = jid, overrides = {}) {
+  return { payjoyByJid: { [remoteJid]: { status: 'approved', approvedAmountCents: 140000, entryPercentBp: 3000,
+    updatedAt: Date.now(), expiresAt: Date.now() + 86400000, ...overrides } } };
+}
+
+async function browseApproved(conversation, rows, state, extra = {}) {
+  const incoming = { remoteJid: jid, conversation, salesFlowAction: 'escolher_item', salesFlowItemNumber: 1, ...extra };
+  const post = (await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': incoming } }))[0].json;
+  const resolved = (await execute('Resolver Acao de Conversacao', { input: post, state,
+    sources: { 'switc Mensagens': incoming, 'Parse Classificacao': incoming } }))[0].json;
+  const result = await list(rows, { state, input: resolved });
+  return { ...result, post, resolved };
+}
+
+test('mais caros após aprovação mostra só total 12x acima do aprovado e soma diferença à entrada fixa', async () => {
+  const rows = [product('within', 'Redmi Note 14', 120000), product('exact', 'Redmi 14', 125112),
+    product('above', 'Redmi 15', 134900), product('highest', 'Poco Pro', 200000)];
+  assert.equal(Math.round(125112 * 1.119), 140000);
+  const state = approvedState();
+  await list(rows, { state });
+  const r = await browseApproved('Me mostra os aparelhos mais caros', rows, state);
+  assert.equal(r.post.salesPostListHandled, false);
+  assert.equal(r.prepared.payjoyApprovedListV1, true);
+  assert.equal(r.prepared.payjoyCatalogModeV1, 'above');
+  assert.equal(state.salesPostList[jid].payjoyCatalogModeV1, 'above');
+  assert.deepEqual(state.salesPostList[jid].options.map(o => o.name), ['Poco Pro', 'Redmi 15']);
+  const redmi = state.salesPostList[jid].options.find(o => o.name === 'Redmi 15');
+  assert.equal(redmi.payjoyQuoteV1.totalCents, 150953);
+  assert.equal(redmi.payjoyQuoteV1.differenceCents, 10953);
+  assert.equal(redmi.payjoyQuoteV1.entryCents, 42000);
+  assert.equal(redmi.payjoyQuoteV1.entryWithDifferenceCents, 52953);
+  assert.match(r.composed.output, /Estes aparelhos ficam acima da sua aprovação de/);
+  assert.match(r.composed.output, /Entrada com a diferença: R\$\s529,53 \(R\$\s420,00 \+ R\$\s109,53\)/);
+  assert.doesNotMatch(r.composed.output, /\d+\. Redmi Note 14|\d+\. Redmi 14\b/);
+  assert.ok(r.composed.output.indexOf('Poco Pro') < r.composed.output.indexOf('Redmi 15'));
+});
+
+test('voltar para dentro do aprovado substitui a lista acima, numera novamente e não persiste preferência de orçamento', async () => {
+  const rows = [product('within', 'Redmi Note 14', 120000), product('above', 'Redmi 15', 134900)];
+  const state = approvedState();
+  await list(rows, { state });
+  await browseApproved('Quero ver os mais caros', rows, state);
+  const returned = await browseApproved('Quero voltar para os aparelhos dentro do valor aprovado', rows, state);
+  assert.equal(returned.prepared.payjoyCatalogModeV1, 'within');
+  assert.equal(state.salesPostList[jid].payjoyCatalogModeV1, 'within');
+  assert.deepEqual(state.salesPostList[jid].options.map(o => [o.number, o.name]), [[1, 'Redmi Note 14']]);
+  assert.doesNotMatch(returned.composed.output, /Entrada com a diferença/);
+  const bypass = workflow.connections['Vendas - Preparar Busca'].main[0][0].node;
+  assert.equal(workflow.connections[bypass].main[0][0].node, 'Vendas - Buscar Produtos');
+});
+
+test('mais caros não é ativado por negativa, pedido humano, acessório ou tablet', async () => {
+  const rows = [product('within'), product('above', 'Poco Pro', 200000)];
+  for (const conversation of ['Não quero mais caros', 'Não mostre aparelhos mais caros',
+    'Quero falar com um atendente sobre os mais caros', 'Me mostra carregadores mais caros', 'Me mostra tablets mais caros']) {
+    const state = approvedState();
+    await list(rows, { state });
+    const result = (await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': {
+      remoteJid: jid, conversation, salesFlowAction: 'escolher_item', salesFlowItemNumber: 1,
+    } } }))[0].json;
+    assert.notEqual(result.payjoyCatalogModeV1, 'above', conversation);
+    assert.notEqual(result.payjoyCatalogRequestV1?.mode, 'above', conversation);
+    assert.equal(state.salesPostList[jid].payjoyCatalogModeV1, 'within', conversation);
+  }
+});
+
+test('aprovação vencida, futura, negada ou incompleta pede confirmação em vez de listar com dados antigos', async () => {
+  const rows = [product('within'), product('above', 'Poco Pro', 200000)];
+  for (const overrides of [{ updatedAt: Date.now() - 31 * 86400000 }, { updatedAt: Date.now() + 86400000 },
+    { expiresAt: Date.now() - 1 }, { status: 'denied' }, { entryPercentBp: null }, { approvedAmountCents: 0 }]) {
+    const state = approvedState();
+    await list(rows, { state });
+    Object.assign(state.payjoyByJid[jid], overrides);
+    const r = (await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': {
+      remoteJid: jid, conversation: 'Quero ver os mais caros pela PayJoy', salesFlowAction: 'escolher_item', salesFlowItemNumber: 1,
+    } } }))[0].json;
+    assert.equal(r.salesPostListHandled, true);
+    assert.match(r.output || '', /confirma|aprovado|percentual|aprovação/i);
+    assert.notEqual(r.payjoyApprovedListV1, true);
+    assert.notEqual(state.salesPostList[jid].payjoyCatalogModeV1, 'above');
+  }
+});
+
+test('sem aprovação, pedido explícito PayJoy pede dados e mais caros genérico mantém o caminho normal', async () => {
+  const rows = [product('without-state')];
+  const explicit = (await execute('Vendas - Verificar Pos Lista', { products: rows, sources: { 'Parse Classificacao': {
+    remoteJid: jid, conversation: 'Me mostra aparelhos mais caros pela PayJoy', salesFlowAction: 'nova_busca',
+  } } }))[0].json;
+  assert.equal(explicit.salesPostListHandled, true);
+  assert.match(explicit.output || '', /aprovado|percentual|aprovação|confirma/i);
+  const generic = (await execute('Vendas - Verificar Pos Lista', { products: rows, sources: { 'Parse Classificacao': {
+    remoteJid: jid, conversation: 'Me mostra aparelhos mais caros', salesFlowAction: 'nova_busca',
+  } } }))[0].json;
+  assert.notEqual(generic.payjoyApprovedListV1, true);
+  assert.notEqual(generic.payjoyCatalogModeV1, 'above');
+  assert.doesNotMatch(generic.output || '', /valor aprovado|percentual.*entrada/i);
+});
+
+test('Meta navega mais caros e a escolha numérica ou por nome mantém fotos, preço e rascunho normais', async () => {
+  for (const conversation of ['1', 'Redmi 15']) {
+    const remoteJid = 'meta:instagram:approved-account:approved-participant:dm';
+    const metaAttendance = { eventKey: 'c'.repeat(64), conversationKey: 'instagram:approved-account:approved-participant:dm', channel: 'instagram' };
+    const state = approvedState(remoteJid);
+    const rows = [product('within-meta', 'Redmi Note 14'), product('above-white', 'Redmi 15', 134900),
+      product('above-black', 'Redmi 15', 134900, 'Preto')];
+    await list(rows, { state, input: source({ remoteJid, metaAttendance }) });
+    const above = await browseApproved('Quero ver os mais caros', rows, state, { remoteJid, metaAttendance });
+    assert.equal(above.prepared.payjoyCatalogModeV1, 'above');
+    assert.deepEqual(above.composed.metaAttendance, metaAttendance);
+    const choice = { remoteJid, metaAttendance, conversation, salesFlowAction: 'escolher_item', salesFlowItemNumber: 1 };
+    const selected = (await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': choice } }))[0].json;
+    assert.equal(selected.salesPostListHandled, true);
+    assert.equal(state.salesPostList[remoteJid].step, 'awaiting_color');
+    assert.match(selected.output || '', /Qual cor/);
+    const color = { remoteJid, metaAttendance, conversation: 'branco', salesFlowAction: 'informar_cor', salesFlowColor: 'Branco' };
+    const draft = (await execute('Vendas - Verificar Pos Lista', { state, products: rows, sources: { 'Parse Classificacao': color } }))[0].json.orderDraft;
+    assert.equal(draft.productId, 'above-white');
+    assert.equal(draft.unitPriceCents, 134900);
+    assert.ok(!draft.downPaymentCents, 'entrada PayJoy informativa não entra no cálculo genérico da maquininha');
+  }
+});
+
+test('nenhum aparelho acima do aprovado não envia lista vazia nem mantém opções da lista anterior', async () => {
+  const rows = [product('all-within', 'Redmi 15', 120000)];
+  const state = approvedState();
+  await list(rows, { state });
+  assert.equal(state.salesPostList[jid].options.length, 1);
+  const none = await browseApproved('Me mostra os mais caros', rows, state);
+  assert.equal(none.prepared.payjoyCatalogModeV1, 'above');
+  assert.equal(none.context.productLookupCount, 0);
+  assert.ok(!state.salesPostList[jid]?.options?.length);
+  assert.match(none.composed.output, /acima|mais caros/i);
+  assert.doesNotMatch(none.composed.output, /\d+\. Redmi 15/);
 });
