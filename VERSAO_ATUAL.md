@@ -1,3 +1,11 @@
+# v1.2.848-bot-payjoy-acima-aprovado
+
+Data: 11/11/2026. Branch: `main`. Tag: `v1.2.848-bot-payjoy-acima-aprovado`. Código: `c3eaa196`. Site (manifesto): `/var/www/mdv-site/releases/20261111-173400-v1-2-848-payjoy-acima-aprovado`. API sem alteração.
+
+Após aprovação PayJoy, pedir “mais caros” mostra apenas smartphones com total em 12x acima do aprovado. Cada item informa a entrada base acrescida da diferença; aprovado R$ 1.400/30% e total R$ 1.509,53 resulta em entrada R$ 529,53 (R$ 420 + R$ 109,53). A escolha mantém o fluxo atual e o cliente pode voltar aos aparelhos dentro da aprovação. Contexto vencido/incompleto pede confirmação. Testes: 22 focados e 152 do gate comercial. Registro: `docs/versoes/2026-11-11-v1.2.848-bot-payjoy-acima-aprovado.md`.
+
+---
+
 # v1.2.847-bot-payjoy-entrada-direta
 
 Data: 11/11/2026. Branch: `main`. Tag: `v1.2.847-bot-payjoy-entrada-direta`. Código: `a55f33d3`. Workflow ativo `4f965fa0…`, backup criptografado e CAS; site (manifesto): `/var/www/mdv-site/releases/20261111-172000-v1-2-847-payjoy-entrada-direta`. API sem alteração.
