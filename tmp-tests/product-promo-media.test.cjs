@@ -73,10 +73,15 @@ test('banner da home é um banner normal, vinculado à versão e às datas da pr
 });
 
 test('cada mídia mostra o tamanho recomendado', () => {
+  // promo-media-prompt-v1: os tamanhos ficam numa fonte só (utils/promoMediaPrompt.js), usada pelos campos e pelo prompt da IA.
   const ui = fs.readFileSync('components/products/ModelVersionFinancials.tsx', 'utf8');
-  assert.match(ui, /1080 × 1350 px \(4:5\)/);
-  assert.match(ui, /1080 × 1920 px \(9:16, vertical\)/);
-  assert.match(ui, /1920 × 823 px \(21:9\)/, 'banner no formato do carrossel da home (21:9)');
+  const specs = fs.readFileSync('utils/promoMediaPrompt.js', 'utf8');
+  assert.match(ui, /size: promoMediaSizeLabel\('image'\)/);
+  assert.match(ui, /size: promoMediaSizeLabel\('video'\)/);
+  assert.match(ui, /size: promoMediaSizeLabel\('banner'\)/);
+  assert.match(specs, /image: \{ width: 1080, height: 1350, ratio: '4:5'/);
+  assert.match(specs, /video: \{ width: 1080, height: 1920, ratio: '9:16, vertical'/);
+  assert.match(specs, /banner: \{ width: 1920, height: 823, ratio: '21:9'/, 'banner no formato do carrossel da home (21:9)');
   assert.match(fs.readFileSync('components/catalog/BannerCarousel.tsx', 'utf8'), /aspect-\[21\/9\]/);
   assert.match(ui, /📐 \{slot\.size\}/);
 });

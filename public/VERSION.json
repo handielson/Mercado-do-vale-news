@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.840-prompt-midia-promocao",
+  "version": "v1.2.841-central-promocoes-produtos",
   "date": "2026-11-11",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.840-prompt-midia-promocao",
-  "release_vps": "/var/www/mdv-site/releases/20261111-113954",
+  "tag": "v1.2.841-central-promocoes-produtos",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Admin: na Mídia da promoção da versão, quadro \"Prompt para a IA criar as imagens\" com botão Copiar. O texto é montado a partir da promoção atual (produto, versão, cores, de/por, desconto, validade) e traz o tamanho exato da imagem 1080×1350, do banner 1920×823 e do vídeo vertical 1080×1920. Sem mudança na API/n8n.",
+  "summary": "Central de Promoções mostra as promoções de preço dos produtos (ativas e agendadas, por versão) com atalho Editar para a Página do Produto. Banner da promoção grava início/fim no formato aceito pelo MySQL (antes falhava) e sai do ar sozinho no fim da promoção.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,31 +28,30 @@
   },
   "site_source_base": "e89f3744",
   "changed_files": [
-    "utils/promoMediaPrompt.js",
+    "services/productPromotionsList.cjs",
+    "services/promoCampaignServer.cjs",
+    "services/promoCampaignService.ts",
+    "services/bannerService.ts",
+    "pages/admin/promotions/PromotionsPage.tsx",
     "components/products/ModelVersionFinancials.tsx",
-    "tmp-tests/promo-media-prompt.test.mjs",
+    "scripts/deploy-promo-campaign.cjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/product-promotions-list.test.cjs",
+    "tmp-tests/product-promo-media.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-11-v1.2.840-prompt-midia-promocao.md"
+    "docs/versoes/2026-11-11-v1.2.841-central-promocoes-produtos.md"
   ],
   "validations": [
-    "node --test tmp-tests/promo-media-prompt.test.mjs tmp-tests/model-version-financials.test.mjs (12/12)",
-    "vite build OK; bundle sem rastros de Supabase",
-    "deploy-vps-site (SKIP_BUILD do commit e89f3744): Site release active /var/www/mdv-site/releases/20261111-113954",
-    "https://www.mercadodovale.com.br/ HTTP 200; /VERSION.json = v1.2.840; chunk ModelProductAggregatorPage contém o quadro do prompt"
+    "node --test product-promotions-list, product-promo-media, promo-media-prompt, model-version-financials (24/24)"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261111-113954",
-    "published_at": "2026-11-11T11:39:54-03:00",
-    "previous": "/var/www/mdv-site/releases/20261111-001422-v1-2-839-bot-nfc-na-lista"
+    "status": "pendente",
+    "previous": "/var/www/mdv-site/releases/20261111-113954"
   },
   "api_release": {
-    "status": "publicada",
-    "version": "v1.2.834-tiktok-frete-liquido",
-    "mode": "sales-marketplaces-only",
-    "backup": "/var/www/mdv-api/backups/sales-marketplaces-1794345516159",
-    "note": "mdv-api reiniciado e online. /status HTTP 200 e MySQL saudável. A v1.2.835 altera apenas o frontend."
+    "status": "pendente",
+    "note": "deploy seletivo --promo-campaign-only (productPromotionsList.cjs + promoCampaignServer.cjs)"
   },
   "nginx_release": {
     "status": "sem mudança",

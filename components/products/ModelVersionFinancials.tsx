@@ -1,7 +1,7 @@
 // model-version-financials-v1: custo, preço praticado e lucro POR VERSÃO na Página do Produto.
 // Fonte única: grupo de preço do celular (o mesmo da Gestão de Modelos e do cadastro da família).
 // Editar aqui grava no mesmo grupo (PUT /models/:id/smartphone-price-groups/:groupId), com conferência de revisão.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, ExternalLink, ImageIcon, Loader2, Pencil, Sparkles, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -275,6 +275,12 @@ function VersionRow({ row, onSaved, modelName, media, onMediaSaved }: { row: Row
       onSaved();
     } finally { setSaving(false); }
   };
+  // product-promotions-list-v1: atalho da Central de Promoções (#promo-<produto>) rola até esta versão.
+  const articleRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#promo-/, '') : '';
+    if (hash && row.productIds.includes(hash)) window.setTimeout(() => articleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  }, [row.productIds]);
   const preview = (key: typeof SALE_TIERS[number]['key']) => {
     const price = editing && draft ? draft[key] : row.prices?.[key] ?? null;
     if (!price || row.costBaseCents === null) return null;
@@ -283,7 +289,7 @@ function VersionRow({ row, onSaved, modelName, media, onMediaSaved }: { row: Row
   };
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3" aria-label={`Versão ${row.label}`}>
+    <article ref={articleRef} className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-3" aria-label={`Versão ${row.label}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           {row.publicUrl

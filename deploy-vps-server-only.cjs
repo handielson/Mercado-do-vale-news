@@ -36,6 +36,7 @@ const phonePriceListServicePaths = [
   'services/promoCampaignArtwork.cjs',
   'services/promoCampaignServer.cjs',
   'services/productPromoMediaServer.cjs',
+  'services/productPromotionsList.cjs',
 ];
 const n8nBotConversationContextPath = 'services/n8nBotConversationContext.cjs';
 const n8nAdminHandoffRelayPath = 'services/n8nAdminHandoffRelay.cjs';
@@ -775,6 +776,13 @@ async function main() {
   }
   if (process.argv.includes('--unit-status-schema-only')) {
     await require('./scripts/deploy-unit-visibility-schema.cjs')({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
+  if (process.argv.includes('--promo-campaign-only')) {
+    await require('./scripts/deploy-promo-campaign.cjs').deployPromoCampaign({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
       write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
     });

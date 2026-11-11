@@ -1,9 +1,97 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Plus, Edit2, Calendar, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldAlert, Plus, Edit2, Calendar, CheckCircle2, XCircle, Tag, Image as ImageIcon, Video, PanelTop } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { promoCampaignService, type ProductPromotionSummary } from '../../../services/promoCampaignService';
 import { toast } from 'sonner';
 import { promotionService, Promotion, PromotionStatus } from '../../../services/promotionService';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+const moneyBRL = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const promoDate = (iso: string | null) => iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+/** Atalho de edição: a promoção da versão é editada na Página do Produto (rola até a versão). */
+export const productPromotionEditPath = (promo: Pick<ProductPromotionSummary, 'modelId' | 'firstProductId'>) => promo.modelId
+    ? `/admin/products/models/${promo.modelId}#promo-${promo.firstProductId}`
+    : `/admin/products/${promo.firstProductId}`;
+
+// product-promotions-list-v1: promoções de preço dos produtos (ativas e agendadas), com atalho para editar.
+const ProductPromotionsSection: React.FC = () => {
+    const [state, setState] = useState<{ status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; items: ProductPromotionSummary[] }>({ status: 'loading' });
+    const load = () => {
+        setState({ status: 'loading' });
+        promoCampaignService.listProductPromotions()
+            .then(result => setState({ status: 'ready', items: result.promotions || [] }))
+            .catch(error => setState({ status: 'error', message: error instanceof Error ? error.message : 'Não foi possível carregar as promoções de produtos.' }));
+    };
+    useEffect(load, []);
+    return (
+        <div className="mb-8 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" aria-label="Promoções de produtos">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-6 py-4">
+                <div>
+                    <h3 className="flex items-center gap-2 font-semibold text-slate-800"><Tag size={16} className="text-red-600" /> Promoções de produtos</h3>
+                    <p className="text-xs text-slate-500">Preço promocional por versão, ativas e agendadas. Criar ou editar: Página do Produto → Por versão.</p>
+                </div>
+                <button type="button" onClick={load} className="text-xs font-semibold text-blue-700 hover:underline">Atualizar</button>
+            </div>
+            {state.status === 'loading' && <div className="p-6 text-sm text-slate-500">Carregando promoções de produtos…</div>}
+            {state.status === 'error' && <div role="alert" className="p-6 text-sm text-red-700">{state.message} <button type="button" onClick={load} className="underline">Tentar de novo</button></div>}
+            {state.status === 'ready' && !state.items.length && <div className="p-6 text-sm text-slate-500">Nenhum produto com promoção ativa ou agendada.</div>}
+            {state.status === 'ready' && state.items.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead>
+                            <tr className="border-b border-slate-200 text-xs text-slate-500">
+                                <th className="py-3 px-6 font-semibold">Produto</th>
+                                <th className="py-3 px-4 font-semibold">Preço</th>
+                                <th className="py-3 px-4 font-semibold">Status</th>
+                                <th className="py-3 px-4 font-semibold">Período</th>
+                                <th className="py-3 px-4 font-semibold">Mídia</th>
+                                <th className="py-3 px-6 font-semibold text-right">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {state.items.map(promo => (
+                                <tr key={promo.id} className="hover:bg-slate-50">
+                                    <td className="py-3 px-6">
+                                        <div className="font-bold text-slate-800">{promo.modelName} {promo.version}</div>
+                                        <div className="text-xs text-slate-500">{promo.colors.join(', ') || 'Sem cor'} · {promo.stock} un.</div>
+                                    </td>
+                                    <td className="py-3 px-4 whitespace-nowrap">
+                                        <div className="text-xs text-slate-400 line-through">{moneyBRL(promo.retailCents)}</div>
+                                        <div className="font-bold text-red-700">{moneyBRL(promo.promoCents)} <span className="text-xs font-semibold text-slate-500">(−{promo.discountPct}%)</span></div>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                        {promo.status === 'active'
+                                            ? <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700"><CheckCircle2 size={12} /> Ativa</span>
+                                            : <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700"><Calendar size={12} /> Agendada</span>}
+                                    </td>
+                                    <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">
+                                        <div><span className="font-medium">Início:</span> {promoDate(promo.start) || 'já valendo'}</div>
+                                        <div><span className="font-medium">Fim:</span> {promoDate(promo.end) || 'sem prazo'}</div>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                        <div className="flex gap-1.5" aria-label="Mídia da promoção">
+                                            <ImageIcon size={16} className={promo.media.image ? 'text-emerald-600' : 'text-slate-300'} aria-label={promo.media.image ? 'Imagem enviada' : 'Sem imagem'} />
+                                            <Video size={16} className={promo.media.video ? 'text-emerald-600' : 'text-slate-300'} aria-label={promo.media.video ? 'Vídeo enviado' : 'Sem vídeo'} />
+                                            <PanelTop size={16} className={promo.media.banner ? 'text-emerald-600' : 'text-slate-300'} aria-label={promo.media.banner ? 'Banner na home' : 'Sem banner'} />
+                                        </div>
+                                    </td>
+                                    <td className="py-3 px-6 text-right">
+                                        <Link to={productPromotionEditPath(promo)} title="Editar promoção na Página do Produto"
+                                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50">
+                                            <Edit2 size={16} /> Editar
+                                        </Link>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export const PromotionsPage: React.FC = () => {
     const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -128,6 +216,10 @@ export const PromotionsPage: React.FC = () => {
                     <p className="text-slate-500 mt-2">Gerencie as promoções ativas e agendadas do site.</p>
                 </div>
             </div>
+
+            <ProductPromotionsSection />
+
+            <h3 className="mb-3 font-semibold text-slate-700">Promoções da loja</h3>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 {loading ? (

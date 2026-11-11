@@ -32,8 +32,21 @@ function mapFromVPS(vpsBanner: any): Banner {
     };
 }
 
+// banner-dates-mysql-v1: o MySQL (TIMESTAMP, sql_mode estrito) recusa ISO com "Z" ("Incorrect datetime value").
+// Envia em UTC no formato 'YYYY-MM-DD HH:MM:SS' — o servidor do banco está em UTC; a leitura volta como ISO.
+export function toBannerDbDate(value: unknown): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    const date = value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 function mapToVPS(banner: any): any {
     const payload = { ...banner };
+    for (const key of ['start_date', 'end_date']) {
+        if (key in payload) payload[key] = toBannerDbDate(payload[key]);
+    }
     if ('is_active' in banner) {
         payload.active = banner.is_active;
         delete payload.is_active;

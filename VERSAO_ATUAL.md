@@ -1,3 +1,10 @@
+# v1.2.841-central-promocoes-produtos
+
+Data: 11/11/2026. Branch: `main`. Status: **pendente** (site + API seletiva). n8n segue a v1.2.839.
+Central de Promoções lista as promoções de preço dos produtos (ativas/agendadas, por versão) com atalho Editar; banner da promoção grava as datas corretamente e sai do ar no fim. Registro: `docs/versoes/2026-11-11-v1.2.841-central-promocoes-produtos.md`.
+
+---
+
 # v1.2.840-prompt-midia-promocao
 
 Data: 11/11/2026. Branch: `main`. Tag: `v1.2.840-prompt-midia-promocao`. Status: **publicada** (site `/var/www/mdv-site/releases/20261111-113954`, commit `e89f3744`). Só site/admin; API e n8n seguem a v1.2.839.

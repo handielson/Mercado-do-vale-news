@@ -28,6 +28,25 @@ export interface PromoCampaignProduct {
   promoVideoUrl?: string | null;
 }
 
+/** product-promotions-list-v1: promoção de preço de uma versão (Central de Promoções). */
+export interface ProductPromotionSummary {
+  id: string;
+  modelId: string | null;
+  modelName: string;
+  version: string;
+  productIds: string[];
+  firstProductId: string;
+  colors: string[];
+  retailCents: number;
+  promoCents: number;
+  discountPct: number;
+  start: string | null;
+  end: string | null;
+  status: 'active' | 'scheduled';
+  stock: number;
+  media: { image: boolean; video: boolean; banner: boolean };
+}
+
 export interface PromoCampaignOverview {
   ok: true;
   campaign: PromoCampaign;
@@ -72,6 +91,7 @@ async function uploadVideo(file: File, onProgress?: (pct: number) => void): Prom
 
 export const promoCampaignService = {
   get: () => vpsClient.get<PromoCampaignOverview>('/admin/marketing/promo-campaign'),
+  listProductPromotions: () => vpsClient.get<{ ok: true; promotions: ProductPromotionSummary[]; generatedAt: string }>('/admin/marketing/product-promotions'),
   save: (campaign: PromoCampaign) => vpsClient.put<PromoCampaignOverview>('/admin/marketing/promo-campaign', {
     headline: campaign.headline, footer: campaign.footer, media_url: campaign.media_url, media_type: campaign.media_type,
   }),

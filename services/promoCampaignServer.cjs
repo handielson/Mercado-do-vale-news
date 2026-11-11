@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const { isPromoActive, normalizePromoCampaign, buildPromoWhatsAppText, shortPromoDate } = require('./promoPricingCore.cjs');
 const { paginatePromoItems, renderPromoCampaignPage } = require('./promoCampaignArtwork.cjs');
 const { loadPromoMediaByProductIds, registerProductPromoMediaRoutes } = require('./productPromoMediaServer.cjs');
+const { selectCurrentProductPromotions } = require('./productPromotionsList.cjs');
 
 const PREFERENCE_KEY = 'promo_campaign';
 const MAX_PRODUCTS = 120;
@@ -76,6 +77,24 @@ function createPromoCampaignService(dependencies) {
     let media = new Map();
     try { media = await loadPromoMediaByProductIds(pool, selected.map((item) => item.id)); } catch {}
     return selected.map((item) => ({ ...item, promoImageUrl: media.get(String(item.id))?.image_url || null, promoVideoUrl: media.get(String(item.id))?.video_url || null }));
+  }
+
+  async function loadProductPromotions() {
+    const stockSql = typeof comboStockSql === 'function' ? comboStockSql('p') : 'GREATEST(COALESCE(p.stock_quantity,0),0)';
+    const [rows] = await pool.query(`SELECT p.id,p.name,p.model_id,p.specs,p.price_retail,p.price_promo,p.promo_start,p.promo_end,
+        (SELECT m.name FROM models m WHERE m.id = p.model_id LIMIT 1) AS model_name,
+        ${stockSql} AS available_stock
+      FROM products p
+      WHERE p.status='active' AND COALESCE(p.is_parent,0)=0
+        AND p.price_promo > 0 AND p.price_promo < p.price_retail
+      ORDER BY p.name, p.id`);
+    const promotions = selectCurrentProductPromotions(rows);
+    let media = new Map();
+    try { media = await loadPromoMediaByProductIds(pool, promotions.flatMap((item) => item.productIds)); } catch {}
+    return promotions.map(({ key, ...item }) => {
+      const found = item.productIds.map((id) => media.get(id)).find(Boolean) || {};
+      return { ...item, id: key, media: { image: Boolean(found.image_url), video: Boolean(found.video_url), banner: Boolean(found.banner_id) } };
+    });
   }
 
   function publicProduct(item) {
@@ -157,7 +176,7 @@ function createPromoCampaignService(dependencies) {
     try { return await job; } finally { inFlight.delete(key); }
   }
 
-  return { readCampaign, saveCampaign, loadProducts, overview, generateStories };
+  return { readCampaign, saveCampaign, loadProducts, overview, generateStories, loadProductPromotions };
 }
 
 function registerPromoCampaignRoutes(fastify, dependencies) {
@@ -172,6 +191,7 @@ function registerPromoCampaignRoutes(fastify, dependencies) {
     }
   };
   fastify.get('/admin/marketing/promo-campaign', guard, (req, reply) => send(reply, () => service.overview()));
+  fastify.get('/admin/marketing/product-promotions', guard, (req, reply) => send(reply, async () => ({ ok: true, promotions: await service.loadProductPromotions(), generatedAt: new Date().toISOString() })));
   fastify.put('/admin/marketing/promo-campaign', guard, (req, reply) => send(reply, async () => {
     await service.saveCampaign(req.body || {});
     return service.overview();
@@ -181,4 +201,4 @@ function registerPromoCampaignRoutes(fastify, dependencies) {
   return service;
 }
 
-module.exports = { PREFERENCE_KEY, selectPromoCampaignProducts, createPromoCampaignService, registerPromoCampaignRoutes };
+module.exports = { PREFERENCE_KEY, selectPromoCampaignProducts, selectCurrentProductPromotions, createPromoCampaignService, registerPromoCampaignRoutes };
