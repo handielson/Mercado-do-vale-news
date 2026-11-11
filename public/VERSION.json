@@ -1,10 +1,10 @@
 {
   "version": "v1.2.843-banner-promo-e-relay-webhook",
   "date": "2026-11-11",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.843-banner-promo-e-relay-webhook",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Banner da promoção volta a aparecer na home (upload com as versões do carrossel e fallback para a imagem original). A API passa a filtrar os recibos de entrega/leitura do WhatsApp antes do n8n, que travavam o bot em rajadas.",
   "gestao_mdv_android": {
@@ -26,7 +26,7 @@
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     }
   },
-  "site_source_base": "5aad5cef",
+  "site_source_base": "4babd1e0",
   "changed_files": [
     "services/evolutionWebhookRelay.cjs",
     "vps_server.js",
@@ -45,15 +45,22 @@
     "docs/versoes/2026-11-11-v1.2.843-banner-promo-e-relay-webhook.md"
   ],
   "validations": [
-    "16 arquivos de teste de banners/promoção/webhook do bot: 42/43 (a falha, upload-service-vps-synology-static, já falhava antes)"
+    "16 arquivos de teste de banners/promoção/webhook do bot: 42/43 (a falha, upload-service-vps-synology-static, já falhava antes)",
+    "21 arquivos de teste no build: 50/51 (falha preexistente upload-service-vps-synology-static)",
+    "site HTTP 200, /VERSION.json v1.2.843 publicada; banner da promoção com versões -768/-1280 AVIF/WEBP geradas na VPS (HTTP 200); API /status 200"
   ],
   "site_release": {
-    "status": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
+    "published_at": "2026-11-11T10:11:00-03:00",
     "previous": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "deploy seletivo --evolution-webhook-relay-only; depois trocar a URL do webhook da Evolution para o relay"
+    "status": "publicada",
+    "deployed_at": "2026-11-11T13:09:20Z",
+    "service": "mdv-api",
+    "backup": "/var/www/mdv-api/backups/evolution-webhook-relay-1794402559758",
+    "note": "deploy seletivo --evolution-webhook-relay-only (1ª tentativa desfeita sozinha pelo teste da rota; corrigido em 16aa1341). Webhook da Evolution (botmercadodovale) trocado para https://api.xiaomipetrolina.com.br/webhooks/evolution/whatsapp às 13:10 UTC; whatsapp-switch/status: webhook valid=true, open. Primeiros minutos: 1 repassado, 16 recibos descartados, 0 falhas."
   },
   "nginx_release": {
     "status": "sem mudança",

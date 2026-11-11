@@ -1,6 +1,6 @@
 # v1.2.843-banner-promo-e-relay-webhook
 
-Data: 11/11/2026. Branch: `main`. Status: **pendente** (site + API seletiva + webhook da Evolution).
+Data: 11/11/2026. Branch: `main`. Tags/commits: `v1.2.843-banner-promo-e-relay-webhook` (`4babd1e0`) + `16aa1341`. Status: **publicada** (site `/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay`; API seletiva, backup `/var/www/mdv-api/backups/evolution-webhook-relay-1794402559758`; webhook da Evolution apontando para o relay da API).
 Banner da promoção volta a aparecer na home; recibos de entrega/leitura do WhatsApp filtrados na API antes do n8n (travaram o bot em 10/11 21h e 11/11 09h39). Registro: `docs/versoes/2026-11-11-v1.2.843-banner-promo-e-relay-webhook.md`.
 
 ---
