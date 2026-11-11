@@ -1204,6 +1204,8 @@ async function main() {
   console.log(`Uploaded ${n8nBotConversationContextPath}`);
   await upload(path.join(__dirname, evolutionWebhookRelayPath), remotePathJoin(appDir, evolutionWebhookRelayPath));
   console.log(`Uploaded ${evolutionWebhookRelayPath}`);
+  await upload(path.join(__dirname, 'services/botErrorAlerts.cjs'), remotePathJoin(appDir, 'services/botErrorAlerts.cjs'));
+  console.log('Uploaded services/botErrorAlerts.cjs');
   await upload(path.join(__dirname, n8nAdminHandoffRelayPath), remotePathJoin(appDir, n8nAdminHandoffRelayPath));
   console.log(`Uploaded ${n8nAdminHandoffRelayPath}`);
   await upload(path.join(__dirname, customerSelfServicePath), remotePathJoin(appDir, customerSelfServicePath));

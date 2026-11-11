@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.843-banner-promo-e-relay-webhook",
+  "version": "v1.2.844-alerta-bot-por-incidente",
   "date": "2026-11-11",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.843-banner-promo-e-relay-webhook",
+  "tag": "v1.2.844-alerta-bot-por-incidente",
   "release_vps": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Banner da promoção volta a aparecer na home (upload com as versões do carrossel e fallback para a imagem original). A API passa a filtrar os recibos de entrega/leitura do WhatsApp antes do n8n, que travavam o bot em rajadas.",
+  "summary": "Alerta de falha do bot passa a ser um por incidente: aviso na 1ª falha, falhas iguais agrupadas na API (lembrete a cada 30 min) e resumo quando param. Se a API não responder, o n8n avisa direto como antes. Sem mudança no site.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,62 +28,40 @@
   },
   "site_source_base": "4babd1e0",
   "changed_files": [
-    "services/evolutionWebhookRelay.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
+    "services/botErrorAlerts.cjs",
+    "scripts/n8n-bot-error-alerts.cjs",
+    "scripts/deploy-n8n-bot-error-alerts.cjs",
     "scripts/deploy-evolution-webhook-relay.cjs",
     "deploy-vps-server-only.cjs",
-    "services/productPromo.ts",
-    "components/products/ModelVersionFinancials.tsx",
-    "components/catalog/BannerCarousel.tsx",
-    "utils/promoMediaPrompt.js",
-    "tmp-tests/evolution-webhook-relay.test.cjs",
-    "tmp-tests/product-promo-media.test.cjs",
-    "tmp-tests/promo-media-prompt.test.mjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "tmp-tests/bot-error-alerts.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-11-v1.2.843-banner-promo-e-relay-webhook.md"
+    "docs/versoes/2026-11-11-v1.2.844-alerta-bot-por-incidente.md"
   ],
   "validations": [
-    "16 arquivos de teste de banners/promoção/webhook do bot: 42/43 (a falha, upload-service-vps-synology-static, já falhava antes)",
-    "21 arquivos de teste no build: 50/51 (falha preexistente upload-service-vps-synology-static)",
-    "site HTTP 200, /VERSION.json v1.2.843 publicada; banner da promoção com versões -768/-1280 AVIF/WEBP geradas na VPS (HTTP 200); API /status 200"
+    "node --test bot-error-alerts + evolution-webhook-relay (7/7)",
+    "dry run do workflow de erros contra produção: só os nós do alerta mudam"
   ],
   "site_release": {
     "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
     "published_at": "2026-11-11T10:11:00-03:00",
-    "previous": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora"
+    "previous": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora",
+    "note": "site sem mudança nesta versão (segue a release da v1.2.843)"
   },
   "api_release": {
-    "status": "publicada",
-    "deployed_at": "2026-11-11T13:09:20Z",
-    "service": "mdv-api",
-    "backup": "/var/www/mdv-api/backups/evolution-webhook-relay-1794402559758",
-    "note": "deploy seletivo --evolution-webhook-relay-only (1ª tentativa desfeita sozinha pelo teste da rota; corrigido em 16aa1341). Webhook da Evolution (botmercadodovale) trocado para https://api.xiaomipetrolina.com.br/webhooks/evolution/whatsapp às 13:10 UTC; whatsapp-switch/status: webhook valid=true, open. Primeiros minutos: 1 repassado, 16 recibos descartados, 0 falhas."
+    "status": "pendente",
+    "note": "deploy seletivo --evolution-webhook-relay-only (leva botErrorAlerts.cjs)"
   },
   "nginx_release": {
     "status": "sem mudança",
     "note": ""
   },
   "n8n_release": {
-    "status": "publicada",
-    "workflow": "SkrkB4vyKVDnQ68t",
-    "versionId": "3edc8f23-90f6-4012-aaf5-385eb3aa8934",
-    "published_at": "2026-11-11T00:14:43.454Z",
-    "before": "cc673b01cb5fa5a5ad35d255f52ee30145a604e850250f02a8e0bc9f9185cb9c",
-    "sha256": "5e190afe7b5c11dfbac8c7950618a9062e276e9532f53ee1ef1175c1852a69c6",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-11T00-14-29-677Z-39eb922b.aes256gcm.json",
-    "nodes": [
-      "Vendas - Contexto Produtos"
-    ],
-    "tests": {
-      "focused_passed": 3,
-      "commercial_gate_passed": 130
-    },
-    "executions": {
-      "lista": 74593
-    }
+    "status": "pendente",
+    "workflow": "mdvBotError2026a"
   },
   "evolution_release": {
     "status": "publicada",

@@ -32271,6 +32271,11 @@ fastify.post('/n8n-bot/global-control', { preHandler: requireSyncKey }, async (r
 });
 
 registerEvolutionWebhookRelay(fastify, { targetUrl: EXPECTED_N8N_BOT_WEBHOOK_URL, instanceName: N8N_BOT_EVOLUTION_INSTANCE_NAME, guard: requireSyncKey });
+// bot-error-alerts-v1: um alerta de falha do bot por incidente (o workflow de erros do n8n manda cada falha para cá).
+require('./services/botErrorAlerts.cjs').registerBotErrorAlertRoutes(fastify, {
+  guard: requireSyncKey, instanceName: N8N_BOT_EVOLUTION_INSTANCE_NAME,
+  evolutionUrl: process.env.EVOLUTION_SERVER_URL, evolutionKey: process.env.EVOLUTION_API_KEY,
+});
 
 fastify.get('/n8n-bot/whatsapp-switch/status', { preHandler: requireSyncKey }, async () => {
   return getN8nBotWhatsAppSwitchStatus();

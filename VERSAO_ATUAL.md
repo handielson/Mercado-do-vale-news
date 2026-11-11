@@ -1,3 +1,10 @@
+# v1.2.844-alerta-bot-por-incidente
+
+Data: 11/11/2026. Branch: `main`. Status: **pendente** (API seletiva + workflow de erros do n8n). Site segue a v1.2.843.
+Alerta de falha do bot: um por incidente, falhas iguais agrupadas e resumo quando param. Registro: `docs/versoes/2026-11-11-v1.2.844-alerta-bot-por-incidente.md`.
+
+---
+
 # v1.2.843-banner-promo-e-relay-webhook
 
 Data: 11/11/2026. Branch: `main`. Tags/commits: `v1.2.843-banner-promo-e-relay-webhook` (`4babd1e0`) + `16aa1341`. Status: **publicada** (site `/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay`; API seletiva, backup `/var/www/mdv-api/backups/evolution-webhook-relay-1794402559758`; webhook da Evolution apontando para o relay da API).

@@ -8,6 +8,7 @@ const { execFileSync } = require('node:child_process');
 const MODULE = 'services/evolutionWebhookRelay.cjs';
 const FILES = [
   { local: MODULE, remote: MODULE },
+  { local: 'services/botErrorAlerts.cjs', remote: 'services/botErrorAlerts.cjs' }, // bot-error-alerts-v1
   { local: 'vps_server.js', remote: 'server.js', runtime: true },
   { local: 'vps_server.js', remote: 'vps_server.js' },
   { local: 'vps_server.cjs', remote: 'vps_server.cjs' },
