@@ -1,10 +1,10 @@
 {
   "version": "v1.2.842-marketing-no-ar-agora",
   "date": "2026-11-11",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.842-marketing-no-ar-agora",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Central de Aprovações ganhou o quadro \"No ar agora\" (stories agendados, promoções de produtos e campanhas automáticas do Marketplace/Status do WhatsApp, com atalhos para editar) e arquiva falhas com mais de 30 dias. Vídeo da promoção passa a ser pedido no formato Stories (1080×1920). Sem mudança na API/n8n.",
   "gestao_mdv_android": {
@@ -26,7 +26,7 @@
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     }
   },
-  "site_source_base": "0fcd7418",
+  "site_source_base": "5aad5cef",
   "changed_files": [
     "utils/marketingLiveNow.js",
     "pages/admin/settings/marketing/MarketingLiveNowPanel.tsx",
@@ -44,10 +44,14 @@
     "docs/versoes/2026-11-11-v1.2.842-marketing-no-ar-agora.md"
   ],
   "validations": [
-    "node --test marketing-live-now, promo-media-prompt, product-promo-media, product-promotions-list (19/19) + 5 testes estáticos da Central de Aprovações/Marketing (6/6)"
+    "node --test marketing-live-now, promo-media-prompt, product-promo-media, product-promotions-list (19/19) + 5 testes estáticos da Central de Aprovações/Marketing (6/6)",
+    "19 arquivos de teste ligados a promoções/marketing/aprovações: 61/61; tsc sem erros nos arquivos novos",
+    "vite build OK sem Supabase; site HTTP 200; /VERSION.json = v1.2.842; chunk MarketingPage contém o quadro \"No ar agora\""
   ],
   "site_release": {
-    "status": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora",
+    "published_at": "2026-11-11T09:28:13-03:00",
     "previous": "/var/www/mdv-site/releases/20261111-091213-v1-2-841-central-promocoes"
   },
   "api_release": {

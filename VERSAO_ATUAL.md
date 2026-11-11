@@ -1,6 +1,6 @@
 # v1.2.842-marketing-no-ar-agora
 
-Data: 11/11/2026. Branch: `main`. Status: **pendente** (site). API segue a v1.2.841; n8n a v1.2.839.
+Data: 11/11/2026. Branch: `main`. Tag: `v1.2.842-marketing-no-ar-agora`. Status: **publicada** (site `/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora`, commit `5aad5cef`). API segue a v1.2.841; n8n a v1.2.839.
 Central de Aprovações com o quadro "No ar agora" (stories agendados, promoções de produtos, campanhas automáticas) e falhas antigas arquivadas; vídeo da promoção no formato Stories. Registro: `docs/versoes/2026-11-11-v1.2.842-marketing-no-ar-agora.md`.
 
 ---
