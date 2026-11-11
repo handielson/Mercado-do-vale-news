@@ -1,3 +1,10 @@
+# v1.2.845-bot-lista-tablets
+
+Data: 11/11/2026. Branch: `main`. Status: **pendente** (n8n). Site/API seguem a v1.2.844.
+Pedido de tablet sai na lista de tablets no formato da lista de celulares; acessório de tablet não vira lista de celular. Registro: `docs/versoes/2026-11-11-v1.2.845-bot-lista-tablets.md`.
+
+---
+
 # v1.2.844-alerta-bot-por-incidente
 
 Data: 11/11/2026. Branch: `main`. Tag: `v1.2.844-alerta-bot-por-incidente` (`8587b23c`). Status: **publicada** (API seletiva, backup `/var/www/mdv-api/backups/evolution-webhook-relay-1794405638723`; workflow de erros `mdvBotError2026a` 7fb811e4…). Site segue a v1.2.843.

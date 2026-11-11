@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.844-alerta-bot-por-incidente",
+  "version": "v1.2.845-bot-lista-tablets",
   "date": "2026-11-11",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.844-alerta-bot-por-incidente",
+  "tag": "v1.2.845-bot-lista-tablets",
   "release_vps": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Alerta de falha do bot passa a ser um por incidente: aviso na 1ª falha, falhas iguais agrupadas na API (lembrete a cada 30 min) e resumo quando param. Se a API não responder, o n8n avisa direto como antes. Sem mudança no site.",
+  "summary": "Robô do WhatsApp: pedido de tablet sai na lista de tablets em estoque, no mesmo formato da lista de celulares (antes mandava a de celulares). Acessório de tablet não cai mais na lista de celulares. Sem mudança no site/API.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,22 +28,17 @@
   },
   "site_source_base": "4babd1e0",
   "changed_files": [
-    "services/botErrorAlerts.cjs",
-    "scripts/n8n-bot-error-alerts.cjs",
-    "scripts/deploy-n8n-bot-error-alerts.cjs",
-    "scripts/deploy-evolution-webhook-relay.cjs",
-    "deploy-vps-server-only.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/bot-error-alerts.test.cjs",
+    "scripts/n8n-tablet-catalog.cjs",
+    "scripts/deploy-n8n-tablet-catalog.cjs",
+    "tmp-tests/n8n-tablet-catalog.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-11-v1.2.844-alerta-bot-por-incidente.md"
+    "docs/versoes/2026-11-11-v1.2.845-bot-lista-tablets.md"
   ],
   "validations": [
-    "node --test bot-error-alerts + evolution-webhook-relay (7/7)",
-    "dry run do workflow de erros contra produção: só os nós do alerta mudam",
-    "após publicar: entity e histórico do workflow de erros = candidato (7fb811e4…); API respondeu ao agrupamento"
+    "n8n-tablet-catalog.test 1/1 no candidato",
+    "gate comercial 130/130 (sha256 2fc8c963…)",
+    "dry run: só Vendas - Preparar Busca, Vendas - Contexto Produtos e Vendas - Catalogo pronto? mudam"
   ],
   "site_release": {
     "status": "publicada",
@@ -64,11 +59,10 @@
     "note": ""
   },
   "n8n_release": {
-    "status": "publicada",
-    "workflow": "mdvBotError2026a",
-    "before": "bdc4588efd428d584b3ad2eb441e97c1073ab029adca94a98f604f637769f70f",
-    "after": "7fb811e44a0856e4935edf1dedb06459e3cd25e1bba236c4cb0b09260e4cf072",
-    "note": "CAS em workflow_entity + histórico da versão ativa, sem reiniciar o n8n"
+    "status": "pendente",
+    "workflow": "SkrkB4vyKVDnQ68t",
+    "before": "5e190afe7b5c11dfbac8c7950618a9062e276e9532f53ee1ef1175c1852a69c6",
+    "candidate": "2fc8c963b34de44d693ac4fa3833d945dd74b12966a1491d5ba2b9434de6f644"
   },
   "evolution_release": {
     "status": "publicada",
