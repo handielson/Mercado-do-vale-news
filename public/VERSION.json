@@ -1,10 +1,10 @@
 {
   "version": "v1.2.841-central-promocoes-produtos",
   "date": "2026-11-11",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.841-central-promocoes-produtos",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261111-091213-v1-2-841-central-promocoes",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Central de Promoções mostra as promoções de preço dos produtos (ativas e agendadas, por versão) com atalho Editar para a Página do Produto. Banner da promoção grava início/fim no formato aceito pelo MySQL (antes falhava) e sai do ar sozinho no fim da promoção.",
   "gestao_mdv_android": {
@@ -26,7 +26,7 @@
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     }
   },
-  "site_source_base": "e89f3744",
+  "site_source_base": "0fcd7418",
   "changed_files": [
     "services/productPromotionsList.cjs",
     "services/promoCampaignServer.cjs",
@@ -43,15 +43,22 @@
     "docs/versoes/2026-11-11-v1.2.841-central-promocoes-produtos.md"
   ],
   "validations": [
-    "node --test product-promotions-list, product-promo-media, promo-media-prompt, model-version-financials (24/24)"
+    "node --test product-promotions-list, product-promo-media, promo-media-prompt, model-version-financials (24/24)",
+    "13 arquivos de teste ligados a promoções/banners/campanha: 51/51; 18 falhas em testes de deploy/MySQL/SSH já existiam na versão anterior (mesmas falhas no commit 6a9e4685)",
+    "vite build OK sem Supabase; site HTTP 200; /VERSION.json = v1.2.841; API /status 200, mdv-api online"
   ],
   "site_release": {
-    "status": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261111-091213-v1-2-841-central-promocoes",
+    "published_at": "2026-11-11T09:12:13-03:00",
     "previous": "/var/www/mdv-site/releases/20261111-113954"
   },
   "api_release": {
-    "status": "pendente",
-    "note": "deploy seletivo --promo-campaign-only (productPromotionsList.cjs + promoCampaignServer.cjs)"
+    "status": "publicada",
+    "deployed_at": "2026-11-11T12:11:36Z",
+    "service": "mdv-api",
+    "backup": "/var/www/mdv-api/backups/promo-campaign-1794399096083",
+    "note": "deploy seletivo --promo-campaign-only: productPromotionsList.cjs (novo) + promoCampaignServer.cjs; GET /admin/marketing/product-promotions respondeu com a promoção do Poco C81 Pro"
   },
   "nginx_release": {
     "status": "sem mudança",
