@@ -4,20 +4,30 @@ const assert = require('node:assert/strict');
 const MARK = 'payjoy-approved-list-v1';
 const ROUTER = 'PayJoy - Lista aprovada?';
 const BYPASS = 'PayJoy - Busca sem preferencias?';
-const NODES = ['Vendas - Preparar Busca', 'Vendas - Contexto Produtos', 'Vendas - Catalogo pronto?', 'Vendas - Catalogo sem IA'];
+const NODES = ['Vendas - Preparar Busca', 'Vendas - Contexto Produtos', 'Vendas - Catalogo pronto?', 'Vendas - Catalogo sem IA', 'Pagamento - Politica'];
 
 function completeCalculation(source) {
   const c = source?.payjoyCalculation;
   return Boolean(c && Number.isSafeInteger(c.amountCents) && c.amountCents > 0 && c.amountCents <= 100000000
     && Number.isInteger(c.percentBp) && c.percentBp >= 0 && c.percentBp <= 10000
     && Number.isSafeInteger(c.entryCents) && c.entryCents === Math.round(c.amountCents * c.percentBp / 10000)
-    && /^A PayJoy aprovou /.test(String(source.output || '')));
+    && /(?:^|\|\|\||\[\[MSG\]\])A PayJoy aprovou /.test(String(source.output || '')));
 }
 function once(code, anchor, replacement) {
   assert.equal(code.split(anchor).length - 1, 1, 'Âncora alterada: ' + anchor.slice(0, 90));
   return code.replace(anchor, () => replacement);
 }
 const edge = node => ({ node, type: 'main', index: 0 });
+
+function patchFreshResult(params) {
+  let code = params.jsCode;
+  code = once(code, "let output = '';", "// " + MARK + ":fresh-result - expose the already calculated first approval, without changing its response.\nlet payjoyFreshCalculationV1;\nlet output = '';");
+  code = once(code, '    const approvedValuesV1 = calculatePayjoyEntryV4(approvedInputV1, {});',
+    '    const approvedValuesV1 = calculatePayjoyEntryV4(approvedInputV1, {});\n    payjoyFreshCalculationV1 = approvedValuesV1;');
+  code = once(code, 'return [{ json: { ...source, output, payjoyFollowupKind, payjoyNeedsHandoff } }];',
+    'return [{ json: { ...source, output, payjoyFollowupKind, payjoyNeedsHandoff, ...(payjoyFreshCalculationV1 ? { payjoyCalculation: payjoyFreshCalculationV1 } : {}) } }];');
+  params.jsCode = code;
+}
 
 function patchWorkflow(workflow) {
   const w = structuredClone(workflow);
@@ -29,6 +39,19 @@ function patchWorkflow(workflow) {
   const marked = NODES.map(name => JSON.stringify(node(name).parameters).includes(MARK));
   const routers = [ROUTER, BYPASS].map(name => w.nodes.some(n => n.name === name));
   if ([...marked, ...routers].every(Boolean)) { validate(w); return w; }
+  // The first live smoke exposed an existing first-approval result not forwarded by payment.
+  // Upgrade only that known v1 layout; CAS still pins the exact deployed workflow.
+  if (marked.slice(0, 4).every(Boolean) && !marked[4] && routers.every(Boolean)) {
+    const params = node(NODES[0]).parameters;
+    params.jsCode = once(params.jsCode, '&& /^A PayJoy aprovou /.test(String(source.output || \'\'))',
+      '&& /(?:^|\\|\\|\\||\\[\\[MSG\\]\\])A PayJoy aprovou /.test(String(source.output || \'\'))');
+    const condition = node(ROUTER).parameters.conditions.conditions[0];
+    assert.ok(condition.leftValue.includes('&& /^A PayJoy aprovou /'), 'Guard de aprovação alterado');
+    condition.leftValue = '={{(' + completeCalculation.toString() + ')($json)}}';
+    patchFreshResult(node(NODES[4]).parameters);
+    validate(w);
+    return w;
+  }
   assert.ok([...marked, ...routers].every(v => !v), 'Patch PayJoy aplicado parcialmente');
 
   const prepare = node(NODES[0]).parameters;
@@ -116,6 +139,7 @@ if (source.payjoyApprovedListV1 === true && catalog) return [{ json: { ...source
   w.connections[ROUTER] = { main: [[edge(NODES[0])], [edge('Estado Conversa - Preparar')]] };
   w.connections[NODES[0]].main = [[edge(BYPASS)]];
   w.connections[BYPASS] = { main: [[edge('Vendas - Buscar Produtos')], [edge('Vendas - Persistir Preferencias')]] };
+  patchFreshResult(node(NODES[4]).parameters);
   validate(w);
   return w;
 }

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const { patchWorkflow, MARK, NODES, ROUTER } = require('../scripts/n8n-payjoy-approved-list.cjs');
+const { patchWorkflow, MARK, NODES, ROUTER, BYPASS } = require('../scripts/n8n-payjoy-approved-list.cjs');
 
 const snapshot = process.env.MDV_N8N_SALES_SNAPSHOT || process.env.MDV_PAYJOY_WORKFLOW_SNAPSHOT;
 assert.ok(snapshot, 'Snapshot ativo exato obrigatório');
@@ -63,7 +63,7 @@ test('patch puro, idempotente, credenciais preservadas e rotas de aprovação an
     const current = workflow.nodes.find(n => n.id === old.id);
     assert.ok(current, old.name);
     assert.deepEqual(current.credentials, old.credentials, old.name);
-    if (!NODES.includes(old.name)) assert.deepEqual(current, old, old.name);
+    if (![...NODES, ROUTER, BYPASS].includes(old.name)) assert.deepEqual(current, old, old.name);
   }
   assert.equal(MARK, 'payjoy-approved-list-v1');
   assert.equal(workflow.connections['PayJoy - Calcular entrada do print'].main[0][0].node, ROUTER);
@@ -187,6 +187,27 @@ test('Meta usa a mesma lista e mantém identidade opaca e estado de escolha', as
   assert.equal(r.composed.remoteJid, remoteJid);
   assert.equal(r.state.salesPostList[remoteJid].options[0].name, 'Redmi 15');
   assert.ok(r.composed.output.endsWith(lastMessage));
+});
+
+test('aprovação fresca sem contexto expõe cálculo e aciona lista na mesma resposta', async () => {
+  for (const conversation of ['Fui aprovado na PayJoy em R$ 1.400,00 com entrada de 30%.',
+    'A PayJoy aprovou R$ 1.400,00 com entrada de 30%.']) {
+    const state = {};
+    const freshSource = source({ conversation, output: undefined, payjoyCalculation: undefined });
+    const payment = (await execute('Pagamento - Politica', { state,
+      input: { store_address: 'Rua de Teste, 100', payjoy_analysis_url: 'https://app.payjoy.com/br/d2c?fixture=1' },
+      sources: { 'Resolver Acao de Conversacao': freshSource },
+    }))[0].json;
+    assert.equal(payment.payjoyCalculation?.amountCents, 140000, conversation);
+    assert.equal(payment.payjoyCalculation?.percentBp, 3000, conversation);
+    assert.equal(payment.payjoyCalculation?.entryCents, 42000, conversation);
+    assert.match(payment.output, /A PayJoy aprovou R\$\s1\.400,00/);
+    const r = await list([product('fresh-product')], { state, input: payment });
+    assert.equal(r.prepared.payjoyApprovedListV1, true);
+    assert.ok(r.composed.output.startsWith(payment.output), 'preserva resposta original da aprovação fresca antes da lista');
+    assert.equal(r.state.salesPostList[jid].options[0].name, 'Redmi 15');
+    assert.ok(r.composed.output.endsWith(lastMessage));
+  }
 });
 
 test('escolha pelo número ou nome retoma fotos por cor e rascunho sem perder a lista PayJoy', async () => {
