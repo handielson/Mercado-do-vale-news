@@ -56,3 +56,11 @@ assert.equal(mlPlan.needs.api,true,'Publication runtime changes require API depl
 const stockPlan=JSON.parse(execFileSync(process.execPath,['scripts/publish-vps-plan.cjs','--json','--mock-files','services/priorityStockDecrement.cjs,services/saleStockReconciliation.cjs'],{encoding:'utf8'}));
 assert.equal(stockPlan.needs.api,true,'Stock helpers run in the API.');
 assert.equal(stockPlan.needs.site,false,'Stock helpers do not run in the browser.');
+const nfcPlan = JSON.parse(execFileSync(process.execPath, [
+  'scripts/publish-vps-plan.cjs', '--json', '--mock-files',
+  'scripts/n8n-sales-list-nfc.cjs,scripts/deploy-n8n-sales-list-nfc.cjs,tmp-tests/n8n-sales-list-nfc.test.cjs',
+], { encoding: 'utf8' }));
+assert.equal(nfcPlan.target, 'n8n');
+assert.deepEqual(nfcPlan.deployCommands, ['node scripts/deploy-n8n-sales-list-nfc.cjs --apply']);
+assert.ok(nfcPlan.validations.includes('node scripts/deploy-n8n-sales-list-nfc.cjs'));
+assert.ok(!nfcPlan.validations.some(command => command.includes('--sales-contract')));
