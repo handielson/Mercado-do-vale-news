@@ -57,6 +57,7 @@ const SITE_PATTERNS = [
 ];
 
 const N8N_WORKFLOW_PATTERNS = [
+  /^scripts\/(?:deploy-)?n8n-payjoy-approved-list\.cjs$/,
   /^scripts\/(?:deploy-)?n8n-sales-list-nfc\.cjs$/,
   /^scripts\/(?:build|deploy)-n8n-meta-attendance\.cjs$/,
   /^scripts\/(?:deploy-n8n-meta-payjoy|n8n-meta-payjoy-images)\.cjs$/,
@@ -175,6 +176,7 @@ function classifyFiles(files) {
 }
 
 function n8nDeployCommands(files) {
+  if (files.includes('scripts/deploy-n8n-payjoy-approved-list.cjs')) return ['node scripts/deploy-n8n-payjoy-approved-list.cjs --apply'];
   if (files.includes('scripts/deploy-n8n-sales-list-nfc.cjs')) return ['node scripts/deploy-n8n-sales-list-nfc.cjs --apply'];
   if(files.includes('scripts/deploy-n8n-meta-payjoy.cjs')||files.includes('scripts/n8n-meta-payjoy-images.cjs'))return ['node scripts/deploy-n8n-meta-payjoy.cjs --apply'];
   if(files.includes('scripts/deploy-n8n-meta-attendance.cjs')) return ['node scripts/deploy-n8n-meta-attendance.cjs --apply'];
@@ -211,6 +213,7 @@ function buildReleaseName(options, now = new Date()) {
 
 function existingChecks(files) {
   const checks = [];
+  const payjoyApprovedList = files.includes('scripts/deploy-n8n-payjoy-approved-list.cjs');
   const attendance=files.includes('tmp-tests/n8n-attendance-flow-contract.cjs');
   const configuration=!attendance && files.includes('tmp-tests/n8n-sales-model-configuration.cjs');
   const models = !attendance && !configuration && files.some(file => /^tmp-tests\/n8n-gpt6-luna-/.test(file));
@@ -218,6 +221,7 @@ function existingChecks(files) {
   const nfcTest = 'tmp-tests/n8n-sales-list-nfc.test.cjs';
   const sales = !attendance && !configuration && files.some(file => /^tmp-tests\/n8n-sales-/.test(file) && file !== nfcTest);
   const changedTests = files.filter((file) => /^tmp-tests\/.*\.test\.(?:mjs|cjs|js)$/.test(file)
+    && !(payjoyApprovedList && file === 'tmp-tests/n8n-payjoy-approved-list.test.cjs')
     && file !== nfcTest
     && !(attendance && /^tmp-tests\/n8n-attendance-/.test(file))
     && !(configuration && /^tmp-tests\/n8n-(?:sales-|gpt6-luna-)/.test(file))
@@ -228,6 +232,7 @@ function existingChecks(files) {
   }
   if (sales) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --sales-contract');
   if (nfcList) checks.push('node scripts/deploy-n8n-sales-list-nfc.cjs');
+  if (payjoyApprovedList) checks.push('node scripts/deploy-n8n-payjoy-approved-list.cjs');
   if (attendance) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --attendance-fixes');
   if (configuration) checks.push('node tmp-tests/n8n-fix-payjoy-link-confirmation.cjs --model-configuration');
   if(files.includes('scripts/deploy-catalog-media.cjs'))checks.push('node scripts/assert-catalog-media-contract.cjs','node deploy-vps-server-only.cjs --catalog-media-check');

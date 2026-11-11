@@ -51,11 +51,12 @@ test('candidato de produção gera um item por bloco para o emissor do WhatsApp'
   const candidate=JSON.parse(fs.readFileSync(process.env.MDV_N8N_SALES_SNAPSHOT,'utf8'));
   const direct=candidate.nodes.find(node=>node.name===DIRECT)?.parameters?.jsCode;
   const splitter=candidate.nodes.find(node=>node.name==='Dividir mensagens')?.parameters?.jsCode;
-  assert.equal(direct,DIRECT_CODE);
+  assert.equal(typeof direct,'string');
   assert.ok(splitter);
   const question='Qual modelo voce quer ver em mais detalhes? 😊';
   const source={remoteJid:'fixture@s.whatsapp.net',Instancia:'fixture',messageId:'INBOUND-FIXTURE',salesAvailabilityStatus:'confirmed_products_available',deterministicCatalogOutput:catalog+'[[MSG]]'+question};
   const output=new Function('$json',direct)(source)[0].json;
+  assert.deepEqual(output,new Function('$json',DIRECT_CODE)(source)[0].json,'O catálogo normal mantém o contrato canônico mesmo com extensões de outros ramos.');
   const lookup=()=>({first:()=>({json:source})});
   const sent=new Function('$json','$',splitter)(output,lookup).map(item=>item.json);
   assert.equal(sent.length,10);

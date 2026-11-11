@@ -64,3 +64,11 @@ assert.equal(nfcPlan.target, 'n8n');
 assert.deepEqual(nfcPlan.deployCommands, ['node scripts/deploy-n8n-sales-list-nfc.cjs --apply']);
 assert.ok(nfcPlan.validations.includes('node scripts/deploy-n8n-sales-list-nfc.cjs'));
 assert.ok(!nfcPlan.validations.some(command => command.includes('--sales-contract')));
+const payjoyPlan = JSON.parse(execFileSync(process.execPath, [
+  'scripts/publish-vps-plan.cjs', '--json', '--mock-files',
+  'scripts/n8n-payjoy-approved-list.cjs,scripts/deploy-n8n-payjoy-approved-list.cjs,tmp-tests/n8n-payjoy-approved-list.test.cjs',
+], { encoding: 'utf8' }));
+assert.equal(payjoyPlan.target, 'n8n');
+assert.deepEqual(payjoyPlan.deployCommands, ['node scripts/deploy-n8n-payjoy-approved-list.cjs --apply']);
+assert.ok(payjoyPlan.validations.includes('node scripts/deploy-n8n-payjoy-approved-list.cjs'));
+assert.ok(!payjoyPlan.validations.includes('node tmp-tests/n8n-payjoy-approved-list.test.cjs'));
