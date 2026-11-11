@@ -39,6 +39,7 @@ const phonePriceListServicePaths = [
   'services/productPromotionsList.cjs',
 ];
 const n8nBotConversationContextPath = 'services/n8nBotConversationContext.cjs';
+const evolutionWebhookRelayPath = 'services/evolutionWebhookRelay.cjs';
 const n8nAdminHandoffRelayPath = 'services/n8nAdminHandoffRelay.cjs';
 const customerSelfServicePath = 'services/customerSelfServiceServer.cjs';
 const customerGoogleAuthPath = 'services/customerGoogleAuthServer.cjs';
@@ -781,6 +782,13 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--evolution-webhook-relay-only')) {
+    await require('./scripts/deploy-evolution-webhook-relay.cjs').deployEvolutionWebhookRelay({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--promo-campaign-only')) {
     await require('./scripts/deploy-promo-campaign.cjs').deployPromoCampaign({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
@@ -1194,6 +1202,8 @@ async function main() {
   await uploadMarketingCampaignFiles(appDir);
   await upload(path.join(__dirname, n8nBotConversationContextPath), remotePathJoin(appDir, n8nBotConversationContextPath));
   console.log(`Uploaded ${n8nBotConversationContextPath}`);
+  await upload(path.join(__dirname, evolutionWebhookRelayPath), remotePathJoin(appDir, evolutionWebhookRelayPath));
+  console.log(`Uploaded ${evolutionWebhookRelayPath}`);
   await upload(path.join(__dirname, n8nAdminHandoffRelayPath), remotePathJoin(appDir, n8nAdminHandoffRelayPath));
   console.log(`Uploaded ${n8nAdminHandoffRelayPath}`);
   await upload(path.join(__dirname, customerSelfServicePath), remotePathJoin(appDir, customerSelfServicePath));

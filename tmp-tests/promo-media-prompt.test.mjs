@@ -41,7 +41,7 @@ test('prompt é dinâmico: muda junto com a promoção', () => {
 test('tamanhos vêm de uma fonte só (campos de upload e prompt)', () => {
   assert.equal(promoMediaSizeLabel('image'), '1080 × 1350 px (4:5) · PNG, JPG ou WEBP · até 15 MB');
   assert.equal(promoMediaSizeLabel('video'), '1080 × 1920 px (9:16, Stories) · MP4 (H.264) · até 60 s · até 500 MB');
-  assert.equal(promoMediaSizeLabel('banner'), '1920 × 823 px (21:9) · PNG, JPG ou WEBP · até 15 MB');
+  assert.equal(promoMediaSizeLabel('banner'), '1920 × 823 px (21:9) · PNG, JPG ou WEBP · até 5 MB');
   assert.equal(PROMO_MEDIA_SPECS.banner.width, 1920);
   assert.equal(promoMemoryLabel('8GB · 256GB · global'), '8GB/256GB');
   const ui = fs.readFileSync(new URL('../components/products/ModelVersionFinancials.tsx', import.meta.url), 'utf8');

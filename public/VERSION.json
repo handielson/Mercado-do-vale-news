@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.842-marketing-no-ar-agora",
+  "version": "v1.2.843-banner-promo-e-relay-webhook",
   "date": "2026-11-11",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.842-marketing-no-ar-agora",
-  "release_vps": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora",
+  "tag": "v1.2.843-banner-promo-e-relay-webhook",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Central de Aprovações ganhou o quadro \"No ar agora\" (stories agendados, promoções de produtos e campanhas automáticas do Marketplace/Status do WhatsApp, com atalhos para editar) e arquiva falhas com mais de 30 dias. Vídeo da promoção passa a ser pedido no formato Stories (1080×1920). Sem mudança na API/n8n.",
+  "summary": "Banner da promoção volta a aparecer na home (upload com as versões do carrossel e fallback para a imagem original). A API passa a filtrar os recibos de entrega/leitura do WhatsApp antes do n8n, que travavam o bot em rajadas.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,35 +28,32 @@
   },
   "site_source_base": "5aad5cef",
   "changed_files": [
-    "utils/marketingLiveNow.js",
-    "pages/admin/settings/marketing/MarketingLiveNowPanel.tsx",
-    "pages/admin/settings/marketing/MarketingApprovalCenterPanel.tsx",
-    "services/promoCampaignService.ts",
-    "pages/admin/promotions/PromotionsPage.tsx",
-    "utils/promoMediaPrompt.js",
+    "services/evolutionWebhookRelay.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "scripts/deploy-evolution-webhook-relay.cjs",
+    "deploy-vps-server-only.cjs",
+    "services/productPromo.ts",
     "components/products/ModelVersionFinancials.tsx",
-    "tmp-tests/marketing-live-now.test.mjs",
-    "tmp-tests/promo-media-prompt.test.mjs",
+    "components/catalog/BannerCarousel.tsx",
+    "utils/promoMediaPrompt.js",
+    "tmp-tests/evolution-webhook-relay.test.cjs",
     "tmp-tests/product-promo-media.test.cjs",
-    "tmp-tests/product-promotions-list.test.cjs",
+    "tmp-tests/promo-media-prompt.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-11-v1.2.842-marketing-no-ar-agora.md"
+    "docs/versoes/2026-11-11-v1.2.843-banner-promo-e-relay-webhook.md"
   ],
   "validations": [
-    "node --test marketing-live-now, promo-media-prompt, product-promo-media, product-promotions-list (19/19) + 5 testes estáticos da Central de Aprovações/Marketing (6/6)",
-    "19 arquivos de teste ligados a promoções/marketing/aprovações: 61/61; tsc sem erros nos arquivos novos",
-    "vite build OK sem Supabase; site HTTP 200; /VERSION.json = v1.2.842; chunk MarketingPage contém o quadro \"No ar agora\""
+    "16 arquivos de teste de banners/promoção/webhook do bot: 42/43 (a falha, upload-service-vps-synology-static, já falhava antes)"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora",
-    "published_at": "2026-11-11T09:28:13-03:00",
-    "previous": "/var/www/mdv-site/releases/20261111-091213-v1-2-841-central-promocoes"
+    "status": "pendente",
+    "previous": "/var/www/mdv-site/releases/20261111-092813-v1-2-842-marketing-no-ar-agora"
   },
   "api_release": {
-    "status": "sem mudança",
-    "note": "segue a v1.2.841 (promo-campaign)"
+    "status": "pendente",
+    "note": "deploy seletivo --evolution-webhook-relay-only; depois trocar a URL do webhook da Evolution para o relay"
   },
   "nginx_release": {
     "status": "sem mudança",

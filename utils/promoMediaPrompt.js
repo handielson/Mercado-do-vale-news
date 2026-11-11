@@ -6,7 +6,7 @@ export const PROMO_MEDIA_SPECS = {
   image: { width: 1080, height: 1350, ratio: '4:5', formats: 'PNG, JPG ou WEBP', maxMb: 15, use: 'WhatsApp, Status, Instagram e bot' },
   // Formato Stories do Instagram e Status do WhatsApp: tela cheia vertical; topo (~250 px) e rodapé (~340 px) ficam cobertos pela interface.
   video: { width: 1080, height: 1920, ratio: '9:16, Stories', formats: 'MP4 (H.264)', maxSeconds: 60, maxMb: 500, safeTop: 250, safeBottom: 340, use: 'Stories do Instagram e Status do WhatsApp (e bot)' },
-  banner: { width: 1920, height: 823, ratio: '21:9', formats: 'PNG, JPG ou WEBP', maxMb: 15, use: 'Carrossel da página inicial do site' },
+  banner: { width: 1920, height: 823, ratio: '21:9', formats: 'PNG, JPG ou WEBP', maxMb: 5, use: 'Carrossel da página inicial do site' },
 };
 
 export const promoMediaSizeLabel = (key) => {

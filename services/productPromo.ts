@@ -5,6 +5,7 @@ import { vpsClient } from './vpsClient';
 import { vpsApiService } from './vpsApiService';
 import { bannerService } from './bannerService';
 import { promoCampaignService } from './promoCampaignService';
+import { uploadService } from './uploadService';
 
 export type PromoInput = { priceCents: number; start: string | null; end: string | null } | null;
 
@@ -49,6 +50,10 @@ export function savePromoMedia(productIds: string[], media: PromoMedia) {
 }
 
 export const uploadPromoFile = (file: File, onProgress?: (pct: number) => void) => promoCampaignService.uploadMedia(file, onProgress);
+
+// promo-banner-derivatives-v1: o banner vai pelo mesmo upload da tela de Banners, que gera as versões
+// -768/-1280 em AVIF/WEBP. Sem elas o carrossel da home (<picture>) mostrava a imagem quebrada.
+export const uploadPromoBannerFile = (file: File) => uploadService.uploadBannerImage(file);
 
 /**
  * Banner da home da promoção: é um banner normal (aparece no carrossel e na tela de Banners),

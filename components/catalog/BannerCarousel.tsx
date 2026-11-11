@@ -44,6 +44,8 @@ export function BannerCarousel({
 }: BannerCarouselProps) {
     const [banners, setBanners] = useState<Banner[]>(externalBanners || []);
     const [currentIndex, setCurrentIndex] = useState(0);
+    // banner-picture-fallback-v1: banner sem as versões -768/-1280 (AVIF/WEBP) volta para a imagem original em vez de ficar quebrado.
+    const [plainBannerIds, setPlainBannerIds] = useState<Set<string>>(() => new Set());
     const [isHovered, setIsHovered] = useState(false);
     const [loading, setLoading] = useState(!externalBanners);
     const [zoomedBanner, setZoomedBanner] = useState<Banner | null>(null);
@@ -170,7 +172,7 @@ export function BannerCarousel({
                                     style={{ backgroundColor: bannerBackgroundColor }}
                                 >
                                     {(() => {
-                                        const responsiveImageSources = buildResponsiveImageSources(banner.image_url, { kind: 'banner' });
+                                        const responsiveImageSources = plainBannerIds.has(banner.id) ? null : buildResponsiveImageSources(banner.image_url, { kind: 'banner' });
 
                                         return (
                                             <picture>
@@ -190,6 +192,9 @@ export function BannerCarousel({
                                                     height={549}
                                                     className="w-full h-full object-contain"
                                                     style={{ backgroundColor: bannerBackgroundColor }}
+                                                    onError={() => {
+                                                        if (responsiveImageSources) setPlainBannerIds(current => new Set(current).add(banner.id));
+                                                    }}
                                                 />
                                             </picture>
                                         );

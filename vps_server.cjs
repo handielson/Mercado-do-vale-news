@@ -3216,6 +3216,9 @@ function normalizeN8nBotContactName(input = {}) {
 const N8N_BOT_EVOLUTION_INSTANCE_NAME = process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || 'botmercadodovale';
 const EXPECTED_N8N_BOT_WEBHOOK_URL = 'https://n8n.mercadodovale.com.br/webhook/whatsapp';
 const EXPECTED_N8N_BOT_WEBHOOK_EVENTS = ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'];
+// evolution-webhook-relay-v1: a Evolution pode apontar para o relay da API (filtra recibos de entrega/leitura) ou direto para o n8n.
+const { N8N_BOT_RELAY_URL, registerEvolutionWebhookRelay } = require('./services/evolutionWebhookRelay.cjs');
+const ACCEPTED_N8N_BOT_WEBHOOK_URLS = [N8N_BOT_RELAY_URL, EXPECTED_N8N_BOT_WEBHOOK_URL];
 
 async function getN8nBotEvolutionSettings() {
   let row = null;
@@ -3296,7 +3299,7 @@ function validateN8nBotWebhook(webhook) {
   const events = Array.isArray(webhook?.events) ? webhook.events : [];
   return Boolean(
     webhook?.enabled === true
-    && webhook?.url === EXPECTED_N8N_BOT_WEBHOOK_URL
+    && ACCEPTED_N8N_BOT_WEBHOOK_URLS.includes(webhook?.url)
     && webhook?.webhookByEvents === false
     && webhook?.webhookBase64 === true
     && EXPECTED_N8N_BOT_WEBHOOK_EVENTS.every((event) => events.includes(event))
@@ -3340,7 +3343,7 @@ async function getN8nBotWhatsAppSwitchStatus(extra = {}) {
   return {
     ok: true,
     instanceName,
-    expectedWebhookUrl: EXPECTED_N8N_BOT_WEBHOOK_URL,
+    expectedWebhookUrl: N8N_BOT_RELAY_URL,
     control,
     evolution: {
       state,
@@ -32207,6 +32210,8 @@ fastify.post('/n8n-bot/global-control', { preHandler: requireSyncKey }, async (r
   });
   return { control };
 });
+
+registerEvolutionWebhookRelay(fastify, { targetUrl: EXPECTED_N8N_BOT_WEBHOOK_URL, instanceName: N8N_BOT_EVOLUTION_INSTANCE_NAME, guard: requireSyncKey });
 
 fastify.get('/n8n-bot/whatsapp-switch/status', { preHandler: requireSyncKey }, async () => {
   return getN8nBotWhatsAppSwitchStatus();

@@ -10,7 +10,7 @@ import { smartphonePriceGroups, type SmartphonePriceGroup, type SmartphoneSalePr
 import { buildVersionFinancials, SALE_TIERS, validatePromo, validateSalePrices } from '../../utils/modelVersionFinancials.js';
 import { bannerService } from '../../services/bannerService';
 import { buildPromoMediaPrompt, promoMediaSizeLabel } from '../../utils/promoMediaPrompt.js';
-import { EMPTY_PROMO_MEDIA, loadPromoMedia, removePromoBanner, savePromoMedia, saveProductsPromo, syncPromoBanner, uploadPromoFile, upsertPromoBanner, type PromoMedia } from '../../services/productPromo';
+import { EMPTY_PROMO_MEDIA, loadPromoMedia, removePromoBanner, savePromoMedia, saveProductsPromo, syncPromoBanner, uploadPromoBannerFile, uploadPromoFile, upsertPromoBanner, type PromoMedia } from '../../services/productPromo';
 
 const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—'
   : (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -40,7 +40,7 @@ const MEDIA_SLOTS = [
   // banner no formato do carrossel da home (aspect-[21/9] em BannerCarousel.tsx).
   { key: 'image_url', label: 'Imagem da promoção', hint: 'WhatsApp, Status, Instagram e bot', size: promoMediaSizeLabel('image'), accept: 'image/png,image/jpeg,image/webp,image/gif' },
   { key: 'video_url', label: 'Vídeo da promoção (Stories)', hint: 'Formato Stories do Instagram e Status do WhatsApp', size: promoMediaSizeLabel('video'), accept: 'video/mp4' },
-  { key: 'banner', label: 'Banner da home', hint: 'Carrossel da página inicial, durante a promoção', size: promoMediaSizeLabel('banner'), accept: 'image/png,image/jpeg,image/webp,image/gif' },
+  { key: 'banner', label: 'Banner da home', hint: 'Carrossel da página inicial, durante a promoção', size: promoMediaSizeLabel('banner'), accept: 'image/png,image/jpeg,image/webp' },
 ] as const;
 
 // promo-media-prompt-v1: prompt para a IA de imagem, montado na hora a partir da promoção atual da versão.
@@ -94,6 +94,11 @@ function PromoMediaBlock({ row, modelName, media, promoActive, onMediaSaved }: {
     if (!file) return;
     setUploading(key); setProgress(0); setError('');
     try {
+      if (key === 'banner') {
+        const url = await uploadPromoBannerFile(file);
+        setDraft(current => ({ ...current, banner_image_url: url }));
+        return;
+      }
       const result = await uploadPromoFile(file, setProgress);
       if (key === 'video_url' && result.type !== 'video') throw new Error('Envie o vídeo em MP4.');
       if (key !== 'video_url' && result.type !== 'image') throw new Error('Envie uma imagem (PNG, JPG, WEBP ou GIF).');

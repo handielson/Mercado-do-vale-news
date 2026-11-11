@@ -85,3 +85,14 @@ test('cada mídia mostra o tamanho recomendado', () => {
   assert.match(fs.readFileSync('components/catalog/BannerCarousel.tsx', 'utf8'), /aspect-\[21\/9\]/);
   assert.match(ui, /📐 \{slot\.size\}/);
 });
+
+test('banner da promoção gera as versões do carrossel e o carrossel não quebra sem elas', () => {
+  // promo-banner-derivatives-v1 / banner-picture-fallback-v1
+  const promo = fs.readFileSync('services/productPromo.ts', 'utf8');
+  assert.match(promo, /uploadPromoBannerFile = \(file: File\) => uploadService\.uploadBannerImage\(file\)/);
+  const ui = fs.readFileSync('components/products/ModelVersionFinancials.tsx', 'utf8');
+  assert.match(ui, /if \(key === 'banner'\) \{\s*const url = await uploadPromoBannerFile\(file\);/);
+  const carousel = fs.readFileSync('components/catalog/BannerCarousel.tsx', 'utf8');
+  assert.match(carousel, /plainBannerIds\.has\(banner\.id\) \? null : buildResponsiveImageSources\(banner\.image_url, \{ kind: 'banner' \}\)/);
+  assert.match(carousel, /onError=\{\(\) => \{\s*if \(responsiveImageSources\) setPlainBannerIds/);
+});
