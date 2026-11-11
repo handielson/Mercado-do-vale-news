@@ -19,7 +19,9 @@ test('tablet: categoria, lista no formato dos celulares e títulos', { skip: !sn
   const pad2 = prepare(search, 'Vc teria o tablet Xiaomi Redmi Pad 2 ?', { salesSearchQuery: 'Xiaomi Redmi Pad 2' });
   assert.equal(pad2.productCategoryId, TABLET_CATEGORY_ID);
   assert.equal(pad2.tabletCatalogV1, true);
-  assert.notEqual(prepare(live, 'Vc teria o tablet Xiaomi Redmi Pad 2 ?', { salesSearchQuery: 'Xiaomi Redmi Pad 2' }).productCategoryId, TABLET_CATEGORY_ID, 'fixture reproduz o bug');
+  // Antes de publicar, o fluxo no ar reproduz o bug; depois, o patch é idempotente.
+  if (!live.includes(MARK)) assert.notEqual(prepare(live, 'Vc teria o tablet Xiaomi Redmi Pad 2 ?', { salesSearchQuery: 'Xiaomi Redmi Pad 2' }).productCategoryId, TABLET_CATEGORY_ID, 'fixture reproduz o bug');
+  else assert.equal(search, live, 'patch idempotente no fluxo publicado');
   for (const text of ['quais tablets vocês têm?', 'tem ipad?', 'Tablete xiaomi', 'tem o Redmi Pad SE?']) assert.equal(prepare(search, text).productCategoryId, TABLET_CATEGORY_ID, text);
   const phone = prepare(search, 'tem o redmi note 15?', { salesSearchQuery: 'redmi note 15' });
   assert.equal(phone.productCategoryId, PHONE_CATEGORY_ID, 'celular continua celular');
