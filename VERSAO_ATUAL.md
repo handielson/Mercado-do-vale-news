@@ -1,3 +1,11 @@
+# v1.2.847-bot-payjoy-entrada-direta
+
+Data: 11/11/2026. Branch: `main`. Tag: `v1.2.847-bot-payjoy-entrada-direta`. Código: `a55f33d3`. Workflow ativo `4f965fa0…`, backup criptografado e CAS; site (manifesto): `/var/www/mdv-site/releases/20261111-172000-v1-2-847-payjoy-entrada-direta`. API sem alteração.
+
+A mensagem anterior à lista PayJoy termina em “Você precisa ter R$ 420,00 para a entrada.”. A pergunta antecipada foi removida; a pergunta depois da lista permanece. Testes: 15 focados e 145 do gate comercial. Registro: `docs/versoes/2026-11-11-v1.2.847-bot-payjoy-entrada-direta.md`.
+
+---
+
 # v1.2.846-bot-payjoy-lista-aprovado
 
 Data: 11/11/2026. Branch: `main`. Tag: `v1.2.846-bot-payjoy-lista-aprovado`. Código: `e9e3ac38`, `3c94a97d` e `d0ae96b6`. Workflow publicado com marcador `payjoy-approved-list-v1`, hash `d15b0b4b…`, backup criptografado e CAS. Site: `/var/www/mdv-site/releases/20261111-165700-v1-2-846-payjoy-lista-aprovado` (manifesto); API sem alteração.

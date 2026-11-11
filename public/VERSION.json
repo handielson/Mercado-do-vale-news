@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.846-bot-payjoy-lista-aprovado",
+  "version": "v1.2.847-bot-payjoy-entrada-direta",
   "date": "2026-11-11",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.846-bot-payjoy-lista-aprovado",
-  "release_vps": "/var/www/mdv-site/releases/20261111-165700-v1-2-846-payjoy-lista-aprovado",
+  "tag": "v1.2.847-bot-payjoy-entrada-direta",
+  "release_vps": "/var/www/mdv-site/releases/20261111-172000-v1-2-847-payjoy-entrada-direta",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Bot WhatsApp e Meta: após calcular a entrada PayJoy sobre o valor aprovado, lista smartphones cujo total em 12x cabe na aprovação; mantém entrada fixa, escolha por número/nome, fotos por cor e fluxo de venda.",
+  "summary": "Bot WhatsApp e Meta: remove a pergunta antecipada após a entrada PayJoy; a lista vem em seguida e a pergunta de escolha permanece no final.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,25 +30,21 @@
   "changed_files": [
     "scripts/n8n-payjoy-approved-list.cjs",
     "scripts/deploy-n8n-payjoy-approved-list.cjs",
-    "scripts/n8n-sales-regression-gate.cjs",
-    "scripts/publish-vps-plan.cjs",
     "tmp-tests/n8n-payjoy-approved-list.test.cjs",
-    "tmp-tests/n8n-sales-catalog-timeout-guard.test.cjs",
-    "tmp-tests/publish-vps-plan-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-11-v1.2.846-bot-payjoy-lista-aprovado.md"
+    "docs/versoes/2026-11-11-v1.2.847-bot-payjoy-entrada-direta.md"
   ],
   "validations": [
-    "14/14 testes focados no snapshot ativo; 144/144 no candidato exato (test:n8n-sales)",
+    "15/15 testes focados no snapshot ativo; 145/145 no candidato exato (test:n8n-sales)",
     "Dry run, backup AES-256-GCM, CAS, entidade/histórico alinhados, n8n e runner saudáveis",
     "Planejador de publicação e guarda de segredos aprovados"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261111-165700-v1-2-846-payjoy-lista-aprovado",
-    "previous": "/var/www/mdv-site/releases/20261111-095335-v1-2-843-banner-relay",
-    "note": "Publicação do manifesto da versão PayJoy; API sem mudança."
+    "release": "/var/www/mdv-site/releases/20261111-172000-v1-2-847-payjoy-entrada-direta",
+    "previous": "/var/www/mdv-site/releases/20261111-165700-v1-2-846-payjoy-lista-aprovado",
+    "note": "Publicação do manifesto do ajuste de mensagem PayJoy; API sem mudança."
   },
   "api_release": {
     "status": "publicada",
@@ -65,16 +61,16 @@
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
     "versionId": "3edc8f23-90f6-4012-aaf5-385eb3aa8934",
-    "published_at": "2026-11-11T20:10:53Z",
-    "before": "2fc8c963b34de44d693ac4fa3833d945dd74b12966a1491d5ba2b9434de6f644",
-    "sha256": "d15b0b4beadef4073e68669d49a6cc8966efce0bca34f4097099c63a844d9331",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-11T20-10-10-854Z-e2059474.aes256gcm.json",
+    "published_at": "2026-11-11T20:19:46Z",
+    "before": "d15b0b4beadef4073e68669d49a6cc8966efce0bca34f4097099c63a844d9331",
+    "sha256": "4f965fa07f357f4e6f2df09b986901df93e9ab2e049e493a42a252e705da8f6c",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-11T20-18-32-414Z-2e210d4c.aes256gcm.json",
     "marker": "payjoy-approved-list-v1",
     "tests": {
-      "focused_passed": 14,
-      "commercial_gate_passed": 144
+      "focused_passed": 15,
+      "commercial_gate_passed": 145
     },
-    "code_commit": "d0ae96b6"
+    "code_commit": "a55f33d3"
   },
   "evolution_release": {
     "status": "publicada",
