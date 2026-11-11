@@ -2,13 +2,14 @@
 // Fonte única: grupo de preço do celular (o mesmo da Gestão de Modelos e do cadastro da família).
 // Editar aqui grava no mesmo grupo (PUT /models/:id/smartphone-price-groups/:groupId), com conferência de revisão.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ExternalLink, ImageIcon, Loader2, Pencil, Upload } from 'lucide-react';
+import { Check, Copy, ExternalLink, ImageIcon, Loader2, Pencil, Sparkles, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import { ModelPricesPanel } from '../settings/ModelPricesPanel';
 import { smartphonePriceGroups, type SmartphonePriceGroup, type SmartphoneSalePrices } from '../../services/smartphonePriceGroups';
 import { buildVersionFinancials, SALE_TIERS, validatePromo, validateSalePrices } from '../../utils/modelVersionFinancials.js';
 import { bannerService } from '../../services/bannerService';
+import { buildPromoMediaPrompt, promoMediaSizeLabel } from '../../utils/promoMediaPrompt.js';
 import { EMPTY_PROMO_MEDIA, loadPromoMedia, removePromoBanner, savePromoMedia, saveProductsPromo, syncPromoBanner, uploadPromoFile, upsertPromoBanner, type PromoMedia } from '../../services/productPromo';
 
 const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—'
@@ -37,10 +38,47 @@ type Row = ReturnType<typeof buildVersionFinancials>[number];
 const MEDIA_SLOTS = [
   // Tamanhos: imagem no formato de post (4:5) do Instagram/WhatsApp; vídeo vertical (9:16) de Status/Reels;
   // banner no formato do carrossel da home (aspect-[21/9] em BannerCarousel.tsx).
-  { key: 'image_url', label: 'Imagem da promoção', hint: 'WhatsApp, Status, Instagram e bot', size: '1080 × 1350 px (4:5) · PNG, JPG ou WEBP · até 15 MB', accept: 'image/png,image/jpeg,image/webp,image/gif' },
-  { key: 'video_url', label: 'Vídeo da promoção', hint: 'Status, Instagram e bot', size: '1080 × 1920 px (9:16, vertical) · MP4 · até 60 s · até 500 MB', accept: 'video/mp4' },
-  { key: 'banner', label: 'Banner da home', hint: 'Carrossel da página inicial, durante a promoção', size: '1920 × 823 px (21:9) · PNG, JPG ou WEBP · até 15 MB', accept: 'image/png,image/jpeg,image/webp,image/gif' },
+  { key: 'image_url', label: 'Imagem da promoção', hint: 'WhatsApp, Status, Instagram e bot', size: promoMediaSizeLabel('image'), accept: 'image/png,image/jpeg,image/webp,image/gif' },
+  { key: 'video_url', label: 'Vídeo da promoção', hint: 'Status, Instagram e bot', size: promoMediaSizeLabel('video'), accept: 'video/mp4' },
+  { key: 'banner', label: 'Banner da home', hint: 'Carrossel da página inicial, durante a promoção', size: promoMediaSizeLabel('banner'), accept: 'image/png,image/jpeg,image/webp,image/gif' },
 ] as const;
+
+// promo-media-prompt-v1: prompt para a IA de imagem, montado na hora a partir da promoção atual da versão.
+function PromoPromptBlock({ row, modelName }: { row: Row; modelName: string }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const prompt = useMemo(() => buildPromoMediaPrompt({
+    modelName, versionLabel: row.label, colors: row.colors, retailCents: row.prices?.price_retail ?? 0, promo: row.promo,
+  }), [modelName, row.label, row.colors, row.prices?.price_retail, row.promo]);
+  useEffect(() => { setCopied(false); }, [prompt]);
+  if (!prompt) return null;
+  const copy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(prompt);
+      else {
+        const area = document.createElement('textarea');
+        area.value = prompt; area.style.position = 'fixed'; area.style.opacity = '0';
+        document.body.appendChild(area); area.select(); document.execCommand('copy'); area.remove();
+      }
+      setCopied(true);
+      toast.success('Prompt copiado. Cole na IA junto com a foto do produto.');
+    } catch { toast.error('Não consegui copiar. Selecione o texto e copie manualmente.'); }
+  };
+  return (
+    <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/60 p-2" aria-label={`Prompt da promoção ${row.label}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button type="button" onClick={() => setOpen(value => !value)} className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-800 hover:underline">
+          <Sparkles className="h-3.5 w-3.5" /> Prompt para a IA criar as imagens {open ? '▴' : '▾'}
+        </button>
+        <button type="button" onClick={() => void copy()} className="inline-flex items-center gap-1 rounded-md bg-violet-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-violet-800">
+          {copied ? <><Check className="h-3 w-3" /> Copiado</> : <><Copy className="h-3 w-3" /> Copiar prompt</>}
+        </button>
+      </div>
+      <p className="mt-0.5 text-[10px] text-violet-700/80">Atualiza sozinho com preço, desconto, datas e cores da promoção. Cole na IA e envie junto a foto do produto.</p>
+      {open && <textarea readOnly value={prompt} rows={14} onFocus={event => event.currentTarget.select()} className="mt-1.5 w-full rounded border border-violet-200 bg-white p-2 font-mono text-[11px] leading-snug text-slate-700" />}
+    </div>
+  );
+}
 
 // promo-media-v1: imagem, vídeo e banner da promoção desta versão (mesma mídia em todas as cores).
 function PromoMediaBlock({ row, modelName, media, promoActive, onMediaSaved }: { row: Row; modelName: string; media: PromoMedia & { banner_image_url?: string | null }; promoActive: boolean; onMediaSaved: () => void }) {
@@ -85,6 +123,7 @@ function PromoMediaBlock({ row, modelName, media, promoActive, onMediaSaved }: {
   return (
     <div className="mt-2 rounded-lg border border-red-100 bg-white p-2.5" aria-label={`Mídia da promoção ${row.label}`}>
       <p className="text-xs font-semibold text-slate-800">Mídia da promoção</p>
+      <PromoPromptBlock row={row} modelName={modelName} />
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         {MEDIA_SLOTS.map(slot => {
           const url = draft[field(slot.key)];
