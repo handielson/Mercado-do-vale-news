@@ -1,3 +1,13 @@
+# v1.2.839-bot-nfc-na-lista
+
+Data: 10/11/2026 (Brasília). Branch: `main`. Commit de código: `8d757b87`.
+
+NFC confirmado na ficha do aparelho aparece antes das cores na lista de smartphones do bot. A linha é omitida se a informação não estiver confirmada ou se as variantes agrupadas divergirem.
+
+WhatsApp de teste: execução `74593`. Testes: 3 focados e 130 do gate comercial. Release do manifesto no site: `/var/www/mdv-site/releases/20261111-001422-v1-2-839-bot-nfc-na-lista`. Registro: `docs/versoes/2026-11-10-v1.2.839-bot-nfc-na-lista.md`.
+
+---
+
 # v1.2.838-bot-parcelas-limpas
 
 Workflow `SkrkB4vyKVDnQ68t` publicado em 10/11/2026 às 20:47:41 de Brasília. Commit de código `248e9dfb` na `main`.
