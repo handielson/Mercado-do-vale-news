@@ -99,6 +99,20 @@ test('1400 a 30% mantém entrada 420, lista a configuração elegível e separa 
   assert.equal(r.state.salesPostList[jid].options.length, 1);
 });
 
+test('entrada antes da lista omite a pergunta antecipada em WhatsApp e Meta', async () => {
+  const approval = 'A PayJoy aprovou R$ 1.400,00 com entrada de 30%. 😊|||Calculando sobre o valor aprovado: R$ 1.400,00 × 30% = R$ 420,00.|||Você precisa ter R$ 420,00 para a entrada.';
+  for (const identity of [{ remoteJid: jid }, { remoteJid: 'meta-fixture', channel: 'meta' }]) {
+    for (const rows of [[product('fits')], []]) {
+      const r = await list(rows, { input: source({ ...identity, output: approval + ' Qual aparelho você quer escolher dentro do valor aprovado?' }) });
+      assert.equal(r.prepared.payjoyApprovalOutputV1, approval);
+      assert.ok(r.composed.output.startsWith(approval + '[[MSG]]'));
+      assert.doesNotMatch(r.text, /Qual aparelho você quer escolher dentro do valor aprovado/);
+      if (rows.length) assert.ok(r.composed.output.endsWith(lastMessage));
+      else assert.match(r.composed.output, /Quer que eu envie a lista completa/);
+    }
+  }
+});
+
 test('fronteira usa total inteiro da maquininha, sem subtrair entrada nem comparar parcela', async () => {
   const excluded = product('boundary', 'Redmi 15', 134900);
   assert.equal(Math.round(134900 * 1.119), 150953);
@@ -204,7 +218,7 @@ test('aprovação fresca sem contexto expõe cálculo e aciona lista na mesma re
     assert.match(payment.output, /A PayJoy aprovou R\$\s1\.400,00/);
     const r = await list([product('fresh-product')], { state, input: payment });
     assert.equal(r.prepared.payjoyApprovedListV1, true);
-    assert.ok(r.composed.output.startsWith(payment.output), 'preserva resposta original da aprovação fresca antes da lista');
+    assert.ok(r.composed.output.startsWith(payment.output.replace(' Qual aparelho você quer escolher dentro do valor aprovado?', '')), 'preserva cálculo e entrada antes da lista, sem pergunta antecipada');
     assert.equal(r.state.salesPostList[jid].options[0].name, 'Redmi 15');
     assert.ok(r.composed.output.endsWith(lastMessage));
   }

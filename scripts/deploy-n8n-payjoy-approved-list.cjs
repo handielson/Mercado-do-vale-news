@@ -52,7 +52,8 @@ async function main() {
     }
     assert.ok(['2fc8c963b34de44d693ac4fa3833d945dd74b12966a1491d5ba2b9434de6f644',
       '5709033b5a7454ef9d7a494d753ff2b3806c36fe235aea52fc2e199c729d7099',
-      'a4dd74562874a5ac935da103fa6c282ecb9676ba285b719c19028b1ffaabbf0d'].includes(fingerprint(before)), 'Active workflow changed since the approved snapshot');
+      'a4dd74562874a5ac935da103fa6c282ecb9676ba285b719c19028b1ffaabbf0d',
+      'd15b0b4beadef4073e68669d49a6cc8966efce0bca34f4097099c63a844d9331'].includes(fingerprint(before)), 'Active workflow changed since the approved snapshot');
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-n8n-payjoy-approved-list-'));
     try {
       const beforeFile = path.join(temp, 'before.json');

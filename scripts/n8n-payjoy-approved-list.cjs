@@ -19,6 +19,14 @@ function once(code, anchor, replacement) {
 }
 const edge = node => ({ node, type: 'main', index: 0 });
 
+function patchApprovalIntro(workflow) {
+  const params = workflow.nodes.find(n => n.name === NODES[0]).parameters;
+  const marker = MARK + ':concise-entry';
+  if (params.jsCode.includes(marker)) return;
+  params.jsCode = once(params.jsCode, 'payjoyApprovalOutputV1: source.output,',
+    "payjoyApprovalOutputV1: String(source.output || '').replace(' Qual aparelho você quer escolher dentro do valor aprovado?', ''), /* " + marker + " */");
+}
+
 function patchFreshResult(params) {
   let code = params.jsCode;
   code = once(code, "let output = '';", "// " + MARK + ":fresh-result - expose the already calculated first approval, without changing its response.\nlet payjoyFreshCalculationV1;\nlet output = '';");
@@ -62,7 +70,7 @@ function patchWorkflow(workflow) {
   };
   const marked = NODES.map(name => JSON.stringify(node(name).parameters).includes(MARK));
   const routers = [ROUTER, BYPASS].map(name => w.nodes.some(n => n.name === name));
-  if ([...marked, ...routers].every(Boolean)) { validate(w); return w; }
+  if ([...marked, ...routers].every(Boolean)) { patchApprovalIntro(w); validate(w); return w; }
   // The first live smoke exposed an existing first-approval result not forwarded by payment.
   // Upgrade only that known v1 layout; CAS still pins the exact deployed workflow.
   if (marked.slice(0, 4).every(Boolean) && routers.every(Boolean)) {
@@ -76,6 +84,7 @@ function patchWorkflow(workflow) {
       patchFreshResult(node(NODES[4]).parameters);
     }
     if (!marked[5]) patchApprovalContinuation(node(NODES[5]).parameters, node(NODES[4]).parameters.jsCode);
+    patchApprovalIntro(w);
     validate(w);
     return w;
   }
@@ -168,6 +177,7 @@ if (source.payjoyApprovedListV1 === true && catalog) return [{ json: { ...source
   w.connections[BYPASS] = { main: [[edge('Vendas - Buscar Produtos')], [edge('Vendas - Persistir Preferencias')]] };
   patchFreshResult(node(NODES[4]).parameters);
   patchApprovalContinuation(node(NODES[5]).parameters, node(NODES[4]).parameters.jsCode);
+  patchApprovalIntro(w);
   validate(w);
   return w;
 }
