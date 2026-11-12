@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.848-bot-payjoy-acima-aprovado",
-  "date": "2026-11-11",
-  "status": "publicada",
+  "version": "v1.2.849-status-conferir-reenviar",
+  "date": "2026-11-12",
+  "status": "pendente de publicação",
   "branch": "main",
-  "tag": "v1.2.848-bot-payjoy-acima-aprovado",
-  "release_vps": "/var/www/mdv-site/releases/20261111-173400-v1-2-848-payjoy-acima-aprovado",
+  "tag": "v1.2.849-status-conferir-reenviar",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Bot WhatsApp e Meta: pedido de aparelhos mais caros após aprovação PayJoy mostra apenas total em 12x acima do aprovado; cada aparelho informa entrada base mais a diferença. Permite voltar aos que cabem na aprovação.",
+  "summary": "Stories/Status: conferência automática no WhatsApp das entregas incertas, reenvio do que não saiu (até 3 tentativas) e botão \"Conferir no WhatsApp\".",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -26,32 +26,33 @@
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     }
   },
-  "site_source_base": "4babd1e0",
+  "site_source_base": "cf5aeeb",
   "changed_files": [
-    "scripts/n8n-payjoy-approved-list.cjs",
-    "scripts/deploy-n8n-payjoy-approved-list.cjs",
-    "tmp-tests/n8n-payjoy-approved-list.test.cjs",
+    "services/whatsappStatusReconcile.cjs",
+    "services/marketingCampaignApi.cjs",
+    "services/socialStoryScheduleService.ts",
+    "pages/admin/settings/marketing/SocialStorySchedulerPanel.tsx",
+    "deploy-vps-server-only.cjs",
+    "scripts/deploy-phone-price-list.cjs",
+    "tmp-tests/whatsapp-status-reconcile.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-11-v1.2.848-bot-payjoy-acima-aprovado.md"
+    "docs/versoes/2026-11-12-v1.2.849-status-conferir-reenviar.md"
   ],
   "validations": [
-    "22/22 testes focados no snapshot ativo; 152/152 no candidato exato (test:n8n-sales)",
-    "Dry run, backup AES-256-GCM, CAS, entidade/histórico alinhados, n8n e runner saudáveis",
-    "Planejador de publicação e guarda de segredos aprovados"
+    "whatsapp-status-reconcile 9/9; whatsapp-status-sender, social-story-* verdes (1 falha preexistente em social-story-scheduler-static, igual ao baseline).",
+    "node --check; tsc sem mensagens novas; vite build aprovado."
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261111-173400-v1-2-848-payjoy-acima-aprovado",
-    "previous": "/var/www/mdv-site/releases/20261111-172000-v1-2-847-payjoy-entrada-direta",
-    "note": "Publicação do manifesto da lista PayJoy acima do valor aprovado; API sem mudança."
+    "status": "pendente",
+    "release": "pendente",
+    "published_at": null
   },
   "api_release": {
-    "status": "publicada",
-    "deployed_at": "2026-11-11T14:00:40Z",
+    "status": "pendente",
     "service": "mdv-api",
-    "backup": "/var/www/mdv-api/backups/evolution-webhook-relay-1794405638723",
-    "note": "deploy seletivo --evolution-webhook-relay-only: services/botErrorAlerts.cjs + entradas do servidor; /status 200; relay seguiu ativo; POST /n8n-bot/error-alerts testado pela URL pública com lista vazia de destinatários (nenhuma mensagem enviada)"
+    "commit": "cf5aeeb",
+    "note": "Deploy completo da API (node deploy-vps-server-only.cjs) e reinício do mdv-api; tabela social_story_delivery_checks criada no primeiro uso. WAHA: atualização separada, com backup da sessão."
   },
   "nginx_release": {
     "status": "sem mudança",

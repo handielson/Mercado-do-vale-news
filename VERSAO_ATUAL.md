@@ -1,3 +1,13 @@
+# v1.2.849-status-conferir-reenviar
+
+Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `cf5aeeb`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.
+
+Status do WhatsApp: conferência automática das entregas incertas, reenvio do que não saiu e botão "Conferir no WhatsApp". Publicação pendente (API antes do site).
+
+Registro: `docs/versoes/2026-11-12-v1.2.849-status-conferir-reenviar.md`.
+
+---
+
 # v1.2.848-bot-payjoy-acima-aprovado
 
 Data: 11/11/2026. Branch: `main`. Tag: `v1.2.848-bot-payjoy-acima-aprovado`. Código: `c3eaa196`. Site (manifesto): `/var/www/mdv-site/releases/20261111-173400-v1-2-848-payjoy-acima-aprovado`. API sem alteração.
