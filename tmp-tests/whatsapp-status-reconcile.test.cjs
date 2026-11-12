@@ -21,6 +21,7 @@ function fakePool({ delivery, check = null }) {
     async query(sql, params = []) {
       db.queries.push(sql);
       if (/^CREATE TABLE/.test(sql.trim())) return [[]];
+      if (/^SHOW FULL COLUMNS/.test(sql)) return [[{ Collation: 'utf8mb4_unicode_ci' }]];
       if (/INSERT INTO social_story_delivery_checks/.test(sql)) {
         db.check = { delivery_id: params[0], sent_at: params[1], state: 'waiting', checks: 0, not_found_streak: 0, last_result: 'x' };
         return [{}];
@@ -51,6 +52,27 @@ test('acha o Status publicado pela legenda, tipo e horário', () => {
   ];
   assert.deepEqual(rec.findPublishedStatus(msgs, { sinceMs: SENT, type: 'video', caption: 'Redmi 15 por R$ 1.349' }).id, 'true_status@broadcast_ABC');
   assert.equal(rec.findPublishedStatus(msgs.slice(0, 3), { sinceMs: SENT, type: 'video', caption: 'Redmi 15 por R$ 1.349' }), null);
+});
+
+test('conferência usa a mesma normalização do ID WPP aninhado no envio', () => {
+  const message = { id: null, _data: { id: { id: 'WPP-ID' }, type: 'video' }, fromMe: true,
+    timestamp: SENT / 1000 + 10, body: 'legenda' };
+  assert.equal(rec.findPublishedStatus([message], { sinceMs: SENT, type: 'video', caption: 'legenda' }).id, 'WPP-ID');
+});
+
+test('schema fixa collation e corrige instalação 849 existente sem repetir o ALTER', async () => {
+  for (const initial of ['utf8mb4_0900_ai_ci', 'utf8mb4_unicode_ci']) {
+    delete require.cache[require.resolve('../services/whatsappStatusReconcile.cjs')];
+    const fresh = require('../services/whatsappStatusReconcile.cjs');
+    const queries = [];
+    const pool = { async query(sql) { queries.push(sql); return /^SHOW/.test(sql)
+      ? [[{ Collation: initial }]] : [[]]; } };
+    await fresh.ensureStatusCheckSchema(pool);
+    await fresh.ensureStatusCheckSchema(pool);
+    assert.match(queries[0], /DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci/);
+    assert.equal(queries.filter(q => q.startsWith('ALTER TABLE')).length, initial === 'utf8mb4_unicode_ci' ? 0 : 1);
+    assert.ok(!queries.some(q => /DELETE|TRUNCATE|DROP TABLE/.test(q)));
+  }
 });
 
 test('"Chat not found" = não publicado; outro erro = sem leitura', async () => {

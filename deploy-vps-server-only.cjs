@@ -589,6 +589,21 @@ async function main() {
   if (!apiProc) throw new Error('Unable to locate target PM2 app');
 
   const appDir = apiProc.pm2_env.pm_cwd;
+  if (process.argv.includes('--whatsapp-status-only')) {
+    if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
+    const backupDir = `${appDir}/backups/whatsapp-status-${Date.now()}`;
+    const files = ['services/whatsappStatusHealth.cjs', 'services/whatsappStatusSender.cjs', 'services/whatsappStatusReconcile.cjs'];
+    await exec(`mkdir -p ${backupDir} ${appDir}/services && chmod 700 ${backupDir}`);
+    for (const file of files) {
+      await exec(`if test -f ${appDir}/${file}; then cp ${appDir}/${file} ${backupDir}/${path.basename(file)}; chmod 600 ${backupDir}/${path.basename(file)}; fi`);
+      await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
+      await exec(`node --check ${appDir}/${file}`);
+    }
+    // This path deliberately never calls the full deployment's env/credential writers.
+    console.log((await exec('pm2 restart mdv-api')).trim());
+    console.log(`WhatsApp Status backup: ${backupDir}`);
+    conn.end(); return;
+  }
   if (process.argv.includes('--unit-visibility-only') || process.argv.includes('--unit-visibility-check')) {
     await require('./scripts/deploy-unit-visibility.cjs').deploy({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

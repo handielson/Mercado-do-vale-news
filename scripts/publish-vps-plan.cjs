@@ -22,6 +22,7 @@ const API_PATTERNS = [
   /(?:^|\/)(?:webhook|cron|server|api)[^/]*\.(?:js|cjs|ts)$/,
   /^services\/autoresponder\/engine\//,
   /^services\/marketingCampaignApi\.cjs$/,
+  /^services\/whatsappStatus(?:Health|Sender|Reconcile)\.cjs$/,
   /^services\/mercadoLivrePublication\.cjs$/,
   /^services\/mercadoLivreListingPrice\.cjs$/,
   /^services\/mercadoLivreListingStock\.cjs$/,
@@ -142,7 +143,8 @@ function matchesAny(file, patterns) {
 function classifyFiles(files) {
   const normalized = unique(files.map(normalizeFile));
   const localOnly = file => file === 'services/localCatalogPreviewServer.cjs';
-  const apiOnlyService = file => file === 'services/mercadoLivreListingStock.cjs';
+  const apiOnlyService = file => file === 'services/mercadoLivreListingStock.cjs'
+    || /^services\/whatsappStatus(?:Health|Sender|Reconcile)\.cjs$/.test(file);
   const siteFiles = normalized.filter((file) => matchesAny(file, SITE_PATTERNS)
     && !localOnly(file)
     && !apiOnlyService(file)
@@ -296,6 +298,10 @@ function buildPlan(options) {
   const mercadoLivreOnly = classification.apiFiles.length > 0
     && classification.apiFiles.some(file => file.startsWith('services/mercadoLivre'))
     && classification.apiFiles.every(file => mercadoLivreApiFiles.has(file));
+  const whatsappStatusOnly = classification.apiFiles.some(file => /^services\/whatsappStatus/.test(file))
+    && classification.apiFiles.every(file => file === 'deploy-vps-server-only.cjs'
+      || /^services\/whatsappStatus(?:Health|Sender|Reconcile)\.cjs$/.test(file));
+  if (whatsappStatusOnly) deployCommands.push('node deploy-vps-server-only.cjs --whatsapp-status-only');
   if (classification.needs.api && mercadoLivreStockReadOnly) deployCommands.push('node deploy-vps-server-only.cjs --mercado-livre-stock-read-only');
   else if (classification.needs.api && mercadoLivreOnly) deployCommands.push('node deploy-vps-server-only.cjs --mercado-livre-only');
   if (classification.needs.api && shopeeFilelink) deployCommands.push('node deploy-vps-server-only.cjs --shopee-filelink-only');
@@ -305,7 +311,7 @@ function buildPlan(options) {
     deployCommands.push(`$env:VPS_SITE_RELEASE_NAME='${releaseName}'; npm.cmd run deploy:vps-site`);
   }
   if (classification.needs.api && !metaAttendance && !salesDelivery && !catalogMedia && !shopeeFilelink
-      && !mercadoLivreOnly && !mercadoLivreStockReadOnly) {
+      && !mercadoLivreOnly && !mercadoLivreStockReadOnly && !whatsappStatusOnly) {
     deployCommands.push('node deploy-vps-server-only.cjs');
   }
   deployCommands.push(...n8nDeployCommands(classification.n8nFiles));

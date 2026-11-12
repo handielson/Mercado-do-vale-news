@@ -72,3 +72,9 @@ assert.equal(payjoyPlan.target, 'n8n');
 assert.deepEqual(payjoyPlan.deployCommands, ['node scripts/deploy-n8n-payjoy-approved-list.cjs --apply']);
 assert.ok(payjoyPlan.validations.includes('node scripts/deploy-n8n-payjoy-approved-list.cjs'));
 assert.ok(!payjoyPlan.validations.includes('node tmp-tests/n8n-payjoy-approved-list.test.cjs'));
+const statusPlan = JSON.parse(execFileSync(process.execPath, [
+  'scripts/publish-vps-plan.cjs', '--json', '--mock-files',
+  'services/whatsappStatusSender.cjs,services/whatsappStatusReconcile.cjs,deploy-vps-server-only.cjs',
+], { encoding: 'utf8' }));
+assert.equal(statusPlan.target, 'api');
+assert.deepEqual(statusPlan.deployCommands, ['node deploy-vps-server-only.cjs --whatsapp-status-only']);

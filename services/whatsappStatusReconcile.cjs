@@ -12,6 +12,7 @@ const FIRST_CHECK_DELAY_MS = 2 * 60 * 1000;
 const RECHECK_DELAY_MS = 3 * 60 * 1000;
 const GIVE_UP_AFTER_MS = 6 * 60 * 60 * 1000;
 const NOT_FOUND_CONFIRMATIONS = 2;
+const { extractWahaStatusId } = require('./whatsappStatusSender.cjs');
 
 function maxAttempts(env = process.env) {
   return Math.max(1, Math.min(10, Number(env.SOCIAL_STORY_WHATSAPP_MAX_ATTEMPTS || 3) || 3));
@@ -40,12 +41,6 @@ function messageTimestampMs(message) {
   return value < 1e12 ? value * 1000 : value;
 }
 
-function messageId(message) {
-  const id = message?.id;
-  if (typeof id === 'string') return id;
-  return id?._serialized || id?.id || message?.key?.id || null;
-}
-
 /** Procura, entre os Status da própria sessão, um de mesmo tipo/legenda publicado a partir de sinceMs. */
 function findPublishedStatus(messages, { sinceMs, type, caption }) {
   const wanted = normalize(caption);
@@ -57,7 +52,7 @@ function findPublishedStatus(messages, { sinceMs, type, caption }) {
     if (kind && type && kind !== type) continue;
     const body = normalize(message?.body ?? message?.caption ?? message?._data?.caption);
     if (wanted && body !== wanted) continue;
-    return { id: messageId(message), at };
+    return { id: extractWahaStatusId(message), at };
   }
   return null;
 }
@@ -95,7 +90,8 @@ async function verifyWahaStatusPublication({ sinceMs, type, caption, env = proce
 
 let schemaPromise = null;
 function ensureStatusCheckSchema(pool) {
-  schemaPromise ||= pool.query(`CREATE TABLE IF NOT EXISTS social_story_delivery_checks (
+  schemaPromise ||= (async () => {
+    await pool.query(`CREATE TABLE IF NOT EXISTS social_story_delivery_checks (
       delivery_id CHAR(36) NOT NULL PRIMARY KEY,
       sent_at DATETIME(3) NOT NULL,
       state ENUM('waiting','published','retried','gave_up','unknown') NOT NULL DEFAULT 'waiting',
@@ -105,7 +101,13 @@ function ensureStatusCheckSchema(pool) {
       last_result VARCHAR(500) NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_story_check_state (state, last_check_at)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`).catch((error) => { schemaPromise = null; throw error; });
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    const [columns] = await pool.query("SHOW FULL COLUMNS FROM social_story_delivery_checks WHERE Field='delivery_id'");
+    if (columns[0]?.Collation !== 'utf8mb4_unicode_ci') {
+      // Upgrade the 849 table as well: CREATE IF NOT EXISTS cannot change its old default.
+      await pool.query('ALTER TABLE social_story_delivery_checks CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+    }
+  })().catch((error) => { schemaPromise = null; throw error; });
   return schemaPromise;
 }
 
