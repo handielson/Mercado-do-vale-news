@@ -1,7 +1,7 @@
 {
   "version": "v1.2.852-bot-card-de-venda",
   "date": "2026-11-12",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.852-bot-card-de-venda",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
@@ -62,10 +62,12 @@
     "note": ""
   },
   "n8n_release": {
-    "status": "pendente",
+    "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
     "before": "42ea1efb130e4550056831ef237494be05f480d396333f32c6dd095717eb5b31",
-    "candidate": "455eb40ffc98de7d7d425fae054cbd86dd2a8663a23946ea45829ab7909477e4"
+    "candidate": "455eb40ffc98de7d7d425fae054cbd86dd2a8663a23946ea45829ab7909477e4",
+    "applied_at": "2026-11-12T20:20Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-12T20-20-06-872Z-0596b9a7.aes256gcm.json"
   },
   "evolution_release": {
     "status": "publicada",

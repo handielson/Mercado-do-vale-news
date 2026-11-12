@@ -1,6 +1,6 @@
 # v1.2.852-bot-card-de-venda
 
-Data: 12/11/2026. Branch: `main`. Status: **pendente** (n8n). Site/API seguem a v1.2.851.
+Data: 12/11/2026. Branch: `main`. Status: **publicada** (n8n, 12/11 20:20). Site/API seguem a v1.2.851.
 Escolha de item da lista: foto com ficha (emojis) + chamada para venda 5 s depois; complemento após a escolha reenvia o card; "SIM" pergunta entrega grátis/retirada. Registro: `docs/versoes/2026-11-12-v1.2.852-bot-card-de-venda.md`.
 
 ---
