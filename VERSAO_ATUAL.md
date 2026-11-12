@@ -1,3 +1,13 @@
+# v1.2.850-bot-mais-em-conta
+
+Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `39fb17b`. Publicado no n8n (sem release de site). Escopo: robô do WhatsApp.
+
+"Qual celular mais em conta que você tem aí?" volta a listar os celulares do mais barato, no formato padrão. Gate 152/152; backup em `/root/n8n-backups/`. Pendente: v1.2.849-status-conferir-reenviar (API e site).
+
+Registro: `docs/versoes/2026-11-12-v1.2.850-bot-mais-em-conta.md`.
+
+---
+
 # v1.2.849-status-conferir-reenviar
 
 Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `cf5aeeb`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.
