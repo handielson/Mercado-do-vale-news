@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.850-bot-mais-em-conta",
+  "version": "v1.2.851-status-id-collation",
   "date": "2026-11-12",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.850-bot-mais-em-conta",
-  "release_vps": "/var/www/mdv-site/releases/20261112-134000-v1-2-849-status-conferir-reenviar",
+  "tag": "v1.2.851-status-id-collation",
+  "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô: \"Qual celular mais em conta que você tem aí?\" volta a listar os celulares do mais barato, no formato padrão da lista.",
+  "summary": "Status WhatsApp: normalização compartilhada dos IDs WAHA/WPP, collation da conferência corrigida e entrega confirmada pelo operador marcada como publicada, sem reenvio.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -26,31 +26,40 @@
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     }
   },
-  "site_source_base": "39fb17b",
+  "site_source_base": "922455f2",
   "changed_files": [
-    "scripts/n8n-cheapest-intent-fillers.cjs",
-    "tmp-tests/n8n-cheapest-intent-fillers.test.cjs",
+    "services/whatsappStatusSender.cjs",
+    "services/whatsappStatusReconcile.cjs",
+    "deploy-vps-server-only.cjs",
+    "scripts/publish-vps-plan.cjs",
+    "tmp-tests/whatsapp-status-sender.test.cjs",
+    "tmp-tests/whatsapp-status-reconcile.test.cjs",
+    "tmp-tests/publish-vps-plan-static.test.mjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-12-v1.2.850-bot-mais-em-conta.md"
+    "docs/versoes/2026-11-12-v1.2.851-status-id-collation.md",
+    "docs/versoes/2026-11-12-v1.2.849-status-conferir-reenviar.md"
   ],
   "validations": [
-    "n8n-cheapest-intent-fillers 3/3 (frase real e variações) e n8n-cheapest-promo-accessory-fix 6/6 no candidato.",
-    "Gate comercial (n8n-sales-regression-gate) 152/152 no candidato 42ea1efb…."
+    "34/34 testes de Status/Stories; planejador de publicação e sintaxe aprovados.",
+    "MySQL real: erro de collation reproduzido em tabelas temporárias e join corrigido; tabela existente migrada sem perda do registro.",
+    "Entrega published/check published, duas tentativas preservadas, zero POSTs de vídeo após confirmação e hashes de env/credencial iguais."
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261112-134000-v1-2-849-status-conferir-reenviar",
-    "previous": "/var/www/mdv-site/releases/20261112-132900-v1-2-849-status-conferir-reenviar",
-    "source_commit": "ccb0d277",
-    "note": "Admin da v1.2.849 publicado; manifesto conserva a versão principal v1.2.850."
+    "release": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
+    "previous": "/var/www/mdv-site/releases/20261112-134000-v1-2-849-status-conferir-reenviar",
+    "source_commit": "922455f2",
+    "note": "Manifesto da correção de Status; funcionalidades do robô v1.2.850 preservadas."
   },
   "api_release": {
-    "status": "publicada com ressalva na conferência automática",
+    "status": "publicada",
     "service": "mdv-api",
-    "commit": "cf5aeeb",
-    "deployed_at": "2026-11-12T16:26:08Z",
-    "note": "Deploy completo e reinício do mdv-api; tabela criada e rota verify sem token retorna 401. Env/credencial preservados por hash. Conferência automática bloqueada por ER_CANT_AGGREGATE_2COLLATIONS entre utf8mb4_0900_ai_ci e utf8mb4_unicode_ci; schema não alterado."
+    "commit": "922455f2",
+    "deployed_at": "2026-11-12T16:57:06Z",
+    "backup": "/var/www/mdv-api/backups/whatsapp-status-1794502619696",
+    "data_backup": "/root/backups/status-id-collation-2026-11-12T16-50-11-050Z",
+    "note": "Deploy seletivo --whatsapp-status-only, sem escrita de env/credenciais. IDs normalizados e tabela de conferência migrada para utf8mb4_unicode_ci; join validado no MySQL."
   },
   "nginx_release": {
     "status": "sem mudança",
@@ -104,15 +113,17 @@
     "rollback": false,
     "delivery_result": {
       "delivery_id": "8e768222-544f-4162-a7f6-5eac49d3b73e",
-      "state": "uncertain",
+      "state": "published",
       "attempts": 2,
       "waha_http": 201,
       "status_id": null,
       "broadcast_read_http": 200,
       "broadcast_items": 0,
       "prepRawMedia_repeated": false,
-      "note": "WAHA respondeu sem ID utilizável; entrega failed/resultado incerto. Sem terceiro envio."
+      "confirmed_by": "operator",
+      "confirmed_at": "2026-11-12T16:50:11Z",
+      "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.849-status-conferir-reenviar: API e site publicados; WAHA atualizado para 2026.10.1/WPP, sem QR. Reenvio teve HTTP 201 sem ID; leitura de Status 200 vazia, resultado incerto. Conferência automática bloqueada por collation. Sem nova tentativa forçada."
+  "pending_previous": "v1.2.849 publicada; pendências de reconhecimento de ID e collation corrigidas na v1.2.851. Entrega confirmada pelo operador registrada como publicada sem reenvio."
 }

@@ -1,3 +1,11 @@
+# v1.2.851-status-id-collation
+
+Data: 12/11/2026 (Brasília). Branch: `main`. Código: `922455f2`. Tag: `v1.2.851-status-id-collation`. API publicada seletivamente e reiniciada; site (manifesto): `/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation`.
+
+Envio e conferência passam a compartilhar a normalização de IDs WAHA/WPP, incluindo MsgKey aninhado e resultado bruto do engine. A tabela existente de conferência foi migrada para `utf8mb4_unicode_ci`, corrigindo o join. Entrega `8e768222…` e seu check marcados como publicados pela confirmação do operador, preservando duas tentativas e ID histórico nulo. Nenhum vídeo reenviado. Testes: 34/34, planejador aprovado e regressão reproduzida/corrigida no MySQL real. `.env` e credenciais preservados por hash. Registro: `docs/versoes/2026-11-12-v1.2.851-status-id-collation.md`.
+
+---
+
 # v1.2.850-bot-mais-em-conta
 
 Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `39fb17b`. Publicado no n8n; tag `v1.2.850-bot-mais-em-conta` enviada em `39fb17b2`. Escopo: robô do WhatsApp. Manifesto do site mantém esta versão principal.
