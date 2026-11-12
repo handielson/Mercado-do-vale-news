@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.851-status-id-collation",
+  "version": "v1.2.852-bot-card-de-venda",
   "date": "2026-11-12",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.851-status-id-collation",
+  "tag": "v1.2.852-bot-card-de-venda",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Status WhatsApp: normalização compartilhada dos IDs WAHA/WPP, collation da conferência corrigida e entrega confirmada pelo operador marcada como publicada, sem reenvio.",
+  "summary": "Robô do WhatsApp: escolher um item da lista agora traz foto com a ficha (emojis) e, 5 s depois, uma chamada para venda com estoque real e entrega grátis em Petrolina/Juazeiro; complemento logo após a escolha (\"De 512gb\") reenvia o card em vez de refazer a busca. Sem mudança no site/API.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,22 +28,18 @@
   },
   "site_source_base": "922455f2",
   "changed_files": [
-    "services/whatsappStatusSender.cjs",
-    "services/whatsappStatusReconcile.cjs",
-    "deploy-vps-server-only.cjs",
-    "scripts/publish-vps-plan.cjs",
-    "tmp-tests/whatsapp-status-sender.test.cjs",
-    "tmp-tests/whatsapp-status-reconcile.test.cjs",
-    "tmp-tests/publish-vps-plan-static.test.mjs",
+    "scripts/n8n-selected-item-card.cjs",
+    "scripts/deploy-n8n-selected-item-card.cjs",
+    "tmp-tests/n8n-selected-item-card.test.cjs",
+    "tmp-tests/fixtures/selected-item-card.json",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-12-v1.2.851-status-id-collation.md",
-    "docs/versoes/2026-11-12-v1.2.849-status-conferir-reenviar.md"
+    "docs/versoes/2026-11-12-v1.2.852-bot-card-de-venda.md"
   ],
   "validations": [
-    "34/34 testes de Status/Stories; planejador de publicação e sintaxe aprovados.",
-    "MySQL real: erro de collation reproduzido em tabelas temporárias e join corrigido; tabela existente migrada sem perda do registro.",
-    "Entrega published/check published, duas tentativas preservadas, zero POSTs de vídeo após confirmação e hashes de env/credencial iguais."
+    "n8n-selected-item-card.test 1/1",
+    "gate comercial 152/152 (sha256 455eb40f…)",
+    "dry run: só Vendas - Contexto Produtos e Vendas - Verificar Pos Lista mudam"
   ],
   "site_release": {
     "status": "publicada",
@@ -66,12 +62,10 @@
     "note": ""
   },
   "n8n_release": {
-    "status": "publicado",
+    "status": "pendente",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "2461086f0c46931ceb3c70b7a63c9d9175cff8beca6ddd6ab7f7e699f37b0ad4",
-    "after": "42ea1efb130e4550056831ef237494be05f480d396333f32c6dd095717eb5b31",
-    "backup": "/root/n8n-backups/cheapest-intent-fillers-2026-11-12T16-06-37-796Z.aes256gcm.json",
-    "published_at": "2026-11-12T16:06:42Z"
+    "before": "42ea1efb130e4550056831ef237494be05f480d396333f32c6dd095717eb5b31",
+    "candidate": "455eb40ffc98de7d7d425fae054cbd86dd2a8663a23946ea45829ab7909477e4"
   },
   "evolution_release": {
     "status": "publicada",

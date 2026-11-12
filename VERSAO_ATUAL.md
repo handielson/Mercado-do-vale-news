@@ -1,3 +1,10 @@
+# v1.2.852-bot-card-de-venda
+
+Data: 12/11/2026. Branch: `main`. Status: **pendente** (n8n). Site/API seguem a v1.2.851.
+Escolha de item da lista: foto com ficha (emojis) + chamada para venda 5 s depois; complemento após a escolha reenvia o card; "SIM" pergunta entrega grátis/retirada. Registro: `docs/versoes/2026-11-12-v1.2.852-bot-card-de-venda.md`.
+
+---
+
 # v1.2.851-status-id-collation
 
 Data: 12/11/2026 (Brasília). Branch: `main`. Código: `922455f2`. Tag: `v1.2.851-status-id-collation`. API publicada seletivamente e reiniciada; site (manifesto): `/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation`.
