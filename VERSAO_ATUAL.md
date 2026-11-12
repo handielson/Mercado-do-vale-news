@@ -1,8 +1,8 @@
 # v1.2.850-bot-mais-em-conta
 
-Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `39fb17b`. Publicado no n8n (sem release de site). Escopo: robô do WhatsApp.
+Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `39fb17b`. Publicado no n8n; tag `v1.2.850-bot-mais-em-conta` enviada em `39fb17b2`. Escopo: robô do WhatsApp. Manifesto do site mantém esta versão principal.
 
-"Qual celular mais em conta que você tem aí?" volta a listar os celulares do mais barato, no formato padrão. Gate 152/152; backup em `/root/n8n-backups/`. Pendente: v1.2.849-status-conferir-reenviar (API e site).
+"Qual celular mais em conta que você tem aí?" volta a listar os celulares do mais barato, no formato padrão. Gate 152/152; backup em `/root/n8n-backups/`. API e site da v1.2.849 publicados, conforme registro abaixo; workflow n8n preservado nesta entrega.
 
 Registro: `docs/versoes/2026-11-12-v1.2.850-bot-mais-em-conta.md`.
 
@@ -10,9 +10,9 @@ Registro: `docs/versoes/2026-11-12-v1.2.850-bot-mais-em-conta.md`.
 
 # v1.2.849-status-conferir-reenviar
 
-Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `cf5aeeb`. Release VPS: pendente. Escopo: API + frontend/admin + tabela nova.
+Data: 12/11/2026 (Brasília). Branch: `main`. Commit de código: `cf5aeeb`, contido em `ccb0d277`. Release VPS: `/var/www/mdv-site/releases/20261112-134000-v1-2-849-status-conferir-reenviar`. Escopo: API + frontend/admin + tabela nova + atualização isolada do WAHA de Status.
 
-Status do WhatsApp: conferência automática das entregas incertas, reenvio do que não saiu e botão "Conferir no WhatsApp". Publicação pendente (API antes do site).
+Status do WhatsApp: API completa publicada e reiniciada, tabela criada e rota protegida (401 sem token). Site publicado; WAHA atualizado de 2026.8.2 para 2026.10.1, mantendo WPP e sessão, sem QR; backup em `/root/backups/waha-status-2026-11-12T16-27-58-954Z/`. Testes 30/30. `.env` e credenciais preservados por hash. **Ressalvas:** reenvio (tentativa 2) teve HTTP 201, mas sem ID; leitura de Status retornou 200 e lista vazia, sem confirmação de publicação. A conferência automática encontrou `ER_CANT_AGGREGATE_2COLLATIONS`. Sem terceiro envio, edição de código ou schema nesta publicação.
 
 Registro: `docs/versoes/2026-11-12-v1.2.849-status-conferir-reenviar.md`.
 
