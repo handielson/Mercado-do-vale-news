@@ -30,6 +30,7 @@ const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const metaAttendanceServicePaths = ['services/metaAttendanceCore.cjs', 'services/metaAttendanceServer.cjs', 'services/metaAttendanceReplies.cjs', 'services/metaAttendanceTransport.cjs', 'services/metaAttendanceMedia.cjs'];
 const phonePriceListServicePaths = [
   'services/socialStoryPriceListBatches.cjs',
+  'services/whatsappStatusReconcile.cjs',
   'services/phonePriceListArtwork.cjs',
   'services/phonePriceListServer.cjs',
   'services/promoPricingCore.cjs',
@@ -1137,7 +1138,7 @@ async function main() {
     if (apiProc.name !== 'mdv-api' || appDir !== '/var/www/mdv-api') throw new Error('Unexpected API target');
     const backupDir = `${appDir}/backups/marketing-scenes-${Date.now()}`;
     await exec(`mkdir -p ${backupDir} ${appDir}/services`);
-    for (const file of [marketingCampaignServicePath, 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs', ...metaAttendanceServicePaths]) {
+    for (const file of [marketingCampaignServicePath, 'services/whatsappStatusReconcile.cjs', 'services/marketingScenesServer.cjs', 'services/marketingSceneCore.mjs', ...metaAttendanceServicePaths]) {
       await exec(`if test -f ${appDir}/${file}; then cp ${appDir}/${file} ${backupDir}/${path.basename(file)}; fi`);
       await upload(path.join(__dirname, file), remotePathJoin(appDir, file));
       console.log(`Uploaded ${file}`);
@@ -1182,6 +1183,7 @@ async function main() {
   await exec(`mkdir -p ${appDir}/services`);
   await upload(path.join(__dirname, 'services/whatsappStatusHealth.cjs'), remotePathJoin(appDir, 'services/whatsappStatusHealth.cjs'));
   await upload(path.join(__dirname, 'services/whatsappStatusSender.cjs'), remotePathJoin(appDir, 'services/whatsappStatusSender.cjs'));
+  await upload(path.join(__dirname, 'services/whatsappStatusReconcile.cjs'), remotePathJoin(appDir, 'services/whatsappStatusReconcile.cjs'));
   await upload(path.join(__dirname, 'services/productReadPrivacy.cjs'), remotePathJoin(appDir, 'services/productReadPrivacy.cjs'));
   await upload(path.join(__dirname, 'services/serializedSaleFinalization.cjs'), remotePathJoin(appDir, 'services/serializedSaleFinalization.cjs'));
   await upload(path.join(__dirname, 'services/cashSessionCutoff.cjs'), remotePathJoin(appDir, 'services/cashSessionCutoff.cjs'));
@@ -1192,6 +1194,7 @@ async function main() {
   await exec(`node --check ${appDir}/services/openAiFinanceServer.cjs`);
   await exec(`node --check ${appDir}/services/whatsappStatusHealth.cjs`);
   await exec(`node --check ${appDir}/services/whatsappStatusSender.cjs`);
+  await exec(`node --check ${appDir}/services/whatsappStatusReconcile.cjs`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);
   await upload(localServer, `${appDir}/server.js`);

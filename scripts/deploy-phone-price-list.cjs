@@ -21,7 +21,7 @@ async function deployPhonePriceList({ appDir, apiProc, exec, root, read, write, 
     const updated = patchCardDependency(normalize(original));
     if (updated !== normalize(original)) changes.push({ file, original, updated });
   }
-  const modules = dynamicTables ? ['services/phonePriceListServer.cjs', 'services/marketingCampaignApi.cjs', 'services/socialStoryPriceListBatches.cjs'] : MODULES;
+  const modules = dynamicTables ? ['services/phonePriceListServer.cjs', 'services/marketingCampaignApi.cjs', 'services/socialStoryPriceListBatches.cjs', 'services/whatsappStatusReconcile.cjs'] : MODULES;
   for (const file of modules) {
     const original = await read(`${appDir}/${file}`);
     const updated = fs.readFileSync(path.join(root, file), 'utf8');

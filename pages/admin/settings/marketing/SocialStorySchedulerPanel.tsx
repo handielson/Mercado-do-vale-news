@@ -305,6 +305,17 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
     } finally { setBusy(false); }
   };
 
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const verifyDelivery = async (deliveryId: string) => {
+    setVerifying(deliveryId);
+    try {
+      const result = await socialStoryScheduleService.verifyDelivery(deliveryId);
+      (result.state === 'published' || result.state === 'retried' ? toast.success : toast.info)(result.message);
+      await load();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível conferir no WhatsApp'); }
+    finally { setVerifying(null); }
+  };
+
   const cancel = async (id: string) => {
     if (!window.confirm('Cancelar as publicações ainda pendentes deste agendamento?')) return;
     try { await socialStoryScheduleService.cancel(id); await load(); toast.success('Agendamento cancelado'); }
@@ -589,6 +600,34 @@ export default function SocialStorySchedulerPanel({ defaultDestinations = ['inst
                 <div className="flex items-start justify-between gap-2"><div><p className="font-bold text-slate-800">{scheduleRow.title}</p><p className="text-xs text-slate-500">{scheduleSummary(scheduleRow)}</p></div><span className="text-[10px] font-black uppercase px-2 py-1 rounded-full bg-slate-100 text-slate-600">{statusLabel(scheduleRow.status)}</span></div>
                 <div className="flex items-center gap-2 mt-3 text-xs font-bold text-slate-600">{scheduleRow.destinations.includes('whatsapp') && <span className="inline-flex items-center gap-1 text-emerald-700"><MessageCircle className="w-4 h-4" /> WhatsApp</span>}{scheduleRow.destinations.includes('instagram') && <span className="inline-flex items-center gap-1 text-pink-700"><Instagram className="w-4 h-4" /> Instagram</span>}{scheduleRow.last_error && <span className="text-red-600 truncate font-normal" title={scheduleRow.last_error}>{scheduleRow.last_error}</span>}</div>
                 {['pending_approval', 'approved', 'processing'].includes(scheduleRow.status) && <button onClick={() => void cancel(scheduleRow.id)} className="mt-3 text-xs font-bold text-red-600 hover:underline">Cancelar pendentes</button>}
+                {(() => {
+                  // whatsapp-status-reconcile-v1: Status do WhatsApp que não confirmaram, com conferência e reenvio
+                  const problems = scheduleRow.items.flatMap((item) => item.deliveries
+                    .filter((delivery) => delivery.destination === 'whatsapp' && (delivery.status === 'failed' || (delivery.status === 'pending' && delivery.status_check?.state === 'retried')))
+                    .map((delivery) => ({ item, delivery })));
+                  if (!problems.length) return null;
+                  const checkLabel: Record<string, string> = { waiting: 'conferindo no WhatsApp…', retried: 'não saiu — reenvio na fila', gave_up: 'não saiu — limite de tentativas', unknown: 'não deu para conferir', published: 'conferido: publicado' };
+                  return (
+                    <div className="mt-3 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
+                      <p className="text-[11px] font-bold text-amber-800">Status do WhatsApp sem confirmação</p>
+                      {problems.map(({ item, delivery }) => (
+                        <div key={delivery.id} className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-700">
+                          <span className="min-w-0 flex-1 truncate" title={delivery.error || ''}>
+                            {item.media_type === 'video' ? 'Vídeo' : 'Imagem'} · {item.label || `mídia ${item.sequence_index + 1}`} · {delivery.attempt_count} tentativa(s)
+                            {delivery.status_check ? ` · ${checkLabel[delivery.status_check.state] || delivery.status_check.state}` : delivery.status === 'pending' ? ' · na fila' : ''}
+                          </span>
+                          {delivery.status === 'failed' && (
+                            <button onClick={() => void verifyDelivery(delivery.id)} disabled={verifying === delivery.id}
+                              className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-50 disabled:opacity-50"
+                              title="Confere no WhatsApp se o Status saiu. Se não saiu, coloca o reenvio na fila.">
+                              {verifying === delivery.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Conferir no WhatsApp
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
             {!schedules.length && !loading && <p className="text-sm text-slate-400 text-center py-8">Nenhum agendamento automático ainda.</p>}

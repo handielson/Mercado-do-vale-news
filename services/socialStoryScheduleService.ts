@@ -34,6 +34,8 @@ export interface SocialStoryDelivery {
   provider_publication_id?: string | null;
   error?: string | null;
   published_at?: string | null;
+  // whatsapp-status-reconcile-v1: conferência automática no WhatsApp quando o envio ficou incerto
+  status_check?: { state: 'waiting' | 'published' | 'retried' | 'gave_up' | 'unknown'; checks: number; last_check_at?: string | null; message?: string | null } | null;
 }
 
 export interface SocialStoryScheduleItem {
@@ -98,5 +100,9 @@ export const socialStoryScheduleService = {
   },
   async cancelItems(id: string, itemIds: string[]): Promise<void> {
     await vpsClient.post(`/admin/marketing/stories/${encodeURIComponent(id)}/cancel-items`, { itemIds });
+  },
+  /** Confere no WhatsApp se o Status saiu; se não saiu, o servidor coloca o reenvio na fila. */
+  async verifyDelivery(deliveryId: string): Promise<{ state: string; message: string }> {
+    return await vpsClient.post(`/admin/marketing/stories/deliveries/${encodeURIComponent(deliveryId)}/verify`, {});
   },
 };

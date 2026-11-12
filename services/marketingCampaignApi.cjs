@@ -4,6 +4,7 @@ const path = require('path');
 const sharp = require('sharp');
 const { registerPhonePriceListRoutes } = require('./phonePriceListServer.cjs');
 const { STRIDE, priceListRecipe, ensurePriceListBatchTable, refreshNextPriceListBatch, cancelStoryItems } = require('./socialStoryPriceListBatches.cjs');
+const statusReconcile = require('./whatsappStatusReconcile.cjs');
 
 const APPROVAL_STATUSES = new Set([
   'pending', 'approved', 'rejected', 'executing', 'succeeded', 'failed', 'cancelled', 'expired',
@@ -1892,7 +1893,7 @@ async function publishInstagramStory(pool, item, dependencies) {
 
 async function claimNextSocialStoryDelivery(pool) {
   const [stale] = await pool.query(
-    `SELECT DISTINCT schedule_id FROM social_story_deliveries
+    `SELECT id,schedule_id,destination,claimed_at FROM social_story_deliveries
      WHERE status='processing' AND claimed_at<DATE_SUB(NOW(),INTERVAL 20 MINUTE)`,
   );
   if (stale.length) {
@@ -1901,7 +1902,14 @@ async function claimNextSocialStoryDelivery(pool) {
        SET status='failed',last_error='Publicacao ficou em estado ambiguo apos interrupcao; envio automatico nao foi repetido para evitar duplicidade'
        WHERE status='processing' AND claimed_at<DATE_SUB(NOW(),INTERVAL 20 MINUTE)`,
     );
-    for (const row of stale) await refreshSocialStoryScheduleStatus(pool, row.schedule_id);
+    // whatsapp-status-reconcile-v1: Status interrompido no meio também é conferido no WhatsApp
+    for (const row of stale) {
+      if (row.destination === 'whatsapp') {
+        await statusReconcile.registerUncertainWhatsAppDelivery(pool, row.id, new Date(row.claimed_at).getTime() || Date.now())
+          .catch((error) => console.error('[social-story-status-check]', text(error.message, 500)));
+      }
+    }
+    for (const scheduleId of new Set(stale.map((row) => row.schedule_id))) await refreshSocialStoryScheduleStatus(pool, scheduleId);
   }
   const connection = await pool.getConnection();
   try {
@@ -2005,12 +2013,21 @@ async function syncSocialStoryApprovalOutcomes(pool) {
   );
 }
 
+// whatsapp-status-reconcile-v1: confere no WhatsApp as entregas incertas e reenvia as que não saíram
+async function reconcileStatusChecks(pool, dependencies) {
+  await statusReconcile.reconcileWhatsAppStoryDeliveries(pool, {
+    fetchImpl: dependencies?.fetchImpl, refreshSchedule: refreshSocialStoryScheduleStatus,
+  }).catch((error) => console.error('[social-story-status-check]', text(error.message, 500)));
+}
+
 async function runNextSocialStoryDelivery(pool, dependencies) {
   await syncSocialStoryApprovalOutcomes(pool);
+  await reconcileStatusChecks(pool, dependencies);
   const refreshed = await refreshNextPriceListBatch(pool, dependencies);
   if (refreshed && !refreshed.retry) await refreshSocialStoryScheduleStatus(pool, refreshed.scheduleId);
   const delivery = await claimNextSocialStoryDelivery(pool);
   if (!delivery) return null;
+  const sendStartedAt = Date.now();
   try {
     await assertSocialStoryMediaAvailable(delivery, dependencies);
     const result = delivery.destination === 'instagram'
@@ -2028,14 +2045,21 @@ async function runNextSocialStoryDelivery(pool, dependencies) {
   } catch (error) {
     const retryableMediaFailure = shouldRetrySocialStoryFailure(error, delivery);
     const deliveryStatus = retryableMediaFailure ? 'pending' : 'failed';
+    const uncertainWhatsApp = !retryableMediaFailure && delivery.destination === 'whatsapp' && error?.code === 'WAHA_STATUS_OUTCOME_UNCERTAIN';
     const errorMessage = retryableMediaFailure
       ? `${text(error.message, 9000)}. Nova tentativa automatica em ${SOCIAL_STORY_MEDIA_RETRY_DELAY_MINUTES} minutos.`
-      : text(error.message, 10000);
+      : uncertainWhatsApp
+        ? `${text(error.message, 9000)} Conferencia automatica no WhatsApp em 2 minutos; se nao saiu, reenvia sozinho.`
+        : text(error.message, 10000);
     await pool.query(
       'UPDATE social_story_deliveries SET status=?,claimed_at=NULL,last_error=? WHERE id=?',
       [deliveryStatus, errorMessage, delivery.id],
     );
     await pool.query('UPDATE social_story_schedules SET last_error=? WHERE id=?', [errorMessage, delivery.schedule_id]);
+    if (uncertainWhatsApp) {
+      await statusReconcile.registerUncertainWhatsAppDelivery(pool, delivery.id, sendStartedAt)
+        .catch((checkError) => console.error('[social-story-status-check]', text(checkError.message, 500)));
+    }
   }
   await refreshSocialStoryScheduleStatus(pool, delivery.schedule_id);
   return delivery.id;
@@ -3516,7 +3540,21 @@ function registerSocialStoryRoutes(fastify, dependencies) {
         error: item.delivery_error, published_at: item.published_at,
       });
     }
+    const checks = await statusReconcile.checksByDeliveryIds(pool, items.map((item) => item.delivery_id)).catch(() => new Map());
+    for (const list of bySchedule.values()) for (const item of list) for (const delivery of item.deliveries) {
+      const check = checks.get(delivery.id);
+      if (check) delivery.status_check = { state: check.state, checks: Number(check.checks || 0), last_check_at: check.last_check_at, message: check.last_result };
+    }
     return { ok: true, items: schedules.map((row) => parseSocialStorySchedule({ ...row, items: bySchedule.get(row.id) || [] })) };
+  });
+
+  // whatsapp-status-reconcile-v1: botão "Conferir no WhatsApp" — confere agora e, se não saiu, coloca o reenvio na fila
+  fastify.post('/admin/marketing/stories/deliveries/:id/verify', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const id = text(req.params?.id, 36);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return reply.code(400).send({ error: 'Entrega invalida' });
+    const result = await statusReconcile.checkWhatsAppDelivery(pool, id, { force: true, refreshSchedule: refreshSocialStoryScheduleStatus });
+    if (result.state === 'invalid') return reply.code(404).send({ error: result.message });
+    return { ok: true, ...result };
   });
 
   fastify.post('/admin/marketing/stories/preview-whatsapp', { preHandler: requireAdminBearerToken }, async (req, reply) => {
