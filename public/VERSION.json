@@ -120,8 +120,11 @@
   },
   "pending_previous": "v1.2.852 publicada (n8n).",
   "print_agent_release": {
-    "status": "pendente",
+    "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
-    "service": "shopee-auto-print (PM2)"
+    "service": "shopee-auto-print (PM2)",
+    "commit": "09c504b1",
+    "deployed_at": "2026-11-13T12:07Z",
+    "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   }
 }
