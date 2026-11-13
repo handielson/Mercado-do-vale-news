@@ -7,12 +7,29 @@
 //   - saiu        → marca a entrega como publicada (com o id encontrado);
 //   - não saiu    → confirmado em 2 leituras seguidas → devolve para a fila (reenvio), até o limite;
 //   - sem leitura → tenta de novo depois; desiste após a janela e deixa para conferência manual.
+// whatsapp-status-no-resend-v1 (13/11/2026): o WAHA aceitou (2xx) os 3 envios do vídeo das 08:00, mas a leitura
+// de status@broadcast voltou vazia e a conferência reenviou duas vezes (Status saiu 3x). Agora:
+//   - leitura vazia / sem nenhum Status próprio recente → 'unknown' (nunca 'not_published');
+//   - envio aceito pelo WAHA (2xx) → nunca reenvia; vira publicado sem confirmação (conferir no celular).
 
 const FIRST_CHECK_DELAY_MS = 2 * 60 * 1000;
 const RECHECK_DELAY_MS = 3 * 60 * 1000;
 const GIVE_UP_AFTER_MS = 6 * 60 * 60 * 1000;
 const NOT_FOUND_CONFIRMATIONS = 2;
-const { extractWahaStatusId } = require('./whatsappStatusSender.cjs');
+const { extractWahaStatusId, WAHA_STATUS_ACCEPTED_MARKER } = require('./whatsappStatusSender.cjs');
+
+/** O envio chegou ao WAHA e recebeu 2xx (marcador gravado em last_error pelo agendador). */
+function wasAcceptedByWaha(delivery) {
+  return String(delivery?.last_error || '').includes(WAHA_STATUS_ACCEPTED_MARKER);
+}
+
+function hasOwnRecentStatus(messages, sinceMs) {
+  return (Array.isArray(messages) ? messages : []).some((message) => {
+    if (message?.fromMe === false) return false;
+    const at = messageTimestampMs(message);
+    return at !== null && at >= sinceMs - 60 * 1000;
+  });
+}
 
 function maxAttempts(env = process.env) {
   return Math.max(1, Math.min(10, Number(env.SOCIAL_STORY_WHATSAPP_MAX_ATTEMPTS || 3) || 3));
@@ -76,16 +93,19 @@ async function verifyWahaStatusPublication({ sinceMs, type, caption, env = proce
     const body = await response.json().catch(() => null);
     const message = String(body?.exception?.message || body?.message || '');
     if (response.status === 500 && /^Chat not found for status@broadcast(?:\n|$)/.test(message)) {
-      return { state: 'not_published', reason: 'Nenhum Status publicado nesta sessão.' };
+      // A leitura do WAHA não enxerga Status já publicados: ausência não prova que não saiu.
+      return { state: 'unknown', reason: 'Leitura do WhatsApp não trouxe nenhum Status desta sessão; conferência manual.' };
     }
     return { state: 'unknown', reason: `Leitura dos Status falhou (HTTP ${response.status}).` };
   }
   const messages = await response.json().catch(() => null);
   if (!Array.isArray(messages)) return { state: 'unknown', reason: 'Resposta inesperada na leitura dos Status.' };
   const found = findPublishedStatus(messages, { sinceMs, type, caption });
-  return found
-    ? { state: 'published', id: found.id, reason: 'Status encontrado no WhatsApp.' }
-    : { state: 'not_published', reason: 'Status não encontrado no WhatsApp.' };
+  if (found) return { state: 'published', id: found.id, reason: 'Status encontrado no WhatsApp.' };
+  if (!hasOwnRecentStatus(messages, sinceMs)) {
+    return { state: 'unknown', reason: 'Leitura do WhatsApp veio vazia; não dá para afirmar que o Status não saiu. Conferência manual.' };
+  }
+  return { state: 'not_published', reason: 'Status não encontrado entre os Status recentes do WhatsApp.' };
 }
 
 let schemaPromise = null;
@@ -124,7 +144,7 @@ async function registerUncertainWhatsAppDelivery(pool, deliveryId, sentAtMs) {
 
 async function loadDelivery(pool, deliveryId) {
   const [[row]] = await pool.query(
-    `SELECT d.id,d.schedule_id,d.status,d.destination,d.attempt_count,i.media_type,i.caption,i.scheduled_at
+    `SELECT d.id,d.schedule_id,d.status,d.destination,d.attempt_count,d.last_error,i.media_type,i.caption,i.scheduled_at
      FROM social_story_deliveries d JOIN social_story_items i ON i.id=d.item_id WHERE d.id=?`, [deliveryId],
   );
   return row || null;
@@ -176,7 +196,13 @@ async function checkWhatsAppDelivery(pool, deliveryId, { force = false, env = pr
   const result = await verifyWahaStatusPublication({ sinceMs, type: delivery.media_type, caption: delivery.caption || '', env, fetchImpl });
 
   let outcome;
-  if (result.state === 'published') {
+  if (result.state !== 'published' && wasAcceptedByWaha(delivery)) {
+    await markPublished(pool, delivery, null);
+    await pool.query('UPDATE social_story_deliveries SET last_error=? WHERE id=?',
+      ['Publicado sem confirmação: o WAHA aceitou o envio (2xx), mas a leitura do WhatsApp não confirmou. Reenvio automático bloqueado; confira no celular.', deliveryId]);
+    await setCheck(pool, deliveryId, { state: 'unknown', result: `Aceito pelo WAHA; ${result.reason}` });
+    outcome = { state: 'accepted_unconfirmed', message: 'O WAHA aceitou o envio; marcado como publicado sem confirmação. Não será reenviado.' };
+  } else if (result.state === 'published') {
     await markPublished(pool, delivery, result.id);
     await setCheck(pool, deliveryId, { state: 'published', result: result.reason });
     outcome = { state: 'published', message: 'Conferido: o Status foi publicado. Entrega marcada como publicada.' };
@@ -236,6 +262,7 @@ async function checksByDeliveryIds(pool, ids) {
 
 module.exports = {
   FIRST_CHECK_DELAY_MS,
+  wasAcceptedByWaha,
   NOT_FOUND_CONFIRMATIONS,
   findPublishedStatus,
   verifyWahaStatusPublication,

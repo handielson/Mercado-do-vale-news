@@ -31,6 +31,8 @@ function extractWahaStatusId(payload, depth = 0) {
   return null;
 }
 
+const WAHA_STATUS_ACCEPTED_MARKER = '[WAHA_ACEITO]';
+
 async function sendWahaStatusMedia({ baseUrl, apiKey, session, type, mediaUrl, caption, timeoutMs, fetchImpl = fetch }) {
   const health = await createWhatsAppStatusHealth({
     env: { WAHA_STATUS_SERVER_URL: baseUrl, WAHA_STATUS_API_KEY: apiKey, WAHA_STATUS_SESSION: session },
@@ -60,9 +62,10 @@ async function sendWahaStatusMedia({ baseUrl, apiKey, session, type, mediaUrl, c
   }
   const id = extractWahaStatusId(body);
   if (!id || typeof id !== 'string') {
-    throw statusError('WAHA_STATUS_OUTCOME_UNCERTAIN', 'WAHA respondeu sem identificador do Status. Confira o WhatsApp antes de reenviar; repeticao automatica bloqueada.');
+    // whatsapp-status-no-resend-v1: 2xx sem id = o WAHA aceitou; o marcador impede reenvio automatico na conferencia.
+    throw statusError('WAHA_STATUS_OUTCOME_UNCERTAIN', `${WAHA_STATUS_ACCEPTED_MARKER} HTTP ${response.status}: WAHA aceitou o Status mas nao devolveu identificador. Confira o WhatsApp; reenvio automatico bloqueado.`);
   }
   return { endpoint, status: response.status, body, bodyText, id };
 }
 
-module.exports = { sendWahaStatusMedia, extractWahaStatusId };
+module.exports = { sendWahaStatusMedia, extractWahaStatusId, WAHA_STATUS_ACCEPTED_MARKER };

@@ -41,6 +41,9 @@ function fakePool({ delivery, check = null }) {
   return pool;
 }
 const baseDelivery = { id: 'd1', schedule_id: 's1', status: 'failed', destination: 'whatsapp', attempt_count: 1, media_type: 'video', caption: 'Redmi 15 por R$ 1.349', scheduled_at: new Date(SENT) };
+// Leitura com outro Status próprio recente (não o desta entrega): única prova de "não saiu".
+const otherOwnStatus = () => [{ id: 'OUTRO', fromMe: true, timestamp: SENT / 1000 + 40, body: 'outra legenda', _data: { type: 'video' } }];
+const acceptedError = '[WAHA_ACEITO] HTTP 201: WAHA aceitou o Status mas nao devolveu identificador. Conferencia automatica no WhatsApp em 2 minutos.';
 const waitingCheck = (streak = 0) => ({ delivery_id: 'd1', sent_at: new Date(SENT), state: 'waiting', checks: streak, not_found_streak: streak });
 
 test('acha o Status publicado pela legenda, tipo e horário', () => {
@@ -75,9 +78,13 @@ test('schema fixa collation e corrige instalação 849 existente sem repetir o A
   }
 });
 
-test('"Chat not found" = não publicado; outro erro = sem leitura', async () => {
+test('"Chat not found" e lista vazia = sem confirmação (unknown), nunca não publicado; outro erro = sem leitura', async () => {
   const notFound = waha(() => json(500, { exception: { message: 'Chat not found for status@broadcast' } }));
-  assert.equal((await rec.verifyWahaStatusPublication({ sinceMs: SENT, type: 'video', caption: 'x', env, fetchImpl: notFound.fetchImpl })).state, 'not_published');
+  assert.equal((await rec.verifyWahaStatusPublication({ sinceMs: SENT, type: 'video', caption: 'x', env, fetchImpl: notFound.fetchImpl })).state, 'unknown');
+  const empty = waha(() => json(200, []));
+  assert.equal((await rec.verifyWahaStatusPublication({ sinceMs: SENT, type: 'video', caption: 'x', env, fetchImpl: empty.fetchImpl })).state, 'unknown');
+  const other = waha(() => json(200, otherOwnStatus()));
+  assert.equal((await rec.verifyWahaStatusPublication({ sinceMs: SENT, type: 'video', caption: 'x', env, fetchImpl: other.fetchImpl })).state, 'not_published');
   const down = waha(() => json(502, {}));
   assert.equal((await rec.verifyWahaStatusPublication({ sinceMs: SENT, type: 'video', caption: 'x', env, fetchImpl: down.fetchImpl })).state, 'unknown');
   assert.ok(notFound.calls.every((c) => c.method === 'GET' && !/status\/(image|video)/.test(c.url)), 'conferência nunca publica');
@@ -92,9 +99,9 @@ test('publicado → entrega vira publicada com o id encontrado', async () => {
   assert.equal(pool.db.delivery.provider_publication_id, 'ID9');
 });
 
-test('não publicado: 1ª leitura só aguarda; 2ª coloca o reenvio na fila e reabre o agendamento', async () => {
+test('não publicado (sem 2xx do WAHA): 1ª leitura só aguarda; 2ª coloca o reenvio na fila e reabre o agendamento', async () => {
   const pool = fakePool({ delivery: baseDelivery, check: waitingCheck() });
-  const { fetchImpl } = waha(() => json(200, []));
+  const { fetchImpl } = waha(() => json(200, otherOwnStatus()));
   assert.equal((await rec.checkWhatsAppDelivery(pool, 'd1', { env, fetchImpl })).state, 'waiting');
   assert.equal(pool.db.delivery.status, 'failed');
   assert.equal((await rec.checkWhatsAppDelivery(pool, 'd1', { env, fetchImpl })).state, 'retried');
@@ -105,7 +112,7 @@ test('não publicado: 1ª leitura só aguarda; 2ª coloca o reenvio na fila e re
 
 test('limite de tentativas: não reenvia mais e explica', async () => {
   const pool = fakePool({ delivery: { ...baseDelivery, attempt_count: 3 }, check: waitingCheck(1) });
-  const { fetchImpl } = waha(() => json(200, []));
+  const { fetchImpl } = waha(() => json(200, otherOwnStatus()));
   assert.equal((await rec.checkWhatsAppDelivery(pool, 'd1', { env, fetchImpl })).state, 'gave_up');
   assert.equal(pool.db.delivery.status, 'failed');
   assert.match(pool.db.delivery.last_error, /limite de 3 tentativas/);
@@ -113,7 +120,7 @@ test('limite de tentativas: não reenvia mais e explica', async () => {
 
 test('botão do admin (force) reenvia já na primeira leitura; falha antiga sem registro usa o horário agendado', async () => {
   const pool = fakePool({ delivery: baseDelivery, check: null });
-  const { fetchImpl } = waha(() => json(500, { exception: { message: 'Chat not found for status@broadcast' } }));
+  const { fetchImpl } = waha(() => json(200, otherOwnStatus()));
   const r = await rec.checkWhatsAppDelivery(pool, 'd1', { force: true, env, fetchImpl });
   assert.equal(r.state, 'retried');
   assert.equal(pool.db.delivery.status, 'pending');
@@ -150,4 +157,47 @@ test('agendador registra incerteza do WhatsApp, confere a cada ciclo e o deploy 
   const deploy = fs.readFileSync('deploy-vps-server-only.cjs', 'utf8');
   assert.equal((deploy.match(/services\/whatsappStatusReconcile\.cjs/g) || []).length >= 4, true);
   assert.match(fs.readFileSync('scripts/deploy-phone-price-list.cjs', 'utf8'), /'services\/whatsappStatusReconcile\.cjs'/);
+});
+
+// whatsapp-status-no-resend-v1: caso real 13/11 — 3 envios aceitos (201) e leitura vazia geraram 3 Status.
+test('leitura vazia depois de 201 do WAHA nunca reenvia: vira publicado sem confirmação', async () => {
+  for (const reply of [() => json(200, []), () => json(500, { exception: { message: 'Chat not found for status@broadcast' } }), () => json(502, {})]) {
+    for (const force of [false, true]) {
+      const pool = fakePool({ delivery: { ...baseDelivery, last_error: acceptedError }, check: waitingCheck(1) });
+      const { fetchImpl, calls } = waha(reply);
+      const r1 = await rec.checkWhatsAppDelivery(pool, 'd1', { force, env, fetchImpl });
+      assert.equal(r1.state, 'accepted_unconfirmed');
+      assert.equal(pool.db.delivery.status, 'published');
+      assert.equal(pool.db.check.state, 'unknown');
+      assert.match(pool.db.delivery.last_error, /Publicado sem confirmação/);
+      assert.ok(!pool.db.queries.some((q) => /SET status='pending'/.test(q)), 'não pode colocar reenvio na fila');
+      assert.equal(pool.db.schedule.status, 'failed');
+      assert.ok(calls.every((c) => c.method === 'GET'), 'conferência nunca publica');
+    }
+  }
+});
+
+test('201 aceito e Status encontrado na leitura: publicado com o id', async () => {
+  const pool = fakePool({ delivery: { ...baseDelivery, last_error: acceptedError }, check: waitingCheck() });
+  const { fetchImpl } = waha(() => json(200, [{ id: 'ID7', fromMe: true, timestamp: SENT / 1000 + 40, body: 'Redmi 15 por R$ 1.349', _data: { type: 'video' } }]));
+  assert.equal((await rec.checkWhatsAppDelivery(pool, 'd1', { env, fetchImpl })).state, 'published');
+  assert.equal(pool.db.delivery.provider_publication_id, 'ID7');
+});
+
+test('leitura vazia sem 2xx: não reenvia, aguarda e depois vai para conferência manual', async () => {
+  const pool = fakePool({ delivery: baseDelivery, check: waitingCheck(1) });
+  const { fetchImpl } = waha(() => json(200, []));
+  for (let i = 0; i < 4; i += 1) assert.equal((await rec.checkWhatsAppDelivery(pool, 'd1', { env, fetchImpl, now: () => SENT + 60 * 1000 })).state, 'unknown');
+  assert.equal(pool.db.delivery.status, 'failed');
+  assert.ok(!pool.db.queries.some((q) => /SET status='pending'/.test(q)));
+});
+
+test('envio com 2xx sem id grava o marcador de aceito', async () => {
+  const { sendWahaStatusMedia, WAHA_STATUS_ACCEPTED_MARKER } = require('../services/whatsappStatusSender.cjs');
+  assert.equal(rec.wasAcceptedByWaha({ last_error: acceptedError }), true);
+  assert.equal(rec.wasAcceptedByWaha({ last_error: 'WAHA HTTP 502: resultado incerto.' }), false);
+  const src = fs.readFileSync('services/whatsappStatusSender.cjs', 'utf8');
+  assert.match(src, /\$\{WAHA_STATUS_ACCEPTED_MARKER\} HTTP \$\{response\.status\}/);
+  assert.equal(WAHA_STATUS_ACCEPTED_MARKER, '[WAHA_ACEITO]');
+  assert.equal(typeof sendWahaStatusMedia, 'function');
 });

@@ -1,3 +1,10 @@
+# v1.2.854-status-sem-reenvio
+
+Data: 13/11/2026. Branch: `main`. Escopo: API (Status do WhatsApp).
+Conferência automática não reenvia Status aceito pelo WAHA (2xx) nem com leitura vazia; vira publicado sem confirmação/conferência manual. Caso: vídeo das 08:00 de 13/11 saiu 3x. Env `SOCIAL_STORY_WHATSAPP_MAX_ATTEMPTS=1` mantido. Registro: `docs/versoes/2026-11-13-v1.2.854-status-sem-reenvio.md`.
+
+---
+
 # v1.2.853-shopee-retry-ate-imprimir
 
 Data: 13/11/2026. Branch: `main`. Escopo: agente de impressão Shopee no Lenovo; site/API sem mudança.

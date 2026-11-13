@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.853-shopee-retry-ate-imprimir",
+  "version": "v1.2.854-status-sem-reenvio",
   "date": "2026-11-13",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.853-shopee-retry-ate-imprimir",
+  "tag": "v1.2.854-status-sem-reenvio",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Agente de impressão Shopee (Lenovo): qualquer erro do fluxo (NF-e, envio, etiqueta, impressora, resumo) volta a ser tentado a cada 5 min até imprimir; pedidos já preparados (PROCESSED) sem impressão concluída voltam à fila e a lista READY_TO_SHIP passa a ser paginada. Site/API sem mudança.",
+  "summary": "Status do WhatsApp: a conferência automática não reenvia mais quando o WAHA aceitou o envio (2xx) nem quando a leitura vem vazia — vira publicado sem confirmação/conferência manual. Corrige o vídeo das 08:00 de 13/11 que saiu 3 vezes. Env SOCIAL_STORY_WHATSAPP_MAX_ATTEMPTS=1 mantido como proteção extra.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,15 +28,16 @@
   },
   "site_source_base": "922455f2",
   "changed_files": [
-    "scripts/shopee-auto-print.cjs",
-    "tmp-tests/shopee-retry-until-printed.test.cjs",
+    "services/whatsappStatusSender.cjs",
+    "services/whatsappStatusReconcile.cjs",
+    "tmp-tests/whatsapp-status-reconcile.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-13-v1.2.853-shopee-retry-ate-imprimir.md"
+    "docs/versoes/2026-11-13-v1.2.854-status-sem-reenvio.md"
   ],
   "validations": [
-    "shopee-retry-until-printed.test 4/4",
-    "regressões Shopee (6 arquivos) OK"
+    "whatsapp-status-reconcile.test 15/15",
+    "testes de Status relacionados OK"
   ],
   "site_release": {
     "status": "publicada",
@@ -46,13 +47,9 @@
     "note": "Manifesto da correção de Status; funcionalidades do robô v1.2.850 preservadas."
   },
   "api_release": {
-    "status": "publicada",
+    "status": "pendente",
     "service": "mdv-api",
-    "commit": "922455f2",
-    "deployed_at": "2026-11-12T16:57:06Z",
-    "backup": "/var/www/mdv-api/backups/whatsapp-status-1794502619696",
-    "data_backup": "/root/backups/status-id-collation-2026-11-12T16-50-11-050Z",
-    "note": "Deploy seletivo --whatsapp-status-only, sem escrita de env/credenciais. IDs normalizados e tabela de conferência migrada para utf8mb4_unicode_ci; join validado no MySQL."
+    "mode": "--whatsapp-status-only"
   },
   "nginx_release": {
     "status": "sem mudança",
@@ -118,7 +115,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.852 publicada (n8n).",
+  "pending_previous": "v1.2.853 publicada (agente de impressão Shopee no Lenovo).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
