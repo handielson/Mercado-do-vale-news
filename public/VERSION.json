@@ -47,9 +47,13 @@
     "note": "Manifesto da correção de Status; funcionalidades do robô v1.2.850 preservadas."
   },
   "api_release": {
-    "status": "pendente",
+    "status": "publicada",
     "service": "mdv-api",
-    "mode": "--whatsapp-status-only"
+    "mode": "--whatsapp-status-only",
+    "commit": "f592222e",
+    "deployed_at": "2026-11-13T12:28Z",
+    "backup": "/var/www/mdv-api/backups/whatsapp-status-1794572894492",
+    "note": "Somente Sender/Reconcile/Health; sem escrita de env. PM2 online, /health 200, SOCIAL_STORY_WHATSAPP_MAX_ATTEMPTS=1 preservado."
   },
   "nginx_release": {
     "status": "sem mudança",
@@ -89,7 +93,7 @@
     "storefront_verification": "Busca pública mostrou apenas a capa. O card do celular não foi localizado."
   },
   "data_fix": {
-    "note": "Cadastro: PADX0001-01/02/03 (8GB/256GB Verde, Roxo, Preto) passaram do modelo Pad 6 para Redmi Pad 2 e o nome para \"Redmi Pad 2, 11\\\" - Cor / 8GB / 256GB - SKU\"; preços inalterados; slugs mantidos. Backup /var/www/mdv-api/backups/redmi-pad2-cadastro-20261111/products.json"
+    "note": "Entrega 3e8610b7-f149-4a2d-8271-6b8d53e1fa9a (vídeo 08:00 de 13/11, saiu 3x): failed/gave_up → published (sem confirmação), published_at 11:01:01 UTC, check unknown. Nada reenviado. Backup /root/backups/status-3x-2026-11-13T12-28-44-875Z/rows.json"
   },
   "waha_status_release": {
     "container": "waha_status_canary",
