@@ -175,6 +175,8 @@ function orderPrintStatePaths(orderSn, connectionId = 'primary') {
         legacy: path.join(printedMarkersDir, `${prefix}.txt`),
         label: path.join(printedMarkersDir, `${prefix}.label.txt`),
         summary: path.join(printedMarkersDir, `${prefix}.summary.txt`),
+        // shopee-retry-until-printed-v1: envio já preparado; etiqueta/resumo seguem sendo tentados mesmo após PROCESSED.
+        shipped: path.join(printedMarkersDir, `${prefix}.shipped.txt`),
     };
 }
 
@@ -1030,16 +1032,56 @@ async function legacyRunLoop() {
 }
 
 let loopRunning = false;
-async function processShopeePrintConnection(settings, connection, ptp) {
-    const listResult = await callVpsShopeeAction('get_order_list', {
-        page_size: 30,
-        order_status: 'READY_TO_SHIP',
-        time_range_field: 'create_time',
-    }, connection.id);
-    if (!isVpsActionSuccess(listResult)) {
-        throw new Error(listResult.data?.message || listResult.data?.error || `Falha ao consultar ${connection.displayName}.`);
+
+const SHOPEE_RETRY_MESSAGE = 'nova tentativa automática em 5 minutos, até imprimir';
+const SHOPEE_ORDER_LIST_MAX_PAGES = 10;
+
+// shopee-retry-until-printed-v1: lista todas as páginas, não só os 30 primeiros pedidos.
+async function listShopeeOrdersByStatus(connection, orderStatus, callAction = callVpsShopeeAction) {
+    const orders = [];
+    let cursor = '';
+    for (let page = 0; page < SHOPEE_ORDER_LIST_MAX_PAGES; page += 1) {
+        const listResult = await callAction('get_order_list', {
+            page_size: 50,
+            order_status: orderStatus,
+            time_range_field: 'create_time',
+            ...(cursor ? { cursor } : {}),
+        }, connection.id);
+        if (!isVpsActionSuccess(listResult)) {
+            throw new Error(listResult.data?.message || listResult.data?.error || `Falha ao consultar ${connection.displayName}.`);
+        }
+        const response = listResult.data?.response || {};
+        orders.push(...(response.order_list || []));
+        if (!response.more || !response.next_cursor || response.next_cursor === cursor) break;
+        cursor = String(response.next_cursor);
     }
-    const orders = listResult.data?.response?.order_list || [];
+    return orders;
+}
+
+// Pedidos READY_TO_SHIP + pedidos que o agente já preparou (PROCESSED) e ainda não terminaram de imprimir.
+async function listShopeeOrdersToPrint(connection, callAction = callVpsShopeeAction, exists = fs.existsSync) {
+    const ready = await listShopeeOrdersByStatus(connection, 'READY_TO_SHIP', callAction);
+    let processed = [];
+    try {
+        processed = (await listShopeeOrdersByStatus(connection, 'PROCESSED', callAction)).filter(order => {
+            const orderSn = String(order?.order_sn || '').trim();
+            if (!orderSn) return false;
+            const markers = orderPrintStatePaths(orderSn, connection.id);
+            return exists(markers.shipped) && !exists(markers.legacy);
+        });
+    } catch (error) {
+        console.error(`[${connection.displayName}] Falha ao listar pedidos PROCESSED pendentes de impressão:`, error.message || error);
+    }
+    const seen = new Set();
+    return [...ready, ...processed].filter(order => {
+        const orderSn = String(order?.order_sn || '').trim();
+        if (!orderSn || seen.has(orderSn)) return false;
+        seen.add(orderSn);
+        return true;
+    });
+}
+async function processShopeePrintConnection(settings, connection, ptp) {
+    const orders = await listShopeeOrdersToPrint(connection);
     if (!orders.length) {
         console.log(`[${connection.displayName}] Nenhum pedido READY_TO_SHIP.`);
         return;
@@ -1062,11 +1104,14 @@ async function processShopeePrintConnection(settings, connection, ptp) {
                 }
 
                 currentStage = 'ship_order';
-                const preparation = await prepareShopeeOrderShipment({ connection, orderSn });
+                const preparation = fs.existsSync(markers.shipped)
+                    ? { success: true, stage: 'ship_order', already_shipped: true }
+                    : await prepareShopeeOrderShipment({ connection, orderSn });
+                if (preparation.success && !preparation.already_shipped) markPrintStep(markers.shipped);
                 if (!preparation.success) {
                     const preparationResult = preparation.result;
                     const pendingLabel = preparation.stage === 'invoice' ? 'Nota ainda não pronta' : 'Preparar envio pendente';
-                    console.log(`[${orderSn}] ${pendingLabel}: ${preparationResult?.data?.message || preparationResult?.data?.error || `HTTP ${preparationResult?.status}`}`);
+                    console.log(`[${orderSn}] ${pendingLabel}: ${preparationResult?.data?.message || preparationResult?.data?.error || `HTTP ${preparationResult?.status}`} (${SHOPEE_RETRY_MESSAGE})`);
                     if (requiresHumanIntervention(preparation.stage, preparationResult)) {
                         await printHumanInterventionReceipt({
                             settings,
@@ -1086,7 +1131,7 @@ async function processShopeePrintConnection(settings, connection, ptp) {
                     shipping_document_type: 'NORMAL_AIR_WAYBILL',
                 }, connection.id);
                 if (!document.ok || !document.buffer?.length || !document.contentType.includes('pdf')) {
-                    console.log(`[${orderSn}] Etiqueta ainda não pronta: ${document.data?.message || document.data?.error || `HTTP ${document.status}`}`);
+                    console.log(`[${orderSn}] Etiqueta ainda não pronta: ${document.data?.message || document.data?.error || `HTTP ${document.status}`} (${SHOPEE_RETRY_MESSAGE})`);
                     if (requiresHumanIntervention('shipping_document', document)) {
                         await printHumanInterventionReceipt({ settings, connection, orderSn, stage: 'shipping_document', resultOrError: document });
                     }
@@ -1132,7 +1177,7 @@ async function processShopeePrintConnection(settings, connection, ptp) {
                 console.log(`[${connection.displayName}] Fluxo ${orderSn} concluído sem repetição.`);
             }
         } catch (orderError) {
-            console.error(`[${connection.displayName}] Falha no pedido ${orderSn}:`, orderError.message || orderError);
+            console.error(`[${connection.displayName}] Falha no pedido ${orderSn} (${SHOPEE_RETRY_MESSAGE}):`, orderError.message || orderError);
             if (requiresHumanIntervention(currentStage, orderError)) {
                 await printHumanInterventionReceipt({
                     settings,
@@ -1223,5 +1268,7 @@ module.exports = {
     interventionInstructions,
     writeShopeeThermalLabel,
     prepareShopeeOrderShipment,
+    listShopeeOrdersToPrint,
+    orderPrintStatePaths,
     startShopeeAutoPrintService,
 };

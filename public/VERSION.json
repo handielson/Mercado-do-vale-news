@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.852-bot-card-de-venda",
-  "date": "2026-11-12",
+  "version": "v1.2.853-shopee-retry-ate-imprimir",
+  "date": "2026-11-13",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.852-bot-card-de-venda",
+  "tag": "v1.2.853-shopee-retry-ate-imprimir",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô do WhatsApp: escolher um item da lista agora traz foto com a ficha (emojis) e, 5 s depois, uma chamada para venda com estoque real e entrega grátis em Petrolina/Juazeiro; complemento logo após a escolha (\"De 512gb\") reenvia o card em vez de refazer a busca. Sem mudança no site/API.",
+  "summary": "Agente de impressão Shopee (Lenovo): qualquer erro do fluxo (NF-e, envio, etiqueta, impressora, resumo) volta a ser tentado a cada 5 min até imprimir; pedidos já preparados (PROCESSED) sem impressão concluída voltam à fila e a lista READY_TO_SHIP passa a ser paginada. Site/API sem mudança.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,18 +28,15 @@
   },
   "site_source_base": "922455f2",
   "changed_files": [
-    "scripts/n8n-selected-item-card.cjs",
-    "scripts/deploy-n8n-selected-item-card.cjs",
-    "tmp-tests/n8n-selected-item-card.test.cjs",
-    "tmp-tests/fixtures/selected-item-card.json",
+    "scripts/shopee-auto-print.cjs",
+    "tmp-tests/shopee-retry-until-printed.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-12-v1.2.852-bot-card-de-venda.md"
+    "docs/versoes/2026-11-13-v1.2.853-shopee-retry-ate-imprimir.md"
   ],
   "validations": [
-    "n8n-selected-item-card.test 1/1",
-    "gate comercial 152/152 (sha256 455eb40f…)",
-    "dry run: só Vendas - Contexto Produtos e Vendas - Verificar Pos Lista mudam"
+    "shopee-retry-until-printed.test 4/4",
+    "regressões Shopee (6 arquivos) OK"
   ],
   "site_release": {
     "status": "publicada",
@@ -121,5 +118,10 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.849 publicada; pendências de reconhecimento de ID e collation corrigidas na v1.2.851. Entrega confirmada pelo operador registrada como publicada sem reenvio."
+  "pending_previous": "v1.2.852 publicada (n8n).",
+  "print_agent_release": {
+    "status": "pendente",
+    "host": "Lenovo DESKTOP-TEH0T2E",
+    "service": "shopee-auto-print (PM2)"
+  }
 }

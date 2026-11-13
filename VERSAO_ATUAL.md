@@ -1,3 +1,10 @@
+# v1.2.853-shopee-retry-ate-imprimir
+
+Data: 13/11/2026. Branch: `main`. Escopo: agente de impressão Shopee no Lenovo; site/API sem mudança.
+Erro em qualquer etapa (NF-e, envio, etiqueta, impressora, resumo) é tentado de novo a cada 5 min até imprimir; pedidos já preparados (PROCESSED) e não impressos voltam à fila; lista READY_TO_SHIP paginada. Caso: 2611136GM99E9B. Registro: `docs/versoes/2026-11-13-v1.2.853-shopee-retry-ate-imprimir.md`.
+
+---
+
 # v1.2.852-bot-card-de-venda
 
 Data: 12/11/2026. Branch: `main`. Status: **publicada** (n8n, 12/11 20:20). Site/API seguem a v1.2.851.
