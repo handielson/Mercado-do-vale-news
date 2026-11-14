@@ -1,6 +1,6 @@
 # v1.2.855-bot-retirada-3-mensagens
 
-Data: 14/11/2026. Branch: `main`. Status: **pendente** (n8n). Site/API sem mudança.
+Data: 14/11/2026. Branch: `main`. Status: **publicada** (n8n, 14/11 12:56 UTC). Site/API sem mudança.
 Retirada na loja em 3 mensagens: combinado + horário; endereço; localização (pino nativo com address_lat/lng cadastrados, senão link do Maps — hoje sem coordenadas). Registro: `docs/versoes/2026-11-14-v1.2.855-bot-retirada-3-mensagens.md`.
 
 ---
