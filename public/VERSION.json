@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.854-status-sem-reenvio",
-  "date": "2026-11-13",
-  "status": "publicada",
+  "version": "v1.2.855-bot-retirada-3-mensagens",
+  "date": "2026-11-14",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.854-status-sem-reenvio",
+  "tag": "v1.2.855-bot-retirada-3-mensagens",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Status do WhatsApp: a conferência automática não reenvia mais quando o WAHA aceitou o envio (2xx) nem quando a leitura vem vazia — vira publicado sem confirmação/conferência manual. Corrige o vídeo das 08:00 de 13/11 que saiu 3 vezes. Env SOCIAL_STORY_WHATSAPP_MAX_ATTEMPTS=1 mantido como proteção extra.",
+  "summary": "Robô do WhatsApp: retirada na loja em 3 mensagens (combinado + horário; endereço; localização — pino nativo quando houver address_lat/lng no cadastro, senão link do Maps). Site/API sem mudança.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -24,20 +24,22 @@
       "divergent_groups": 9,
       "active_visible_in_stock_no_promo_divergences": 0,
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
-    }
+    },
+    "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps)."
   },
   "site_source_base": "922455f2",
   "changed_files": [
-    "services/whatsappStatusSender.cjs",
-    "services/whatsappStatusReconcile.cjs",
-    "tmp-tests/whatsapp-status-reconcile.test.cjs",
+    "scripts/n8n-pickup-three-messages.cjs",
+    "scripts/deploy-n8n-pickup-three-messages.cjs",
+    "tmp-tests/n8n-pickup-three-messages.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-13-v1.2.854-status-sem-reenvio.md"
+    "docs/versoes/2026-11-14-v1.2.855-bot-retirada-3-mensagens.md"
   ],
   "validations": [
-    "whatsapp-status-reconcile.test 15/15",
-    "testes de Status relacionados OK"
+    "n8n-pickup-three-messages.test 1/1",
+    "gate comercial 152/152 (sha256 638139b1…)",
+    "dry run: só Dividir mensagens, Enviar WhatsApp e Vendas - Verificar Pos Lista mudam"
   ],
   "site_release": {
     "status": "publicada",
@@ -60,12 +62,10 @@
     "note": ""
   },
   "n8n_release": {
-    "status": "publicada",
+    "status": "pendente",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "42ea1efb130e4550056831ef237494be05f480d396333f32c6dd095717eb5b31",
-    "candidate": "455eb40ffc98de7d7d425fae054cbd86dd2a8663a23946ea45829ab7909477e4",
-    "applied_at": "2026-11-12T20:20Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-12T20-20-06-872Z-0596b9a7.aes256gcm.json"
+    "before": "455eb40ffc98de7d7d425fae054cbd86dd2a8663a23946ea45829ab7909477e4",
+    "candidate": "638139b185805c5053c68f3f77f675ce3125181a665b86ac8c627102537df898"
   },
   "evolution_release": {
     "status": "publicada",
@@ -119,7 +119,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.853 publicada (agente de impressão Shopee no Lenovo).",
+  "pending_previous": "v1.2.854 publicada (API Status WhatsApp).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
