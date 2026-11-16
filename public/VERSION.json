@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.855-bot-retirada-3-mensagens",
-  "date": "2026-11-14",
-  "status": "publicada",
+  "version": "v1.2.856-bot-modelo-tablet-emoji",
+  "date": "2026-11-16",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.855-bot-retirada-3-mensagens",
+  "tag": "v1.2.856-bot-modelo-tablet-emoji",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô do WhatsApp: retirada na loja em 3 mensagens (combinado + horário; endereço; localização — pino nativo quando houver address_lat/lng no cadastro, senão link do Maps). Site/API sem mudança.",
+  "summary": "Robô do WhatsApp: pedido com \"tablet\"/\"celular\" no nome do modelo agora acha o produto (antes abria a lista com \"não encontrei\"); emoji solto logo depois de outra mensagem não derruba a resposta nem gera resposta própria. Sem mudança no site/API.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -29,17 +29,18 @@
   },
   "site_source_base": "922455f2",
   "changed_files": [
-    "scripts/n8n-pickup-three-messages.cjs",
-    "scripts/deploy-n8n-pickup-three-messages.cjs",
-    "tmp-tests/n8n-pickup-three-messages.test.cjs",
+    "scripts/n8n-model-match-emoji.cjs",
+    "scripts/deploy-n8n-model-match-emoji.cjs",
+    "tmp-tests/n8n-model-match-emoji.test.cjs",
+    "tmp-tests/fixtures/tablet-model-request.json",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-14-v1.2.855-bot-retirada-3-mensagens.md"
+    "docs/versoes/2026-11-16-v1.2.856-bot-modelo-tablet-emoji.md"
   ],
   "validations": [
-    "n8n-pickup-three-messages.test 1/1",
-    "gate comercial 152/152 (sha256 638139b1…)",
-    "dry run: só Dividir mensagens, Enviar WhatsApp e Vendas - Verificar Pos Lista mudam"
+    "n8n-model-match-emoji.test 1/1",
+    "gate comercial 152/152 (sha256 dc8f1be2…)",
+    "dry run: só Vendas - Contexto Produtos e Controle Bot - Aplicar mensagem atual mudam"
   ],
   "site_release": {
     "status": "publicada",
@@ -62,12 +63,10 @@
     "note": ""
   },
   "n8n_release": {
-    "status": "publicada",
+    "status": "pendente",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "455eb40ffc98de7d7d425fae054cbd86dd2a8663a23946ea45829ab7909477e4",
-    "candidate": "638139b185805c5053c68f3f77f675ce3125181a665b86ac8c627102537df898",
-    "applied_at": "2026-11-14T12:56Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-14T12-56-38-934Z-e0658b45.aes256gcm.json"
+    "before": "638139b185805c5053c68f3f77f675ce3125181a665b86ac8c627102537df898",
+    "candidate": "dc8f1be211f3a565f888a6dd2d5f1695f3a09400c2eb3e66ba5467b614a5c1dc"
   },
   "evolution_release": {
     "status": "publicada",
