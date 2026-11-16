@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.858-api-historico-sem-emoji-partido",
+  "version": "v1.2.859-bot-visita-mensagens-separadas",
   "date": "2026-11-16",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.858-api-historico-sem-emoji-partido",
+  "tag": "v1.2.859-bot-visita-mensagens-separadas",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "API: o histórico que vai para a IA do bot não corta mais emoji no meio. Antes, uma lista longa no histórico fazia a OpenAI rejeitar o pedido e o cliente recebia \"Não consegui processar sua mensagem\".",
+  "summary": "Robô do WhatsApp: a resposta de visita à loja / onde fica sai em mensagens separadas (endereço, localização e pergunta final), como já era na retirada. Sem mudança no site/API.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -29,17 +29,17 @@
   },
   "site_source_base": "922455f2",
   "changed_files": [
-    "vps_server.js",
-    "vps_server.cjs",
-    "tmp-tests/n8n-history-well-formed.test.cjs",
+    "scripts/n8n-visit-split-messages.cjs",
+    "scripts/deploy-n8n-visit-split-messages.cjs",
+    "tmp-tests/n8n-visit-split-messages.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-16-v1.2.858-api-historico-sem-emoji-partido.md"
+    "docs/versoes/2026-11-16-v1.2.859-bot-visita-mensagens-separadas.md"
   ],
   "validations": [
-    "n8n-history-well-formed.test 2/2",
-    "vps-server-no-supabase-rest-static ok",
-    "produção: client-control da conversa afetada com histórico bem formado"
+    "n8n-visit-split-messages.test 1/1",
+    "gate comercial 152/152 (sha256 ac2b4034…)",
+    "dry run: só Loja - Localizacao muda"
   ],
   "site_release": {
     "status": "publicada",
@@ -121,5 +121,11 @@
     "commit": "09c504b1",
     "deployed_at": "2026-11-13T12:07Z",
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
+  },
+  "n8n_release": {
+    "status": "pendente",
+    "workflow": "SkrkB4vyKVDnQ68t",
+    "before": "dc8f1be211f3a565f888a6dd2d5f1695f3a09400c2eb3e66ba5467b614a5c1dc",
+    "candidate": "ac2b4034ab67612e8879c96f634a767aa8b8682e457d1c76c4a5c08de458da3b"
   }
 }
