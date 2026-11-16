@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.856-bot-modelo-tablet-emoji",
+  "version": "v1.2.857-deploy-reenvia-interrompidas",
   "date": "2026-11-16",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.856-bot-modelo-tablet-emoji",
+  "tag": "v1.2.857-deploy-reenvia-interrompidas",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô do WhatsApp: pedido com \"tablet\"/\"celular\" no nome do modelo agora acha o produto (antes abria a lista com \"não encontrei\"); emoji solto logo depois de outra mensagem não derruba a resposta nem gera resposta própria. Sem mudança no site/API.",
+  "summary": "Publicação do n8n: mensagens de cliente cortadas pelo restart do deploy são reenviadas automaticamente quando o n8n volta (sem repetir o que já foi respondido). Só script local; robô, site e API sem mudança.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -29,18 +29,16 @@
   },
   "site_source_base": "922455f2",
   "changed_files": [
-    "scripts/n8n-model-match-emoji.cjs",
-    "scripts/deploy-n8n-model-match-emoji.cjs",
-    "tmp-tests/n8n-model-match-emoji.test.cjs",
-    "tmp-tests/fixtures/tablet-model-request.json",
+    "scripts/deploy-n8n-meta-attendance.cjs",
+    "tmp-tests/n8n-deploy-interrupted-replay.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-16-v1.2.856-bot-modelo-tablet-emoji.md"
+    "docs/versoes/2026-11-16-v1.2.857-deploy-reenvia-interrompidas.md"
   ],
   "validations": [
-    "n8n-model-match-emoji.test 1/1",
-    "gate comercial 152/152 (sha256 dc8f1be2…)",
-    "dry run: só Vendas - Contexto Produtos e Controle Bot - Aplicar mensagem atual mudam"
+    "n8n-deploy-interrupted-replay.test 2/2",
+    "n8n-meta-payjoy-deploy 3/3, meta-attendance-replies-deploy 3/3",
+    "VPS: replay_interrupted na janela da 856 -> 76097 answered_later (sem reenvio)"
   ],
   "site_release": {
     "status": "publicada",
@@ -61,14 +59,6 @@
   "nginx_release": {
     "status": "sem mudança",
     "note": ""
-  },
-  "n8n_release": {
-    "status": "publicada",
-    "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "638139b185805c5053c68f3f77f675ce3125181a665b86ac8c627102537df898",
-    "candidate": "dc8f1be211f3a565f888a6dd2d5f1695f3a09400c2eb3e66ba5467b614a5c1dc",
-    "applied_at": "2026-11-16T12:08Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-16T12-08-17-183Z-ff582875.aes256gcm.json"
   },
   "evolution_release": {
     "status": "publicada",

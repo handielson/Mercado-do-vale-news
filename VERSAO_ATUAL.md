@@ -1,3 +1,10 @@
+# v1.2.857-deploy-reenvia-interrompidas
+
+Data: 16/11/2026. Branch: `main`. Status: **publicada** (só script local de deploy). Robô/site/API seguem as versões anteriores.
+Deploy do n8n reenvia sozinho as mensagens de cliente cortadas pelo restart. Registro: `docs/versoes/2026-11-16-v1.2.857-deploy-reenvia-interrompidas.md`.
+
+---
+
 # v1.2.856-bot-modelo-tablet-emoji
 
 Data: 16/11/2026. Branch: `main`. Status: **publicada** (n8n, 16/11 12:08 UTC). Site/API seguem a versão anterior.

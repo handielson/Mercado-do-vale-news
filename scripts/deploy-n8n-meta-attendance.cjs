@@ -70,6 +70,25 @@ COMMIT;`;
 // Executed on the VPS via node stdin. It never emits child-process stderr or env.
 async function remoteProgram(request){
  const fs=require('node:fs'),crypto=require('node:crypto'),cp=require('node:child_process');
+ // interrupted-replay-v1: mensagem de cliente cortada pelo restart do deploy volta para o webhook depois que o n8n sobe.
+ const unflatReplay=text=>{const arr=JSON.parse(text),seen=new Map();const rev=v=>typeof v==='string'&&/^\d+$/.test(v)?get(+v):v;
+  const get=i=>{if(seen.has(i))return seen.get(i);const v=arr[i];if(Array.isArray(v)){const o=[];seen.set(i,o);for(const x of v)o.push(rev(x));return o;}
+   if(v&&typeof v==='object'){const o={};seen.set(i,o);for(const k of Object.keys(v))o[k]=rev(v[k]);return o;}seen.set(i,v);return v;};return get(0);};
+ const extractReplay=(text,status)=>{
+  let data;try{data=unflatReplay(text);}catch{return {skip:'unreadable'};}
+  const run=data?.resultData?.runData||{};
+  const body=run.Webhook?.[0]?.data?.main?.[0]?.[0]?.json?.body||data?.executionData?.nodeExecutionStack?.[0]?.data?.main?.[0]?.[0]?.json?.body;
+  const key=body?.data?.key||{};
+  if(body?.event!=='messages.upsert'||key.fromMe===true)return {skip:'not_inbound'};
+  if(!/@s\.whatsapp\.net$/.test(String(key.remoteJid||'')))return {skip:'not_private_chat'};
+  if(!/^[A-Za-z0-9]{8,64}$/.test(String(key.id||'')))return {skip:'no_message_id'};
+  if(Object.keys(run).some(name=>/^Enviar WhatsApp/.test(name)))return {skip:'already_sent'};
+  const message=String(data?.resultData?.error?.message||'');
+  const interrupted=status==='crashed'||/task request timed out|task runner|runner|interrupted|econnreset|econnrefused|socket hang up|connection lost|offer/i.test(message);
+  if(!interrupted)return {skip:'not_interrupted'};
+  return {body,messageId:String(key.id)};
+ };
+ if(request.mode==='extract_replay'){const r=extractReplay(request.data,request.status);return r.body?{messageId:r.messageId,remoteJid:r.body.data.key.remoteJid}:r;}
  const execute=(args,input)=>cp.execFileSync('docker',args,{input,encoding:'utf8',stdio:['pipe','pipe','pipe'],timeout:30000,maxBuffer:16*1024*1024}).trim();
  const db=execute(['ps','--filter','label=com.docker.swarm.service.name=n8n_n8n-db','--format','{{.Names}}']).split('\n').filter(Boolean);
  if(db.length!==1 || !/^n8n_n8n-db[.\w-]*$/.test(db[0]))throw Error('Postgres container unavailable');
@@ -125,9 +144,49 @@ async function remoteProgram(request){
   const response=await fetch('https://n8n.mercadodovale.com.br/webhook/meta-attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(10000)});
   return {...result,unauthenticatedStatus:response.status};
  }
+ if(request.mode==='replay_interrupted'){
+  const since=new Date(request.since);
+  if(!(since.getTime()>Date.now()-30*60000&&since.getTime()<=Date.now()))throw Error('Invalid replay window');
+  const pauseReplay=ms=>new Promise(r=>setTimeout(r,ms));
+  for(let i=0;i<45;i++){
+   const running=execute(['service','ps','n8n_n8n-runner','--format','{{.CurrentState}}','--filter','desired-state=running']).split('\n').some(v=>/^Running\b/.test(v));
+   let ready=false;try{ready=(await fetch('https://n8n.mercadodovale.com.br/healthz/readiness',{signal:AbortSignal.timeout(5000)})).status===200;}catch{}
+   if(running&&ready)break;await pauseReplay(2000);
+  }
+  await pauseReplay(5000);
+  const ids=parse(`SELECT COALESCE(json_agg(json_build_object('id',id,'status',status) ORDER BY id),'[]'::json) FROM execution_entity WHERE "workflowId"='${workflowId}' AND "startedAt">='${since.toISOString()}' AND status IN ('error','crashed');`);
+  const replayed=[],skipped=[],done=new Set();
+  for(const row of ids){
+   const id=Number(row.id);if(!Number.isSafeInteger(id))continue;
+   const r=extractReplay(sql(`SELECT data FROM execution_data WHERE "executionId"=${id};`),row.status);
+   if(!r.body){skipped.push({id,reason:r.skip});continue;}
+   if(done.has(r.messageId)){skipped.push({id,reason:'duplicate'});continue;}
+   const answered=Number(sql(`SELECT COUNT(*) FROM execution_entity e JOIN execution_data d ON d."executionId"=e.id WHERE e."workflowId"='${workflowId}' AND e.id>${id} AND e.status='success' AND d.data LIKE '%${r.messageId}%';`));
+   if(answered>0){skipped.push({id,reason:'answered_later'});continue;}
+   done.add(r.messageId);
+   const body={...r.body,date_time:new Date().toISOString(),data:{...r.body.data,messageTimestamp:Math.floor(Date.now()/1000)}};
+   let status=0;try{status=(await fetch('https://n8n.mercadodovale.com.br/webhook/whatsapp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)})).status;}catch{}
+   replayed.push({id,status});await pauseReplay(3000);
+  }
+  return {since:since.toISOString(),candidates:ids.length,replayed,skipped};
+ }
  throw Error('Unknown remote mode');
 }
+// interrupted-replay-v1: ao subir o runner de volta, reenvia ao webhook as mensagens de cliente que o restart cortou
+// (desde 2 min antes do deploy começar). Falha no reenvio não derruba o deploy; o resumo vai para o stderr sem dados do cliente.
+const DEPLOY_WINDOW_STARTED_AT=new Date(Date.now()-120000).toISOString();
+let interruptedReplayDone=false;
 function callRemote(connection,request){
+ return callRemoteRaw(connection,request).then(async value=>{
+  if(request.mode==='scale'&&request.service===RUNNER&&request.replicas===1&&!interruptedReplayDone&&process.env.MDV_N8N_SKIP_INTERRUPTED_REPLAY!=='1'){
+   interruptedReplayDone=true;
+   try{console.error(JSON.stringify({interruptedReplay:await callRemoteRaw(connection,{mode:'replay_interrupted',since:DEPLOY_WINDOW_STARTED_AT})}));}
+   catch{console.error(JSON.stringify({interruptedReplay:{failed:true}}));}
+  }
+  return value;
+ });
+}
+function callRemoteRaw(connection,request){
  const program=`(${remoteProgram.toString()})(${JSON.stringify(request)}).then(value=>process.stdout.write(JSON.stringify(value))).catch(()=>{process.stderr.write('remote operation failed; sensitive output omitted');process.exitCode=1;});`;
  return new Promise((resolve,reject)=>connection.exec('node',(error,stream)=>{
   if(error)return reject(Error('SSH command could not start'));
