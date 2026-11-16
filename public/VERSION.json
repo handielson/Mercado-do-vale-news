@@ -1,7 +1,7 @@
 {
   "version": "v1.2.856-bot-modelo-tablet-emoji",
   "date": "2026-11-16",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.856-bot-modelo-tablet-emoji",
   "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
@@ -63,10 +63,12 @@
     "note": ""
   },
   "n8n_release": {
-    "status": "pendente",
+    "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
     "before": "638139b185805c5053c68f3f77f675ce3125181a665b86ac8c627102537df898",
-    "candidate": "dc8f1be211f3a565f888a6dd2d5f1695f3a09400c2eb3e66ba5467b614a5c1dc"
+    "candidate": "dc8f1be211f3a565f888a6dd2d5f1695f3a09400c2eb3e66ba5467b614a5c1dc",
+    "applied_at": "2026-11-16T12:08Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-16T12-08-17-183Z-ff582875.aes256gcm.json"
   },
   "evolution_release": {
     "status": "publicada",

@@ -1,6 +1,6 @@
 # v1.2.856-bot-modelo-tablet-emoji
 
-Data: 16/11/2026. Branch: `main`. Status: **pendente** (n8n). Site/API seguem a versão anterior.
+Data: 16/11/2026. Branch: `main`. Status: **publicada** (n8n, 16/11 12:08 UTC). Site/API seguem a versão anterior.
 Pedido com "tablet"/"celular" no nome do modelo acha o produto; emoji solto logo depois não derruba a resposta nem gera outra. Registro: `docs/versoes/2026-11-16-v1.2.856-bot-modelo-tablet-emoji.md`.
 
 ---
