@@ -1,6 +1,6 @@
 # v1.2.859-bot-visita-mensagens-separadas
 
-Data: 16/11/2026. Branch: `main`. Status: **pendente** (n8n). Site/API seguem as versões anteriores.
+Data: 16/11/2026. Branch: `main`. Status: **publicada** (n8n, 16/11 23:37 UTC). Site/API seguem as versões anteriores.
 Visita à loja / onde fica em mensagens separadas (endereço, localização, pergunta final). Registro: `docs/versoes/2026-11-16-v1.2.859-bot-visita-mensagens-separadas.md`.
 
 ---
