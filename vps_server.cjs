@@ -3041,6 +3041,11 @@ function mapN8nBotControlRow(row, identity) {
   };
 }
 
+// well-formed-history-v1: cortar no meio de um emoji deixa meio caractere (surrogate solto) e a OpenAI rejeita o JSON
+// inteiro ("Invalid body: failed to parse JSON value"); o cliente ficava preso em "Não consegui processar".
+function wellFormedTextSliceV1(value, max) {
+  return String(value || '').slice(0, max).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
 async function getN8nBotClientControl(identity) {
   const [rows] = await pool.query(
     `SELECT *,
@@ -3067,7 +3072,7 @@ async function getN8nBotClientControl(identity) {
     const role = direction === 'inbound'
       ? 'Cliente'
       : (/manual|atendente/i.test(sourceNode) ? 'Atendente humano' : 'Loja');
-    const text = String(row.message_text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const text = wellFormedTextSliceV1(String(row.message_text || '').replace(/\s+/g, ' ').trim(), 500);
     return { role, text, direction, source_node: sourceNode, created_at: row.created_at || null };
   }).filter((row) => row.text);
   // Automacoes enviadas fora do n8n tambem precisam fazer parte do contexto do
@@ -3090,7 +3095,7 @@ async function getN8nBotClientControl(identity) {
   const messagesWithBirthdayContext = birthdayGreetingText && !hasBirthdayGreetingInHistory
     ? [{
       role: 'Loja',
-      text: birthdayGreetingText.replace(/\s+/g, ' ').slice(0, 500),
+      text: wellFormedTextSliceV1(birthdayGreetingText.replace(/\s+/g, ' '), 500),
       direction: 'outbound',
       source_node: 'automation-birthday-greeting',
       created_at: birthdayGreeting?.created_at || null,

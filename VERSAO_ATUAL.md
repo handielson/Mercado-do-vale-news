@@ -1,3 +1,10 @@
+# v1.2.858-api-historico-sem-emoji-partido
+
+Data: 16/11/2026. Branch: `main`. Status: **pendente** (API). Site/robô seguem as versões anteriores.
+Histórico do bot sem emoji partido (a OpenAI rejeitava e o cliente recebia "Não consegui processar"). Registro: `docs/versoes/2026-11-16-v1.2.858-api-historico-sem-emoji-partido.md`.
+
+---
+
 # v1.2.857-deploy-reenvia-interrompidas
 
 Data: 16/11/2026. Branch: `main`. Status: **publicada** (só script local de deploy). Robô/site/API seguem as versões anteriores.
