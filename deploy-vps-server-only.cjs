@@ -798,6 +798,13 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--bling-nfe-launch-guard-only')) {
+    await require('./scripts/deploy-bling-nfe-launch-guard.cjs').deployBlingNfeLaunchGuard({ appDir, apiProc, exec, root: __dirname,
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--evolution-webhook-relay-only')) {
     await require('./scripts/deploy-evolution-webhook-relay.cjs').deployEvolutionWebhookRelay({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
@@ -1224,6 +1231,8 @@ async function main() {
   console.log(`Uploaded ${evolutionWebhookRelayPath}`);
   await upload(path.join(__dirname, 'services/botErrorAlerts.cjs'), remotePathJoin(appDir, 'services/botErrorAlerts.cjs'));
   console.log('Uploaded services/botErrorAlerts.cjs');
+  await upload(path.join(__dirname, 'services/blingNfeLaunchGuard.cjs'), remotePathJoin(appDir, 'services/blingNfeLaunchGuard.cjs')); // bling-nfe-launch-guard-v1
+  console.log('Uploaded services/blingNfeLaunchGuard.cjs');
   await upload(path.join(__dirname, n8nAdminHandoffRelayPath), remotePathJoin(appDir, n8nAdminHandoffRelayPath));
   console.log(`Uploaded ${n8nAdminHandoffRelayPath}`);
   await upload(path.join(__dirname, customerSelfServicePath), remotePathJoin(appDir, customerSelfServicePath));

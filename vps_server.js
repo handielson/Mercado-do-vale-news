@@ -43939,6 +43939,26 @@ const getLiveFiscalMarketplaceOrder = async (channel, orderId) => {
 const blingFiscalAutomation = require('./services/blingFiscalAutomation.cjs').createBlingFiscalAutomation({
   pool, fetchDocuments: fetchBlingFiscalDocumentsForMigrationVps,
 });
+// bling-nfe-launch-guard-v1 (17/11/2026): NF-e autorizada que ficou sem estoque/contas no Bling (a emissão automática
+// falhou, o Bling estornou e não relançou quando a nota foi reenviada) recebe o lançamento e os admins do bot são avisados.
+const blingNfeLaunchGuard = require('./services/blingNfeLaunchGuard.cjs').createBlingNfeLaunchGuard({
+  pool,
+  getAuthHeader: () => getBlingProductDetailAuthHeaderVps({ headers: {} }),
+  notify: async (text) => {
+    const evolutionUrl = String(process.env.EVOLUTION_SERVER_URL || '').replace(/\/+$/, '');
+    if (!evolutionUrl || !process.env.EVOLUTION_API_KEY) return;
+    const [admins] = await pool.query('SELECT phone FROM n8n_bot_admin_numbers WHERE active=1');
+    const numbers = [...new Set(admins.map(row => String(row.phone || '').replace(/\D/g, '')).filter(phone => phone.length >= 10))];
+    await Promise.allSettled(numbers.map(number => fetch(`${evolutionUrl}/message/sendText/${encodeURIComponent(N8N_BOT_EVOLUTION_INSTANCE_NAME)}`, {
+      method: 'POST', headers: { 'content-type': 'application/json', apikey: process.env.EVOLUTION_API_KEY },
+      body: JSON.stringify({ number, text }), signal: AbortSignal.timeout(20000),
+    })));
+  },
+});
+fastify.get('/api/bling-nfe-launch-guard', { preHandler: requireSyncKey }, async () => ({ ok: true, ...blingNfeLaunchGuard.getStatus() }));
+fastify.post('/api/bling-nfe-launch-guard/run', { preHandler: requireSyncKey }, async (request) => (
+  { ok: true, ...(await blingNfeLaunchGuard.tick({ dryRun: String(request.query?.dryRun || '') === '1' })) }
+));
 require('./services/accountantPortalServer.cjs').registerAccountantPortalRoutes(fastify, {
   pool,
   getBearerAuthContext: getVpsBearerAuthContext,
@@ -43953,6 +43973,7 @@ runMigrations().then(async () => {
   await tiktokStockSyncQueueVps.start();
   await blingStockWebhookQueue.start();
   blingFiscalAutomation.start();
+  blingNfeLaunchGuard.start(); // bling-nfe-launch-guard-v1
   if (process.env.MDV_FISCAL_AUTO_CANCEL_ENABLED === '1' && process.env.MDV_FISCAL_AUTO_CANCEL_HOMOLOGATED === '1') {
     const fiscalCancellation = require('./services/fiscalCancellationAutomation.cjs').createFiscalCancellationAutomation({
       pool, getLiveMarketplaceOrder: getLiveFiscalMarketplaceOrder,
