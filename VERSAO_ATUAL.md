@@ -1,6 +1,6 @@
 # v1.2.860-bling-nfe-baixa-automatica
 
-Data: 17/11/2026. Branch: `main`. Status: **pendente** (API). Site/robô seguem as versões anteriores.
+Data: 17/11/2026. Branch: `main`. Status: **publicada** (API, 17/11 ~20:30 UTC). Site/robô seguem as versões anteriores.
 NF-e autorizada que ficou sem estoque/contas no Bling (emissão automática falhou e a nota foi reenviada) recebe o lançamento automático, com aviso no WhatsApp dos admins. Registro: `docs/versoes/2026-11-17-v1.2.860-bling-nfe-baixa-automatica.md`.
 
 ---
