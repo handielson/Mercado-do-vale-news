@@ -25,7 +25,8 @@
       "active_visible_in_stock_no_promo_divergences": 0,
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     },
-    "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps)."
+    "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
+    "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque."
   },
   "site_source_base": "922455f2",
   "changed_files": [
@@ -59,7 +60,7 @@
     "service": "mdv-api",
     "mode": "--bling-nfe-launch-guard-only",
     "commit": "da61e12e",
-    "deployed_at": "2026-11-17T20:30Z",
+    "deployed_at": "2026-11-17T20:10Z",
     "backup": "/var/www/mdv-api/backups/bling-nfe-launch-guard-1794946246075",
     "note": "Módulo novo + server.js/vps_server.js/.cjs; sem escrita de env. /status ok; 1ª rodada real: 17 NF-e conferidas, todas já lançadas, nada lançado; saldos JUUB257AZ 0 e NBPT30P 42 inalterados."
   },
