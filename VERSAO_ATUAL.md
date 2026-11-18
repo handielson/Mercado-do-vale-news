@@ -1,3 +1,10 @@
+# v1.2.864-devolucao-de-itens
+
+Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API + nginx, 18/11). Robô segue a versão anterior.
+Devolução de itens da venda (parcial ou total) com estorno documentado, recibo em PDF, comprovantes e recibo assinado para finalizar; caixa e lucro descontam o devolvido. Registro: `docs/versoes/2026-11-18-v1.2.864-devolucao-de-itens.md`.
+
+---
+
 # v1.2.863-local-do-aparelho
 
 Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API + nginx, 18/11). Robô segue a versão anterior.
