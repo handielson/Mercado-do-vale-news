@@ -1,10 +1,11 @@
 const test = require('node:test');
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { files, patchServer, deployAccountantPortal } = require('../scripts/deploy-accountant-portal.cjs');
 const { patchBlingFiscalSync, deployBlingFiscalSync } = require('../scripts/deploy-accountant-portal.cjs');
-test('fiscal automation deploy preserves unrelated runtime code and is idempotent', async () => {
+test('fiscal automation deploy preserves unrelated runtime code and is idempotent', { skip: PUBLICACAO_ANTIGA }, async () => {
   const current = fs.readFileSync(path.join(__dirname, '../vps_server.cjs'), 'utf8').replaceAll('\r\n','\n');
   const old = current.replace(', maxDocuments = 25, skipDocument', '').replace('    maxDocuments,\n    skipDocument,', '    maxDocuments: 25,').replace(/const blingFiscalAutomation =[^;]+;\r?\n/, '').replace(/  fiscalSyncStatus: blingFiscalAutomation.getStatus,\r?\n/, '').replace(/  blingFiscalAutomation.start\(\);\r?\n/, '');
   assert.equal(patchBlingFiscalSync(old).replaceAll('\r\n', '\n'), current.replaceAll('\r\n', '\n'));

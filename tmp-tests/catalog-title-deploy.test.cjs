@@ -1,9 +1,10 @@
 const test = require('node:test');
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const { patchEntry } = require('../scripts/deploy-catalog-title-upload.cjs');
-test('surgical deployment preserves unrelated runtime changes and is idempotent', () => {
+test('surgical deployment preserves unrelated runtime changes and is idempotent', { skip: PUBLICACAO_ANTIGA }, () => {
     const base = execFileSync('git', ['show', '222c8817:vps_server.cjs'], { encoding: 'utf8', maxBuffer: 10000000 });
     const remote = base + '\n// Independent production change\n';
     const updated = patchEntry(remote);

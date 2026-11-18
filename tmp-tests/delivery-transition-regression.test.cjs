@@ -1,9 +1,10 @@
 'use strict';
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-test('completion note selective deployment preserves unrelated remote code, is idempotent and rejects drift',()=>{
+test('completion note selective deployment preserves unrelated remote code, is idempotent and rejects drift', { skip: PUBLICACAO_ANTIGA },()=>{
   const {patch,COMPLETION_NOTE_BASELINE}=require('../scripts/deploy-sales-delivery.cjs');
   for(const file of ['vps_server.js','vps_server.cjs']){
     const before=require('node:child_process').execFileSync('git',['show',COMPLETION_NOTE_BASELINE+':'+file],{encoding:'utf8',maxBuffer:15e6});

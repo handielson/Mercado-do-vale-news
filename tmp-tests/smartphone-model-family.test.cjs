@@ -120,7 +120,8 @@ test('produto selecionado fora do modelo nao provoca criacao',async()=>{
 });
 test('finalizacao integra familia antes da unidade e dentro da mesma transacao',()=>{
   const src=fs.readFileSync('services/smartphonePhotoIntakeServer.cjs','utf8');
-  const finalize=src.slice(src.indexOf("fastify.post('/smartphone-photo-intakes/:id/finalize'"));
+  // A finalização mora em finalizePhotoIntake (usada pela rota e pela porta única de entrada).
+  const finalize=src.slice(src.indexOf('async function finalizePhotoIntake'));
   assert.match(finalize,/ensureSmartphoneModelFamily\(connection/);
   assert.ok(finalize.indexOf('ensureSmartphoneModelFamily')<finalize.indexOf('INSERT INTO units'));
   assert.ok(finalize.indexOf('ensureSmartphoneModelFamily')<finalize.lastIndexOf('await connection.commit()'));

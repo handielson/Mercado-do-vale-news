@@ -54,6 +54,7 @@ test('falha de atualização não vira lista vazia nem bloqueia nova tentativa',
     assert.equal((await service.refreshActive())[0].name,'Translúcido');
     const ui=fs.readFileSync('components/products/selectors/ColorSelect.tsx','utf8');
     assert.match(ui,/onClick=\{\(\) => void loadColors\(true\)\}/);
-    assert.match(ui,/forceRefresh \? colorService.refreshActive\(\)/);
+    assert.match(ui,/if \(forceRefresh\) await colorService\.refreshActive\(\)/);
+    assert.match(ui,/A lista anterior foi mantida/);
     assert.match(ui,/role="alert"/);
 });

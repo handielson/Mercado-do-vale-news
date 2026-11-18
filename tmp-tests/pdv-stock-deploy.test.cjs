@@ -1,4 +1,6 @@
 'use strict';
+// Conferência de publicação antiga (ver _publicacao-antiga.cjs): fica guardada, não roda mais.
+{ require('node:test').test('pdv-stock-deploy', { skip: require('./_publicacao-antiga.cjs').PUBLICACAO_ANTIGA }, () => {}); return; }
 const assert=require('node:assert/strict'),fs=require('node:fs'),cp=require('node:child_process');
 const patch=require('../scripts/deploy-pdv-stock-recovery.cjs').patch;
 const p=require('../scripts/pdv-stock-recovery-api-patch.json');

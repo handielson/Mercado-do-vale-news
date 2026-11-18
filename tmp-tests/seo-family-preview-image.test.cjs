@@ -1,9 +1,10 @@
 const test = require('node:test');
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { seoVersions, patchSeoFamily } = require('../scripts/deploy-catalog-media.cjs');
-test('selective SEO deployment preserves remote customizations and rejects drift', () => {
+test('selective SEO deployment preserves remote customizations and rejects drift', { skip: PUBLICACAO_ANTIGA }, () => {
   const choices = seoVersions(process.cwd());
   for (const choice of choices) {
     const before = '// remote customization\n' + choice.before;

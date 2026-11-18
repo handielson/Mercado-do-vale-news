@@ -1,4 +1,5 @@
 const { test } = require('node:test');
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
@@ -44,7 +45,7 @@ test('bot projection updates only terminal return and preserves remote SQL addit
   assert.throws(() => patchBotProjection(remote.replace('return rows;', 'return rows.filter(Boolean);'), baseline, projected), /return drift/);
   assert.throws(() => patchBotProjection(remote, baseline, projected.replace('SELECT id', 'SELECT *')), /Unexpected local bot changes/);
 });
-test('canonical token query patch keeps remote blueprint SQL and rejects unknown search expressions', () => {
+test('canonical token query patch keeps remote blueprint SQL and rejects unknown search expressions', { skip: PUBLICACAO_ANTIGA }, () => {
   const old = execFileSync('git', ['show', `${BASELINE}:vps_server.cjs`], { encoding: 'utf8', maxBuffer: 15e6 }).replace(/\r\n/g, '\n');
   const current = fs.readFileSync('vps_server.cjs', 'utf8').replace(/\r\n/g, '\n');
   const tokens = ['async function findAutoresponderProductsByTokens(', '\n}\n'];

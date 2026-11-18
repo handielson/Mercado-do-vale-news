@@ -57,6 +57,8 @@ for (const file of ['server.js', 'vps_server.js', 'vps_server.cjs']) {
       productFamilyNameSelectSql: () => 'NULL AS family_name',
       normalizeProductSpecsRam: x => x || {}, parsePublicJson: (_, fallback) => fallback,
       attachCatalogModelColorImages: rows => rows, buildSeoBaseUrl: () => '',
+      // Preço promocional (v1.2.832): regra real, a mesma do servidor.
+      ...require('../services/promoPricingCore.cjs'),
     };
     new Function(...Object.keys(dependencies), source.slice(start, end))(...Object.values(dependencies));
     const request = async (query, expected) => {

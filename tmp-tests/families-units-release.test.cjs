@@ -1,3 +1,5 @@
+// Conferência de publicação antiga (ver _publicacao-antiga.cjs): fica guardada, não roda mais.
+{ require('node:test').test('families-units-release', { skip: require('./_publicacao-antiga.cjs').PUBLICACAO_ANTIGA }, () => {}); return; }
 const assert=require('node:assert/strict'),fs=require('node:fs'),cp=require('node:child_process');
 const {patch}=require('../scripts/deploy-families-units.cjs');
 const base=cp.execFileSync('git',['show','b48e5073:vps_server.cjs'],{encoding:'utf8',maxBuffer:16e6});

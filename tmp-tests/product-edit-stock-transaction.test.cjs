@@ -8,6 +8,8 @@ for(const filename of ['vps_server.cjs','vps_server.js']) {
   const route=source.slice(source.indexOf("fastify.put('/products/:id'"),source.indexOf('// Delete product, its variations'));
   let handler;let reconciled=0;let writes=0;let conflict=false;
   const connection={query:async(sql,params)=>{
+   // Leitura do produto atual (herança de custo da família) não é escrita.
+   if(/^SELECT \* FROM products WHERE id=\? FOR UPDATE/.test(sql))return [[{id:'test',sku:'SYSTEM-SKU',is_parent:0,parent_id:null,custom_fields:null}]];
    assert.doesNotMatch(sql,/stock_quantity\s*=/);
    assert.equal((sql.match(/\?/g)||[]).length,params.length);
    writes++;return [{affectedRows:1}];
@@ -17,7 +19,8 @@ for(const filename of ['vps_server.cjs','vps_server.js']) {
   },
    normalizePrint3dProductOffer(){},collectProductSerializedIdentifiers:()=>[],findProductSerializedIdentifierConflict:async()=>null,
    withSmartphonePriceWrite:async(pool,input,write,options)=>{assert.equal(options.transactional,true);return write(connection,input);},
-   require:()=>({reconcileExternalStock:async(pool,options)=>{assert.equal(options.connection,connection);reconciled++;return conflict?{ok:false,error:'external_stock_below_reserved'}:{ok:true};}}),
+   // Herança de custo da família é o módulo real; o resto é o reconciliador falso.
+   require:id=>/productFamilyInheritance/.test(id)?require('../services/productFamilyInheritance.cjs'):({reconcileExternalStock:async(pool,options)=>{assert.equal(options.connection,connection);reconciled++;return conflict?{ok:false,error:'external_stock_below_reserved'}:{ok:true};}}),
    ensureIncomingStockLocation(){},getDefaultStockCompanyId(){},jsonStr:()=>null,sanitizeDescription:()=>null,
    normalizeProductSpecsRam:()=>null,optionalBool:()=>null,
   };

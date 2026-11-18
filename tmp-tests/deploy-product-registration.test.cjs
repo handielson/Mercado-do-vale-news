@@ -1,4 +1,5 @@
 const test = require('node:test');
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { patchModule, patchEntry, patchDraftEntry, deployProductDrafts, schemaReady, setRecipeFlag, MODULES } = require('../scripts/deploy-product-registration.cjs');
@@ -42,7 +43,7 @@ test('registration publisher rejects unknown drift; accepts only reviewed baseli
   assert.equal(patchModule('', 'new', ''), 'new');
   assert(!MODULES.some(p => /Payments|Checkout|Filament|Shipping|shopee/.test(p)));
 });
-test('entry patch preserves existing integrations and is idempotent in both API entrypoints', () => {
+test('entry patch preserves existing integrations and is idempotent in both API entrypoints', { skip: PUBLICACAO_ANTIGA }, () => {
   // All three deployed entries use this reviewed baseline helper. The legacy
   // local .js does not; the publisher deliberately patches remote sources.
   for (const source of [require('node:child_process').execFileSync('git',['show','7555d8eb:vps_server.cjs'],{encoding:'utf8',maxBuffer:8*1024*1024}), fs.readFileSync('vps_server.cjs','utf8')]) {

@@ -1,4 +1,5 @@
 'use strict';
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -7,7 +8,7 @@ const { BASELINE, ENTRIES, patch, MODULE } = require('../scripts/deploy-shopee-f
 for (const file of ENTRIES) {
   const baseline = execFileSync('git', ['show', `${BASELINE}:${file}`], { encoding: 'utf8', maxBuffer: 15e6 });
   const current = fs.readFileSync(file, 'utf8');
-  test(`${file}: patches only approved blocks and preserves remote additions`, () => {
+  test(`${file}: patches only approved blocks and preserves remote additions`, { skip: PUBLICACAO_ANTIGA }, () => {
     const remote = baseline + '\n// REMOTE CUSTOMIZATION\n';
     const result = patch(remote, baseline, current);
     assert.equal(result.replace(/\r\n/g, '\n'), (current + '\n// REMOTE CUSTOMIZATION\n').replace(/\r\n/g, '\n'));

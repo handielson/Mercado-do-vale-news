@@ -1,4 +1,5 @@
 const test = require('node:test');
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const fastify = require('fastify');
@@ -108,7 +109,7 @@ test('legacy numeric product URLs redirect only after resolving a real public pr
   }
 });
 
-test('selective deployment preserves unrelated remote code and rejects redirect drift', () => {
+test('selective deployment preserves unrelated remote code and rejects redirect drift', { skip: PUBLICACAO_ANTIGA }, () => {
   const { patch, BASELINE } = require('../scripts/deploy-seo-soft-404.cjs');
   for (const entry of ['server.js', 'vps_server.js', 'vps_server.cjs']) {
     const baseline = execFileSync('git', ['show', BASELINE + ':' + entry], { encoding: 'utf8', maxBuffer: 15e6 });

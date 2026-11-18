@@ -45,7 +45,9 @@ const noMatch = extractCatalogPreferences('1200', firstTurn.state);
 assert.equal(filterProductsByPreferences(products, noMatch.state).length, 0);
 assert.match(CATALOG_PREFERENCE_HANDOFF_MESSAGE, /Não consegui identificar com segurança, de forma automática/);
 assert.doesNotMatch(CATALOG_PREFERENCE_HANDOFF_MESSAGE, /nao (?:tem|existe)|ruim|camera boa.*nao/i);
-assert.match(PHONE_LIST_FOLLOWUP_MESSAGE, /câmera, tela, NFC, memória, marca ou faixa de preço/i);
+// Texto do follow-up mudou em 21/09 (v1.2.423): pergunta pelo modelo e oferece fechar a compra.
+assert.match(PHONE_LIST_FOLLOWUP_MESSAGE, /opções e na ficha técnica/i);
+assert.match(PHONE_LIST_FOLLOWUP_MESSAGE, /cor disponível, a condição de pagamento/i);
 
 const technical = extractCatalogPreferences('Samsung com NFC, 8 GB RAM, 256 GB de armazenamento e tela AMOLED 120 Hz', {}, ['Samsung', 'Motorola']);
 assert.equal(technical.state.constraints.brand, 'Samsung');

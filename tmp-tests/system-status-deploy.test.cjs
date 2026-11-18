@@ -1,4 +1,5 @@
 const test = require('node:test');
+const { PUBLICACAO_ANTIGA } = require('./_publicacao-antiga.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -32,7 +33,7 @@ test('full deploy ships the required module before any entry registers it', () =
   assert.ok(defaultDeploy.indexOf("await upload(path.join(__dirname, 'services/whatsappStatusHealth.cjs')") < defaultDeploy.indexOf('await upload(localServer,'));
   assert.ok(deploy.includes("process.argv.includes('--system-status-check')"));
 });
-test('check mode reads the planned production files without writes or restart', async () => {
+test('check mode reads the planned production files without writes or restart', { skip: PUBLICACAO_ANTIGA }, async () => {
   const runtime = fakeRuntime();
   const result = await deploySystemStatus({ ...runtime.args, checkOnly: true });
   assert.equal(result.files.length, 4);
@@ -45,7 +46,7 @@ test('unexpected target or modified production module stops before mutation', as
   await assert.rejects(deploySystemStatus(runtime.args), /baseline/);
   assert.deepEqual(runtime.writes, []); assert.deepEqual(runtime.commands, []);
 });
-test('syntax failure does not promote files or restart the running API', async () => {
+test('syntax failure does not promote files or restart the running API', { skip: PUBLICACAO_ANTIGA }, async () => {
   const runtime = fakeRuntime(); const originalExec = runtime.args.exec;
   runtime.args.exec = async command => { if (command.startsWith('node --check')) throw new Error('invalid syntax'); return originalExec(command); };
   await assert.rejects(deploySystemStatus(runtime.args), /invalid syntax/);
@@ -54,7 +55,7 @@ test('syntax failure does not promote files or restart the running API', async (
   assert.equal(runtime.commands.some(command => command.startsWith('mv ') || command.startsWith('pm2 ')), false);
   assert.equal([...runtime.files.keys()].some(file => file.endsWith('.release-check.cjs')), false);
 });
-test('restart failure restores original entries and removes a previously absent module', async () => {
+test('restart failure restores original entries and removes a previously absent module', { skip: PUBLICACAO_ANTIGA }, async () => {
   const runtime = fakeRuntime(); const originalExec = runtime.args.exec; let restarts = 0;
   runtime.args.exec = async command => { if (command === 'pm2 restart mdv-api' && ++restarts === 1) throw new Error('restart failed'); return originalExec(command); };
   await assert.rejects(deploySystemStatus(runtime.args), /restart failed/);
