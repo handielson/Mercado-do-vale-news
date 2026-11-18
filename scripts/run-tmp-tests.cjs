@@ -61,6 +61,7 @@ const groups = [
       'n8n-smartphone-model-id-grouping.test.cjs',
       'n8n-unavailable-phone-full-catalog.test.cjs',
       'n8n-whatsapp-payjoy-images.test.cjs',
+      'n8n-state-rebase-revision.test.cjs',
     ],
   },
   {

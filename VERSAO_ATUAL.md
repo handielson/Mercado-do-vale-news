@@ -1,3 +1,10 @@
+# v1.2.867-bot-retentativa-estado
+
+Data: 18/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 18/11). Site e API sem mudança.
+Segunda mensagem do mesmo cliente não some mais sem resposta: a retentativa depois de conflito de estado grava contra a revisão nova. Registro: `docs/versoes/2026-11-18-v1.2.867-bot-retentativa-estado.md`.
+
+---
+
 # v1.2.866-aparelho-itens-de-fora
 
 Data: 18/11/2026. Branch: `main`. Status: **publicada** (API, 18/11). Site segue a v1.2.865; robô segue a versão anterior.

@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.866-aparelho-itens-de-fora",
+  "version": "v1.2.867-bot-retentativa-estado",
   "date": "2026-11-18",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.866-aparelho-itens-de-fora",
+  "tag": "v1.2.867-bot-retentativa-estado",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Itens deixados de fora da 865: entrada por foto sincroniza o custo médio uma vez só; venda antiga (anterior ao diário) cancelada ou estornada conta como vendida e devolvida; transferência de aparelho confere o destino com a empresa do produto, não com a empresa padrão.",
+  "summary": "Robô do WhatsApp: quando duas mensagens do mesmo cliente chegam juntas, a segunda não some mais sem resposta. Na retentativa depois do conflito de estado, o fluxo grava contra a revisão nova (antes, respostas reconstruídas como a do endereço da loja pediam a revisão velha 3 vezes e eram descartadas).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,22 +30,19 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "services/smartphonePhotoIntakeServer.cjs",
-    "services/unitLocation.cjs",
-    "services/unitLocationServer.cjs",
-    "services/unitTimeline.cjs",
-    "tmp-tests/catalog-entry-photo.test.cjs",
-    "tmp-tests/unit-location.test.cjs",
-    "tmp-tests/unit-location-routes.test.cjs",
-    "tmp-tests/unit-timeline.test.cjs",
+    "scripts/n8n-state-rebase-revision.cjs",
+    "scripts/deploy-n8n-state-rebase-revision.cjs",
+    "tmp-tests/n8n-state-rebase-revision.test.cjs",
+    "scripts/run-tmp-tests.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-18-v1.2.866-aparelho-itens-de-fora.md"
+    "docs/versoes/2026-11-18-v1.2.867-bot-retentativa-estado.md"
   ],
   "validations": [
-    "unit-location + rotas, unit-timeline + rotas, catalog-entry-photo: 95/95",
-    "suíte tmp-tests: nenhuma falha nova contra a v1.2.865 (1 teste de busca instável em paralelo, passa sozinho)",
-    "node --check dos módulos na VPS"
+    "teste focado 5/5 (reproduz o defeito no fluxo antigo)",
+    "gate comercial 19 arquivos no candidato dd45b398…",
+    "dry run: só 'Estado Conversa - Preparar' muda",
+    "produção: alreadyApplied no dry run seguinte; n8n e runner de pé"
   ],
   "site_release": {
     "status": "publicada",
@@ -116,7 +113,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.865 publicada (site + API).",
+  "pending_previous": "v1.2.866 publicada (API).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -128,9 +125,9 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "dc8f1be211f3a565f888a6dd2d5f1695f3a09400c2eb3e66ba5467b614a5c1dc",
-    "candidate": "ac2b4034ab67612e8879c96f634a767aa8b8682e457d1c76c4a5c08de458da3b",
-    "applied_at": "2026-11-16T23:37Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-16T23-37-35-466Z-d79016ed.aes256gcm.json"
+    "before": "ac2b4034ab67612e8879c96f634a767aa8b8682e457d1c76c4a5c08de458da3b",
+    "candidate": "dd45b3982e9da3dd9b87ffa9a5f15858450df6746694dc443d7edddb3960235b",
+    "applied_at": "2026-11-18T22:09Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-18T22-09-26-025Z-df2fb1d0.aes256gcm.json"
   }
 }
