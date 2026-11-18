@@ -1,3 +1,10 @@
+# v1.2.865-ajustes-aparelho-devolucao
+
+Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API, 18/11). Robô segue a versão anterior.
+Ajustes pequenos da página do aparelho, do local do aparelho e da devolução de itens, deixados de lado nas versões 862 a 864. Registro: `docs/versoes/2026-11-18-v1.2.865-ajustes-aparelho-devolucao.md`.
+
+---
+
 # v1.2.864-devolucao-de-itens
 
 Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API + nginx, 18/11). Robô segue a versão anterior.
