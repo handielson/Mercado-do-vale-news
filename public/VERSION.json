@@ -28,7 +28,7 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque."
   },
-  "site_source_base": "pendente",
+  "site_source_base": "8cb689b",
   "changed_files": [
     "services/unitLocation.cjs",
     "services/unitLocationServer.cjs",
@@ -69,27 +69,28 @@
     "node --check vps_server.js/.cjs",
     "tsc sem erro novo",
     "npm run build ok",
-    "revisão independente: 0 crítico; travamento/deadlock, evento na volta da venda e UPDATE do Depósito corrigidos com teste"
+    "revisão independente: 0 crítico; travamento/deadlock, evento na volta da venda e UPDATE do Depósito corrigidos com teste",
+    "produção 18/11: Poco 868499080873669 mostra \"Onde está: Deposito / Entrada / Conferencia\" e \"Local definido\"; tela Transferir aparelhos acha o Poco no Depósito (sem transferir); lista de saldo sem IMEI vazia"
   ],
   "site_release": {
     "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261118-122948-v1-2-863-local-do-aparelho",
     "previous": "/var/www/mdv-site/releases/20261118-115140-v1-2-862-pagina-do-aparelho",
-    "source_commit": "pendente",
+    "source_commit": "8cb689b",
     "note": "Tela Transferir aparelhos e lista de saldo sem IMEI."
   },
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
     "mode": "upload manual (módulos + server.js/vps_server.js/.cjs + entrada por foto)",
-    "commit": "pendente",
-    "deployed_at": "pendente",
-    "backup": "pendente",
-    "note": ""
+    "commit": "f2bed9d",
+    "deployed_at": "2026-11-18T15:30Z",
+    "backup": "/var/www/mdv-api/backups/unit-location-1795015808706",
+    "note": "/status 200; PM2 online; transfers sem login → 401; [migration] unit_events table: OK; triggers mdv_unit_events_no_update/no_delete criados como root."
   },
   "nginx_release": {
     "status": "publicada",
-    "note": "regra SPA /admin/aparelhos/transferir; listen de produção preservados."
+    "note": "regra SPA /admin/aparelhos/transferir; listen de produção preservados. Backup: /var/www/mdv-api/backups/unit-location-1795015808706/mdv-site-production.conf.bak; nginx -t ok."
   },
   "evolution_release": {
     "status": "publicada",
@@ -158,6 +159,6 @@
     "backup": "/root/n8n-backups/meta-attendance-2026-11-16T23-37-35-466Z-d79016ed.aes256gcm.json"
   },
   "data_fix": {
-    "note": "pendente"
+    "note": "18/11 (pedido do dono): Athomics Inspire Lite zerado — 4 aparelhos disponíveis ocultados e saldo 0 nos 15 cadastros; Redmi 15 (R158256R/R158256T) com saldo igual aos IMEIs (1,1,0,0,0 nos que divergiam). Preenchimento inicial: 67 aparelhos de 42 produtos foram para Deposito / Entrada / Conferencia (evento location_set), 0 pulados, total por produto inalterado. Cópias antes: /var/www/mdv-api/backups/unit-location-1795015808706/antes-ajuste-saldo.tsv e antes-backfill.tsv."
   }
 }
