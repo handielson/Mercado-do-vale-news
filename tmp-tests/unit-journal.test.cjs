@@ -115,7 +115,9 @@ test('missing installation is explicit; malformed requests never query DB',async
 test('both server entrypoints, deploy manifest and UI retain the diary',()=>{
   for(const path of ['vps_server.js','vps_server.cjs']) assert.match(readFileSync(path,'utf8'),/registerUnitJournalRoutes/);
   assert.match(readFileSync('deploy-vps-server-only.cjs','utf8'),/'services\/unitJournalServer\.cjs'/);
-  const page=readFileSync('pages/admin/inventory/SerializedUnitsPage.tsx','utf8');
-  assert.match(page,/onJournal=\{unit => setJournalTarget\(unit\.id\)\}/);
-  assert.match(page,/Consultar diário por IMEI ou serial/);
+  // Desde a v1.2.862 o diário bruto abre pela página do aparelho ("Ver dados técnicos").
+  const page=readFileSync('pages/admin/inventory/UnitHistoryPage.tsx','utf8');
+  assert.match(page,/<UnitJournalModal unitId=\{timeline\.unit\.id\}/);
+  assert.match(page,/Ver dados técnicos/);
+  assert.match(readFileSync('pages/admin/inventory/SerializedUnitsPage.tsx','utf8'),/\/admin\/aparelhos/);
 });

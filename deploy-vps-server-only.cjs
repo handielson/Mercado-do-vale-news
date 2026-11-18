@@ -75,6 +75,9 @@ const tiktokShopAutomationPaths = [
 const print3dRecipeRuntimePaths = [
   'services/unitJournalServer.cjs',
   'services/unitJournalSchema.cjs',
+  'services/unitTimeline.cjs',
+  'services/unitTimelineServer.cjs',
+  'services/customerSaleVisibility.cjs',
   'services/productFormDraftsServer.cjs',
   'services/print3dMaterialsServer.cjs',
   'services/print3dProductOffer.cjs',

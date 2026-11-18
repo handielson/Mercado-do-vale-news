@@ -920,6 +920,23 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                                     return `${idLine} • Qtd: ${item.quantity}`;
                                                 })()}
                                                 {item.discount > 0 ? ` • Desc: ${formatCurrency(item.discount)}/un` : ''}
+                                                {(() => {
+                                                    const deviceKey = (item as any).serialized_unit_id
+                                                        || productSpecs[(item as any).id]?.imei1
+                                                        || (item as any).imei
+                                                        || '';
+                                                    if (!deviceKey) return null;
+                                                    return (
+                                                        <a
+                                                            href={`/admin/aparelhos/${encodeURIComponent(String(deviceKey))}`}
+                                                            title="Abrir histórico do aparelho"
+                                                            className="ml-2 text-blue-600 underline"
+                                                            onClick={(event) => event.stopPropagation()}
+                                                        >
+                                                            Histórico do aparelho
+                                                        </a>
+                                                    );
+                                                })()}
                                             </p>
                                             <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-500">
                                                 <span>Custo un.: <strong className="text-slate-700">{formatCurrency(itemView.unitCost)}</strong></span>

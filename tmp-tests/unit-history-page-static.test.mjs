@@ -23,4 +23,18 @@ assert.match(page, /\/admin\/sales\?sale=/);
 assert.match(page, /IMEI 1, IMEI 2 ou serial/);
 assert.doesNotMatch(page, /product_stock_locations|stock_location_movements/);
 
+// Atalhos: lista de unidades e itens da venda abrem a página do aparelho.
+const units = read('pages/admin/inventory/SerializedUnitsPage.tsx');
+const saleModal = read('components/admin/sales/SaleDetailsModal.tsx');
+assert.match(units, /\/admin\/aparelhos\/\$\{[^}]*unit\.id/);
+assert.match(units, /aria-label="Abrir histórico do aparelho"/);
+assert.match(saleModal, /\/admin\/aparelhos\//);
+assert.match(saleModal, /title="Abrir histórico do aparelho"/);
+
+// O deploy da API sobe os módulos novos (senão o servidor não sobe numa máquina limpa).
+const deploy = read('deploy-vps-server-only.cjs');
+for (const mod of ['services/unitTimeline.cjs', 'services/unitTimelineServer.cjs', 'services/customerSaleVisibility.cjs']) {
+  assert.match(deploy, new RegExp(`'${mod.replace(/[.\/]/g, m => '\\' + m)}'`), mod);
+}
+
 console.log('unit-history-page static checks passed');
