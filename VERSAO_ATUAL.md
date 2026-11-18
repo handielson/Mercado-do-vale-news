@@ -1,3 +1,10 @@
+# v1.2.861-venda-cancelada-oculta-aparelho
+
+Data: 18/11/2026. Branch: `main`. Status: **publicada** (API, 18/11). Site/robô seguem as versões anteriores.
+Venda cancelada/estornada some dos dados de aparelho da cliente (IMEI mascarado, log e garantia ocultos); admin e diário do aparelho completos; caixa registra o cancelamento uma vez. Registro: `docs/versoes/2026-11-18-v1.2.861-venda-cancelada-oculta-aparelho.md`.
+
+---
+
 # v1.2.860-bling-nfe-baixa-automatica
 
 Data: 17/11/2026. Branch: `main`. Status: **publicada** (API, 17/11 ~20:10 UTC). Site/robô seguem as versões anteriores.

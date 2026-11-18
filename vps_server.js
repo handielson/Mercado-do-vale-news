@@ -1,6 +1,7 @@
 require('dotenv').config();
 const fastify = require('fastify')({ logger: false, bodyLimit: 500 * 1024 * 1024 }); // 500MB
 const mysql = require('mysql2/promise');
+const { isCancelledSale, sanitizeCustomerSale, sanitizeCustomerSaleItems, shouldRecordSaleCancellationCashEvent } = require('./services/customerSaleVisibility.cjs');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -33316,6 +33317,11 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
 
   const setClauses = entries.map(([k]) => `\`${k}\` = ?`).join(', ');
   const vals = [...entries.map(([, v]) => normalizeTableDataValue(v)), pkValue];
+  let previousSaleRow = null;
+  if (name === 'sales') {
+    const [previousRows] = await pool.query(`SELECT * FROM \`${name}\` WHERE \`${pkCol}\` = ? LIMIT 1`, [pkValue]);
+    previousSaleRow = previousRows?.[0] || null;
+  }
 
   // order-coin-redemption-v1: cancelar o pedido devolve as moedas resgatadas, uma unica vez.
   if (name === 'orders' && String(body.status || '') === 'cancelled') {
@@ -33342,7 +33348,7 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   if (name === 'customers' && updatedRow) {
     await syncCustomerGoogleContactRecord(updatedRow, 'table-data-update');
   }
-  if (name === 'sales' && updatedRow?.refund_cash_session_id && ['cancelled', 'refunded'].includes(String(updatedRow.payment_status))) {
+  if (name === 'sales' && shouldRecordSaleCancellationCashEvent(previousSaleRow, updatedRow)) {
     await recordCashEvent(pool, req, {
       sessionId: updatedRow.refund_cash_session_id,
       eventType: updatedRow.payment_status === 'refunded' ? 'sale_refund' : 'sale_cancellation',
@@ -36023,9 +36029,9 @@ fastify.get('/customer/purchases', async (req, reply) => {
   return {
     customer: publicCustomer(customer),
     sales: sales.map(sale => ({
-      ...sale,
+      ...sanitizeCustomerSale(sale),
       coins_earned: Number(coinsBySaleId.get(String(sale.id)) || 0),
-      items: saleItemsBySaleId.get(String(sale.id)) || [],
+      items: sanitizeCustomerSaleItems(sale, saleItemsBySaleId.get(String(sale.id)) || []),
       customer: {
         id: String(customer.id),
         name: String(customer.name || ''),
@@ -36073,12 +36079,16 @@ fastify.get('/customer/sales/:saleId/warranty-documents', async (req, reply) => 
 
   const saleId = String(req.params?.saleId || '').trim();
   const [sales] = await pool.query(
-    'SELECT id, customer_id FROM sales WHERE id = ? LIMIT 1',
+    'SELECT id, customer_id, payment_status FROM sales WHERE id = ? LIMIT 1',
     [saleId]
   );
   const sale = sales?.[0] || null;
   if (!sale || (!auth.isAdmin && String(sale.customer_id) !== String(auth.customerId))) {
     return reply.code(404).send({ error: 'Venda nao encontrada' });
+  }
+  if (!auth.isAdmin && isCancelledSale(sale)) {
+    reply.header('Cache-Control', 'private, no-store');
+    return { documents: [] };
   }
 
   const [documents] = await pool.query(
@@ -39216,7 +39226,7 @@ function createSignedWarrantyApi({
   async function listForSale(request, reply) {
     const saleId = String(request.params?.saleId || '').trim();
     const [saleRows] = await pool.query(
-      'SELECT id, customer_id FROM sales WHERE id = ? LIMIT 1',
+      'SELECT id, customer_id, payment_status FROM sales WHERE id = ? LIMIT 1',
       [saleId]
     );
     const sale = saleRows?.[0] || null;
@@ -39226,6 +39236,7 @@ function createSignedWarrantyApi({
     if (!access.isAdmin && String(sale.customer_id || '') !== String(access.customerId || '')) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
+    if (!access.isAdmin && isCancelledSale(sale)) return { sale_id: saleId, active: null, history: [], pending: [] };
 
     const customerFilter = access.isAdmin
       ? ''
