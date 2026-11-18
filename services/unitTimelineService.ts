@@ -3,7 +3,7 @@ import { vpsClient } from './vpsClient';
 export type UnitTimelineEventType =
     | 'entry' | 'legacy_entry' | 'legacy_sale' | 'data_corrected' | 'reserved' | 'reservation_released'
     | 'sold' | 'sale_cancelled' | 'sale_refunded' | 'returned_to_stock' | 'warranty_issued' | 'warranty_signed'
-    | 'rma' | 'hidden' | 'unhidden' | 'scrapped';
+    | 'rma' | 'hidden' | 'unhidden' | 'scrapped' | 'transfer' | 'location_set' | 'returned_to_incoming';
 
 export interface UnitTimelineEvent {
     key: string;

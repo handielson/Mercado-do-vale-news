@@ -2,8 +2,9 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowDownToLine, Ban, Camera, History, Loader2, MapPin, PackageCheck, PackageOpen, Pencil, RotateCcw,
-    Search, ShieldCheck, ShoppingBag, Smartphone, Tag, Undo2, Wrench, EyeOff, Eye, Trash2,
+    Search, ShieldCheck, ShoppingBag, Smartphone, Tag, Undo2, Wrench, EyeOff, Eye, Trash2, ArrowRightLeft, AlertTriangle,
 } from 'lucide-react';
+import { getStockMismatches, type StockMismatch } from '@/services/unitLocationService';
 import { UnitJournalModal } from '@/components/inventory/UnitJournalModal';
 import {
     getUnitTimeline, isTimelineMatches,
@@ -25,7 +26,22 @@ const EVENT_ICON: Record<UnitTimelineEventType, ReactNode> = {
     sold: <ShoppingBag className="h-4 w-4" />, sale_cancelled: <Ban className="h-4 w-4" />, sale_refunded: <Undo2 className="h-4 w-4" />,
     returned_to_stock: <RotateCcw className="h-4 w-4" />, warranty_issued: <ShieldCheck className="h-4 w-4" />, warranty_signed: <ShieldCheck className="h-4 w-4" />,
     rma: <Wrench className="h-4 w-4" />, hidden: <EyeOff className="h-4 w-4" />, unhidden: <Eye className="h-4 w-4" />, scrapped: <Trash2 className="h-4 w-4" />,
+    transfer: <ArrowRightLeft className="h-4 w-4" />, location_set: <MapPin className="h-4 w-4" />, returned_to_incoming: <RotateCcw className="h-4 w-4" />,
 };
+
+function Mismatches() {
+    const [rows, setRows] = useState<StockMismatch[] | null>(null);
+    useEffect(() => { getStockMismatches().then(setRows).catch(() => setRows(null)); }, []);
+    if (!rows?.length) return null;
+    return <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <h2 className="mb-1 flex items-center gap-2 font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" />Produtos com saldo sem IMEI</h2>
+        <p className="mb-3 text-sm text-amber-900">O saldo desses produtos é diferente da quantidade de aparelhos cadastrados. Cadastre os IMEIs que faltam ou corrija o saldo.</p>
+        <ul className="divide-y divide-amber-200 text-sm">{rows.map(r => <li key={r.productId} className="flex justify-between gap-3 py-2">
+            <Link to={`/admin/products/${r.productId}`} className="text-amber-950 underline">{r.name}{r.sku ? ` · ${r.sku}` : ''}</Link>
+            <span className="whitespace-nowrap text-amber-900">{r.units} IMEI · saldo {r.balance}</span>
+        </li>)}</ul>
+    </section>;
+}
 
 function SearchBox({ initial }: { initial: string }) {
     const navigate = useNavigate();
@@ -140,6 +156,8 @@ export default function UnitHistoryPage() {
     return <div className="mx-auto max-w-3xl space-y-4 p-4">
         <div className="flex items-center gap-2"><Smartphone className="h-5 w-5 text-slate-600" /><h1 className="text-lg font-semibold">Aparelhos</h1></div>
         <SearchBox initial={identifier} />
+        <Link to="/admin/aparelhos/transferir" className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm"><ArrowRightLeft className="h-4 w-4" />Transferir aparelhos</Link>
+        {!identifier && <Mismatches />}
         {!identifier && <p className="text-sm text-slate-500">Bipe ou digite o IMEI ou serial para ver a vida do aparelho: entrada, vendas, devoluções e onde está agora.</p>}
         {loading && <p className="flex items-center gap-2 text-slate-600"><Loader2 className="h-4 w-4 animate-spin" />Carregando…</p>}
         {error && <p className="rounded-xl bg-amber-50 p-3 text-amber-900">{error}</p>}

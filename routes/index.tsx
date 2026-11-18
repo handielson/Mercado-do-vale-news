@@ -114,6 +114,7 @@ const DeliveryTrackingPage = lazy(() => import('../pages/delivery/DeliveryTracki
 const OnlineOrdersPage = lazy(() => import('../pages/admin/orders/OnlineOrdersPage'));
 const SerializedUnitsPage = lazy(() => import('../pages/admin/inventory/SerializedUnitsPage'));
 const UnitHistoryPage = lazy(() => import('../pages/admin/inventory/UnitHistoryPage'));
+const UnitTransferPage = lazy(() => import('../pages/admin/inventory/UnitTransferPage'));
 const SEODashboardPage = lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
 const SEOBlacklistPage = lazy(() => import('../pages/admin/settings/SEOBlacklistPage').then(module => ({ default: module.SEOBlacklistPage })));
 const ReviewsPage = lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
@@ -573,6 +574,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><UnitHistoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/aparelhos/transferir",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><UnitTransferPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
