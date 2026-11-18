@@ -11,14 +11,19 @@ function quantity(value) {
 const locationKey = row => JSON.stringify([row.product_id, row.from_deposit_id, row.from_location_id]);
 
 // Um único escritor para venda e pedido: a transação inclui saldos, movimentos e totais.
-async function restoreStockMovements(pool, { referenceType, restoreReferenceType, referenceId, reason, notes }, helpers) {
+// opts.limits (Map produto → quantidade): devolução de itens, só o que voltou.
+// opts.connection: roda dentro da transação de quem chamou (sem abrir/fechar a própria).
+async function restoreStockMovements(pool, { referenceType, restoreReferenceType, referenceId, reason, notes, limits = null, connection = null }, helpers) {
   if (!['sale', 'order'].includes(referenceType)
     || restoreReferenceType !== referenceType + '_restore'
     || typeof referenceId !== 'string' || !referenceId.trim()) fail(400, 'Informe a venda ou pedido para devolver o estoque.');
-  const db = await pool.getConnection();
+  const db = connection || await pool.getConnection();
   try {
-    await db.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
-    await db.beginTransaction();
+    if (!connection) {
+      await db.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+      await db.beginTransaction();
+    }
+    const remainingLimit = limits ? new Map([...limits].map(([k, v]) => [String(k), quantity(v)])) : null;
     const table = referenceType === 'sale' ? 'sales' : 'orders';
     const [[reference]] = await db.query(`SELECT id FROM ${table} WHERE id=? FOR UPDATE`, [referenceId]);
     if (!reference) fail(404, 'Venda ou pedido não encontrado.');
@@ -52,7 +57,11 @@ async function restoreStockMovements(pool, { referenceType, restoreReferenceType
       const key = locationKey(movement), amount = quantity(movement.quantity);
       const alreadyRestored = Math.min(amount, remainingRestored.get(key) || 0);
       remainingRestored.set(key, (remainingRestored.get(key) || 0) - alreadyRestored);
-      const delta = amount - alreadyRestored;
+      let delta = amount - alreadyRestored;
+      if (remainingLimit) {
+        delta = Math.min(delta, remainingLimit.get(String(movement.product_id)) || 0);
+        if (delta) remainingLimit.set(String(movement.product_id), remainingLimit.get(String(movement.product_id)) - delta);
+      }
       if (!delta) continue;
       const current = await helpers.getStockLocationRow(movement.product_id, movement.from_deposit_id, movement.from_location_id, true, db);
       const previous = quantity(current?.quantity);
@@ -77,13 +86,13 @@ async function restoreStockMovements(pool, { referenceType, restoreReferenceType
         quantity_restored: delta, previous_quantity: previous, new_quantity: next });
     }
     for (const productId of changedProducts) await helpers.syncProductStockFromLocations(productId, db);
-    await db.commit();
+    if (!connection) await db.commit();
     return result;
   } catch (error) {
-    try { await db.rollback(); } catch {}
+    if (!connection) { try { await db.rollback(); } catch {} }
     throw error;
   } finally {
-    db.release();
+    if (!connection) db.release();
   }
 }
 module.exports = { restoreStockMovements };
