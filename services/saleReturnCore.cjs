@@ -46,7 +46,7 @@ function returnableItems(sale, items, returnedRows) {
 
 const METHOD_ORDER = { money: 0, cash: 0, pix: 1, debit: 2, credit: 3 };
 
-function planSameMethodRefund(payments, amountCents, refundedByIndex = new Map()) {
+function planSameMethodRefund(payments, amountCents, refundedByIndex = new Map(), refundedFeeByIndex = new Map()) {
   let remaining = cents(amountCents);
   if (remaining <= 0) fail(400, 'Informe um valor de devolução maior que zero.');
   const ordered = (payments || []).map((p, index) => ({ p, index }))
@@ -58,7 +58,11 @@ function planSameMethodRefund(payments, amountCents, refundedByIndex = new Map()
     const goods = Math.min(remaining, available);
     if (goods <= 0) continue;
     const amount = cents(p.amount), withFee = cents(p.total_with_fee ?? p.amount);
-    const refundCents = amount > 0 && withFee > amount ? Math.round((goods * withFee) / amount) : goods;
+    // Com juros: proporcional, nunca passa do que sobrou pago; a última leva da forma leva o resto exato.
+    const feeLeft = Math.max(0, withFee - cents(refundedFeeByIndex.get(index)));
+    const refundCents = amount > 0 && withFee > amount
+      ? (goods === available ? feeLeft : Math.min(feeLeft, Math.round((goods * withFee) / amount)))
+      : goods;
     plan.push({ paymentIndex: index, method: p.method, goodsCents: goods, refundCents, gatewayPaymentId: p.mercado_pago_payment_id ? String(p.mercado_pago_payment_id) : null });
     remaining -= goods;
   }

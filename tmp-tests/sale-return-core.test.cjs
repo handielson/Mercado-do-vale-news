@@ -88,3 +88,22 @@ test('valor por extenso para a declaração de recebimento', () => {
   assert.equal(amountInWords(5), 'cinco centavos');
   assert.equal(amountInWords(100000000), 'um milhão de reais');
 });
+
+test('crédito devolvido aos poucos nunca passa do que o cliente pagou com juros', () => {
+  const credit = payments[1];
+  const amount = Math.round(credit.amount), withFee = Math.round(credit.total_with_fee);
+  const goodsByIndex = new Map([[0, Math.round(payments[0].amount)]]);
+  const feeByIndex = new Map();
+  let total = 0;
+  // pedaços que arredondam para cima no juros
+  let piece = 1; while (Math.round(piece * withFee / amount) - piece * withFee / amount <= 0.3) piece++;
+  let left = amount;
+  while (left > 0) {
+    const goods = Math.min(piece, left);
+    const [step] = planSameMethodRefund(payments, goods, goodsByIndex, feeByIndex);
+    goodsByIndex.set(1, (goodsByIndex.get(1) || 0) + step.goodsCents);
+    feeByIndex.set(1, (feeByIndex.get(1) || 0) + step.refundCents);
+    total += step.refundCents; left -= goods;
+  }
+  assert.equal(total, withFee);
+});

@@ -44,7 +44,7 @@ async function ensureSaleReturnSchema(db, addColumnIfMissing) {
 }
 
 // Já estornado por forma de pagamento, em "valor de produto" (estorno parcial antigo vem com juros).
-async function refundedByIndex(db, saleId, payments, totals = null) {
+async function refundedByIndex(db, saleId, payments, totals = null, feeMap = null) {
   const map = new Map();
   const add = (i, v) => map.set(i, (map.get(i) || 0) + v);
   const [partial] = await db.query("SELECT payment_index, amount FROM sale_partial_refunds WHERE sale_id = ? AND status = 'completed'", [saleId]);
@@ -52,10 +52,14 @@ async function refundedByIndex(db, saleId, payments, totals = null) {
     const p = payments[Number(r.payment_index)]; if (!p) continue;
     const amount = Math.round(Number(p.amount) || 0), withFee = Math.round(Number(p.total_with_fee ?? p.amount) || 0);
     add(Number(r.payment_index), withFee > 0 ? Math.round(Number(r.amount) * amount / withFee) : Number(r.amount));
+    if (feeMap) feeMap.set(Number(r.payment_index), (feeMap.get(Number(r.payment_index)) || 0) + Math.round(Number(r.amount) || 0));
   }
-  const [returned] = await db.query('SELECT payment_index, goods_cents FROM sale_return_refunds WHERE sale_id = ?', [saleId]);
+  const [returned] = await db.query('SELECT payment_index, goods_cents, refund_cents FROM sale_return_refunds WHERE sale_id = ?', [saleId]);
   for (const r of returned || []) {
-    if (r.payment_index != null) add(Number(r.payment_index), Number(r.goods_cents));
+    if (r.payment_index != null) {
+      add(Number(r.payment_index), Number(r.goods_cents));
+      if (feeMap) feeMap.set(Number(r.payment_index), (feeMap.get(Number(r.payment_index)) || 0) + Number(r.refund_cents || 0));
+    }
     else if (totals) totals.unindexed = (totals.unindexed || 0) + Number(r.goods_cents || 0);
   }
   return map;
@@ -108,18 +112,22 @@ async function createSaleReturn({ db, saleId, body = {}, actor, request, deps })
     if (!Number.isSafeInteger(amount) || amount <= 0 || amount > suggested) fail(400, 'O valor da devolução precisa ser maior que zero e no máximo o valor pago pelos itens.');
 
     const totals = {};
-    const byIndex = await refundedByIndex(db, saleId, payments, totals);
+    const feeByIndex = new Map();
+    const byIndex = await refundedByIndex(db, saleId, payments, totals, feeByIndex);
     const alreadyRefunded = [...byIndex.values()].reduce((a, v) => a + v, 0) + (totals.unindexed || 0);
     const stillRefundable = payments.reduce((a, pm) => a + Math.round(Number(pm.amount) || 0), 0) - alreadyRefunded;
     if (amount > stillRefundable) fail(409, `Esse valor passa do que ainda pode ser devolvido: desta venda já foi estornado R$ ${(alreadyRefunded / 100).toFixed(2).replace('.', ',')}.`);
     const plan = mode === 'same'
-      ? core.planSameMethodRefund(payments, amount, byIndex).map(p => ({
+      ? core.planSameMethodRefund(payments, amount, byIndex, feeByIndex).map(p => ({
         payment_index: p.paymentIndex, method: p.method, goods_cents: p.goodsCents, refund_cents: p.refundCents, gateway_payment_id: p.gatewayPaymentId }))
       : core.validateOtherRefunds(body.refunds, amount).map(r => ({ payment_index: null, method: r.method, goods_cents: r.amount_cents, refund_cents: r.amount_cents, gateway_payment_id: null }));
-    const cashSessionId = String(body.cash_session_id || '').trim() || null;
+    let cashSessionId = String(body.cash_session_id || '').trim() || null;
+    const [open] = cashSessionId ? await db.query('SELECT status FROM pdv_cash_sessions WHERE id = ?', [cashSessionId]) : [[]];
+    const cashOpen = open?.[0]?.status === 'open';
     if (plan.some(r => ['money', 'cash'].includes(r.method))) {
-      const [open] = cashSessionId ? await db.query('SELECT status FROM pdv_cash_sessions WHERE id = ?', [cashSessionId]) : [[]];
-      if (open?.[0]?.status !== 'open') fail(409, 'Abra o caixa para devolver em dinheiro.');
+      if (!cashOpen) fail(409, 'Abra o caixa para devolver em dinheiro.');
+    } else if (!cashOpen) {
+      cashSessionId = null; // sem dinheiro, caixa já fechado não recebe a devolução
     }
     const cashCents = plan.filter(r => ['money', 'cash'].includes(r.method)).reduce((a, r) => a + r.refund_cents, 0);
     const cashWords = cashCents ? core.amountInWords(cashCents) : null;
@@ -236,6 +244,8 @@ async function saveReturnFile({ db, returnId, kind, refundId = null, fileName, b
   if (buffer.length > MAX_FILE_BYTES) fail(413, 'Arquivo maior que 12 MB.');
   const type = detectMime(buffer);
   if (!type) fail(400, 'Envie foto (JPG, PNG, WEBP) ou PDF.');
+  const [exists] = await db.query('SELECT id FROM sale_returns WHERE id = ? LIMIT 1', [returnId]);
+  if (!exists?.length) fail(404, 'Devolução não encontrada.');
   const [refunds] = await db.query('SELECT * FROM sale_return_refunds WHERE return_id = ?', [returnId]);
   if (kind === 'proof' && !(refunds || []).some(r => String(r.id) === String(refundId))) fail(400, 'Escolha a qual estorno o comprovante pertence.');
   const id = crypto.randomUUID();
@@ -244,8 +254,13 @@ async function saveReturnFile({ db, returnId, kind, refundId = null, fileName, b
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, buffer, { mode: 0o600 });
   const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-  await db.query(`INSERT INTO sale_return_files (id, return_id, kind, refund_id, file_name, mime, path, size_bytes, sha256, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, returnId, kind, kind === 'proof' ? refundId : null, String(fileName || 'arquivo').slice(0, 255), type[0], relative, buffer.length, sha256, actor?.userId || null]);
+  try {
+    await db.query(`INSERT INTO sale_return_files (id, return_id, kind, refund_id, file_name, mime, path, size_bytes, sha256, uploaded_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, returnId, kind, kind === 'proof' ? refundId : null, String(fileName || 'arquivo').slice(0, 255), type[0], relative, buffer.length, sha256, actor?.userId || null]);
+  } catch (error) {
+    try { fs.unlinkSync(target); } catch { /* já não existe */ }
+    throw error;
+  }
   const [files] = await db.query('SELECT kind, refund_id FROM sale_return_files WHERE return_id = ?', [returnId]);
   const status = core.returnStatusOf({ refunds, files });
   await db.query("UPDATE sale_returns SET status = ?, finalized_at = IF(? = 'finalizada', COALESCE(finalized_at, CURRENT_TIMESTAMP), NULL) WHERE id = ?", [status, status, returnId]);
@@ -335,8 +350,13 @@ function registerSaleReturnRoutes(app, deps) {
     const [[sale]] = await pool.query('SELECT customer_id FROM sales WHERE id = ? LIMIT 1', [ret.sale_id]);
     const [[customer]] = await pool.query('SELECT phone FROM customers WHERE id = ? LIMIT 1', [sale?.customer_id || '']);
     if (!customer?.phone) return reply.code(409).send({ error: 'Cliente sem telefone cadastrado.' });
-    const result = await deps.sendWhatsappDocument(customer.phone, buffer, `recibo-devolucao-${ret.code}.pdf`, `Recibo da devolução #${ret.code} (venda #${saleCode(ret.sale_id)})`);
-    const ok = Boolean(result?.ok);
+    let ok = false;
+    try {
+      const result = await deps.sendWhatsappDocument(customer.phone, buffer, `recibo-devolucao-${ret.code}.pdf`, `Recibo da devolução #${ret.code} (venda #${saleCode(ret.sale_id)})`);
+      ok = Boolean(result?.ok);
+    } catch (error) {
+      req.log?.warn?.({ err: error }, 'whatsapp da devolução falhou');
+    }
     await pool.query('UPDATE sale_returns SET whatsapp_status = ?, whatsapp_sent_at = IF(?, CURRENT_TIMESTAMP, whatsapp_sent_at) WHERE id = ?', [ok ? 'sent' : 'failed', ok, ret.id]);
     return ok ? { status: 'sent' } : reply.code(502).send({ error: 'Não foi possível enviar pelo WhatsApp.' });
   });

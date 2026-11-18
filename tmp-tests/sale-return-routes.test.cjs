@@ -27,7 +27,8 @@ function fakeDb(overrides = {}) {
       if (/^SELECT \* FROM sales WHERE id = \? FOR UPDATE/.test(sql)) return [[s.sale]];
       if (/^SELECT \* FROM sale_items WHERE sale_id = \?/.test(sql)) return [s.items];
       if (/^SELECT sale_item_id, quantity, value_cents, suggested_cents FROM sale_return_items WHERE sale_id = \?/.test(sql)) return [s.returnItems];
-      if (/^SELECT payment_index, goods_cents FROM sale_return_refunds WHERE sale_id = \?/.test(sql)) return [s.refunds.map(r => ({ payment_index: r[3], goods_cents: r[5] }))];
+      if (/^SELECT payment_index, goods_cents, refund_cents FROM sale_return_refunds WHERE sale_id = \?/.test(sql)) return [s.refunds.map(r => ({ payment_index: r[3], goods_cents: r[5], refund_cents: r[6] }))];
+      if (/^SELECT id FROM sale_returns WHERE id = \?/.test(sql)) return [s.missingReturn ? [] : [{ id: p[0] }]];
       if (/^SELECT payment_index, amount FROM sale_partial_refunds/.test(sql)) return [s.partial];
       if (/^SELECT status FROM pdv_cash_sessions WHERE id = \?/.test(sql)) return [s.cashOpen ? [{ status: 'open' }] : []];
       if (/^SELECT company_id FROM products WHERE id = \?/.test(sql)) return [[{ company_id: 'c' }]];
@@ -39,7 +40,7 @@ function fakeDb(overrides = {}) {
       if (/^UPDATE sales SET /.test(sql)) { s.saleUpdates.push({ sql, p }); return [{}]; }
       if (/^SELECT \* FROM sale_return_refunds WHERE return_id = \?/.test(sql)) return [s.refunds.map(r => ({ id: r[0], method: r[4], gateway_refund_id: r[9] }))];
       if (/^SELECT kind, refund_id FROM sale_return_files WHERE return_id = \?/.test(sql)) return [s.files];
-      if (/^INSERT INTO sale_return_files /.test(sql)) { s.files.push({ kind: p[2], refund_id: p[3] }); return [{}]; }
+      if (/^INSERT INTO sale_return_files /.test(sql)) { if (s.failFileInsert) throw new Error('banco caiu'); s.files.push({ kind: p[2], refund_id: p[3] }); return [{}]; }
       if (/^UPDATE sale_returns SET status = \?/.test(sql)) { s.lastStatus = p[0]; return [{}]; }
       if (/^SELECT \* FROM sale_returns WHERE id = \?/.test(sql)) return [[{ id: p[0], sale_id: SALE, code: 'D1' }]];
       if (/^SELECT id FROM sale_returns WHERE client_request_id = \?/.test(sql)) return [s.returns.filter(r => r[9] === p[0]).map(r => ({ id: r[0] }))];
@@ -281,3 +282,41 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
     assert.match(src, /'X-Idempotency-Key': idempotencyKey \|\| `sale-return-\$\{crypto\.randomUUID\(\)\}`/);
   });
 }
+
+test('arquivo de devolução inexistente → 404 sem gravar; falha no banco apaga o arquivo', async () => {
+  const pdf = Buffer.from('%PDF-1.4 teste').toString('base64');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ret-'));
+  const missing = fakeDb(); missing.s.missingReturn = true;
+  await assert.rejects(saveReturnFile({ db: missing, returnId: 'NAO', kind: 'signed', fileName: 'r.pdf', base64: pdf, actor, root }), e => e.statusCode === 404);
+  assert.equal(fs.existsSync(path.join(root, 'sale-returns', 'NAO')), false);
+  const broken = fakeDb(); broken.s.failFileInsert = true;
+  await assert.rejects(saveReturnFile({ db: broken, returnId: 'D1', kind: 'signed', fileName: 'r.pdf', base64: pdf, actor, root }), /banco caiu/);
+  assert.deepEqual(fs.readdirSync(path.join(root, 'sale-returns', 'D1')), []);
+});
+
+test('WhatsApp que explode fica marcado como falha e responde 502', async t => {
+  const app = Fastify();
+  const db = fakeDb();
+  db.s.customerPhone = '5599999999999';
+  const realQuery = db.query.bind(db);
+  const updates = [];
+  db.query = async (sql, p) => {
+    if (/^SELECT customer_id FROM sales/.test(sql)) return [[{ customer_id: 'c1' }]];
+    if (/^SELECT phone FROM customers/.test(sql)) return [[{ phone: '5599999999999' }]];
+    if (/^UPDATE sale_returns SET whatsapp_status/.test(sql)) { updates.push(p); return [{}]; }
+    return realQuery(sql, p);
+  };
+  registerSaleReturnRoutes(app, { pool: { getConnection: async () => db, query: (...a) => db.query(...a) },
+    getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }), privateRoot: os.tmpdir(), ...deps(db),
+    sendWhatsappDocument: async () => { throw new Error('gateway fora'); } });
+  t.after(() => app.close());
+  const res = await app.inject({ method: 'POST', url: '/admin/sale-returns/D1/whatsapp', payload: { pdf_base64: Buffer.from('%PDF-1.4 x').toString('base64') } });
+  assert.equal(res.statusCode, 502);
+  assert.equal(updates[0][0], 'failed');
+});
+
+test('devolução sem dinheiro não prende o caixa fechado', async () => {
+  const db = fakeDb({ cashOpen: false });
+  await run(db, deps(db), { items: [{ sale_item_id: cup.id, quantity: 1 }], reason: 'x', refund_mode: 'other', amount_cents: 2386, refunds: [{ method: 'pix', amount_cents: 2386 }], cash_session_id: 'cx-fechado' });
+  assert.equal(db.s.returns[0][8], null);
+});
