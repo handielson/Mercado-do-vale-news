@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.861-venda-cancelada-oculta-aparelho",
+  "version": "v1.2.862-pagina-do-aparelho",
   "date": "2026-11-18",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.861-venda-cancelada-oculta-aparelho",
-  "release_vps": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
+  "tag": "v1.2.862-pagina-do-aparelho",
+  "release_vps": "/var/www/mdv-site/releases/20261118-115140-v1-2-862-pagina-do-aparelho",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Venda cancelada/estornada: a cliente deixa de ver IMEI/serial/unidade do aparelho (IMEI mascarado, log interno e termos de garantia ocultos); admin e diário do aparelho seguem completos. Caixa registra o cancelamento uma única vez. Só API.",
+  "summary": "Página do aparelho no admin (/admin/aparelhos/<IMEI ou serial>): situação atual e linha do tempo legível (entrada, venda, cancelamento/estorno, volta ao estoque, garantias, correções de IMEI/custo), achando também por IMEI antigo e aparelho apagado. Diário bruto em \"Ver dados técnicos\". Site + API + nginx.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,45 +28,60 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque."
   },
-  "site_source_base": "922455f2",
+  "site_source_base": "pendente",
   "changed_files": [
-    "services/customerSaleVisibility.cjs",
+    "services/unitTimeline.cjs",
+    "services/unitTimelineServer.cjs",
     "vps_server.js",
     "vps_server.cjs",
-    "tmp-tests/customer-sale-visibility.test.cjs",
+    "deploy-vps-server-only.cjs",
+    "services/unitTimelineService.ts",
+    "pages/admin/inventory/UnitHistoryPage.tsx",
+    "routes/index.tsx",
+    "layouts/AdminLayout.tsx",
+    "pages/admin/inventory/SerializedUnitsPage.tsx",
+    "components/admin/sales/SaleDetailsModal.tsx",
+    "infra/nginx/mdv-site-production.conf",
+    "infra/nginx/mdv-site-staging.conf",
+    "tmp-tests/unit-timeline.test.cjs",
+    "tmp-tests/unit-timeline-routes.test.cjs",
+    "tmp-tests/unit-history-page-static.test.mjs",
+    "tmp-tests/unit-journal.test.cjs",
+    "tmp-tests/fixtures/unit-timeline-868499080873669.json",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-18-v1.2.861-venda-cancelada-oculta-aparelho.md"
+    "docs/versoes/2026-11-18-v1.2.862-pagina-do-aparelho.md"
   ],
   "validations": [
-    "customer-sale-visibility.test 8/8",
-    "sale-partial-refund-static ok",
-    "sale-cancel-serialized-bling-static ok",
-    "customer-purchase-history-redesign-static ok",
-    "customer-purchase-image-coins-static ok",
-    "legacy-customer-purchases-static ok",
-    "node --check vps_server.js/.cjs e módulo",
-    "venda real 8D7563B4 após o deploy: JSON da cliente sem o IMEI completo; banco intacto"
+    "unit-timeline 10/10",
+    "unit-timeline-routes 9/9",
+    "unit-journal 11/11",
+    "unit-history-page-static ok",
+    "customer-sale-visibility 8/8",
+    "sale-partial-refund/sale-cancel-serialized-bling/serialized-units-vps-only/marketplace-sale-details estáticos ok",
+    "node --check vps_server.js/.cjs",
+    "npm run build ok",
+    "revisão independente do branch: 0 crítico; 2 importantes + 2 regraduados corrigidos com teste"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
-    "previous": "/var/www/mdv-site/releases/20261112-134000-v1-2-849-status-conferir-reenviar",
-    "source_commit": "922455f2",
-    "note": "Manifesto da correção de Status; funcionalidades do robô v1.2.850 preservadas."
+    "release": "/var/www/mdv-site/releases/20261118-115140-v1-2-862-pagina-do-aparelho",
+    "previous": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
+    "source_commit": "pendente",
+    "note": "Página Aparelhos; nenhum outro arquivo de frontend mudou desde a 922455f2."
   },
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
-    "mode": "upload manual (módulo + server.js/vps_server.js/.cjs)",
-    "commit": "este commit",
-    "deployed_at": "2026-11-18T13:55Z",
-    "backup": "/var/www/mdv-api/backups/customer-sale-visibility-1795010021195",
-    "note": "/status 200; PM2 online. Sem escrita de env."
+    "mode": "upload manual (2 módulos + server.js/vps_server.js/.cjs)",
+    "commit": "pendente",
+    "deployed_at": "pendente",
+    "backup": "pendente",
+    "note": ""
   },
   "nginx_release": {
-    "status": "sem mudança",
-    "note": ""
+    "status": "publicada",
+    "note": "mdv-site-production.conf: regras SPA com /admin/aparelhos e /admin/aparelhos/[^/]+ (listen de produção 172.17.0.1:8085/8445 preservados)."
   },
   "evolution_release": {
     "status": "publicada",
@@ -93,9 +108,6 @@
     "prices_stock_specs_preserved": true,
     "storefront_verification": "Busca pública mostrou apenas a capa. O card do celular não foi localizado."
   },
-  "data_fix": {
-    "note": "Venda 8D7563B4 (Eliany, 17/11) estornada pelo painel: Poco X8 IMEI 868499080873669 voltou disponível em Loja Principal / Estoque Geral; película e copo voltaram. Evento de caixa sale_cancellation duplicado (9dea4e78) removido; cópia em /var/www/mdv-api/backups/customer-sale-visibility-1795010021195/pdv_cash_event_duplicado.txt. Estorno no cartão/dinheiro é feito fora do sistema."
-  },
   "waha_status_release": {
     "container": "waha_status_canary",
     "before": "2026.8.2",
@@ -120,7 +132,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.860 publicada (API).",
+  "pending_previous": "v1.2.861 publicada (API).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

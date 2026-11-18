@@ -1,3 +1,10 @@
+# v1.2.862-pagina-do-aparelho
+
+Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API + nginx, 18/11). Robô segue a versão anterior.
+Página Aparelhos no admin: situação e linha do tempo de cada aparelho por IMEI/serial (entrada, vendas, cancelamentos, volta ao estoque, garantias), achando também IMEI antigo e aparelho apagado. Registro: `docs/versoes/2026-11-18-v1.2.862-pagina-do-aparelho.md`.
+
+---
+
 # v1.2.861-venda-cancelada-oculta-aparelho
 
 Data: 18/11/2026. Branch: `main`. Status: **publicada** (API, 18/11). Site/robô seguem as versões anteriores.
