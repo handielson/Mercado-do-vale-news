@@ -1137,6 +1137,11 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       location = locationRows[0];
       if (!location) throw refuse(409, 'Local de estoque não encontrado.');
     }
+    // Sem local informado, o aparelho nasce no Depósito / Entrada / Conferencia.
+    if (!location && dependencies.getIncomingStockLocation) {
+      const incoming = await dependencies.getIncomingStockLocation(intake.company_id, connection);
+      location = { id: incoming.locationId, deposit_id: incoming.depositId };
+    }
     const unitId = crypto.randomUUID();
     await connection.query(
       `INSERT INTO units (id,product_id,imei_1,imei_2,serial,status,\`condition\`,internal_notes,cost_price,intake_photo_path,intake_id,deposit_id,location_id)

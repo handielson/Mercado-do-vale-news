@@ -77,6 +77,8 @@ const print3dRecipeRuntimePaths = [
   'services/unitJournalSchema.cjs',
   'services/unitTimeline.cjs',
   'services/unitTimelineServer.cjs',
+  'services/unitLocation.cjs',
+  'services/unitLocationServer.cjs',
   'services/customerSaleVisibility.cjs',
   'services/productFormDraftsServer.cjs',
   'services/print3dMaterialsServer.cjs',

@@ -2,6 +2,7 @@ require('dotenv').config();
 const fastify = require('fastify')({ logger: false, bodyLimit: 500 * 1024 * 1024 }); // 500MB
 const mysql = require('mysql2/promise');
 const { isCancelledSale, sanitizeCustomerSale, sanitizeCustomerSaleItems, shouldRecordSaleCancellationCashEvent } = require('./services/customerSaleVisibility.cjs');
+const { withIncomingDefault, isReturnFromSale, recordUnitEvent } = require('./services/unitLocation.cjs');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -27776,6 +27777,11 @@ fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }
   const quantity = stockNumber(input.quantity);
   if (quantity <= 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para a transferencia.' });
   if (input.from_location_id === input.to_location_id) return reply.code(400).send({ error: 'A origem e destino precisam ser diferentes.' });
+  // O saldo de produto com IMEI é recalculado pelos aparelhos: por quantidade, a transferência seria desfeita.
+  const [[serializedUnits]] = await pool.query("SELECT COUNT(*) AS n FROM units WHERE product_id = ? AND status IN ('available', 'reserved')", [input.product_id]);
+  if (Number(serializedUnits?.n) > 0) {
+    return reply.code(409).send({ error: 'Produto com IMEI: transfira pelos aparelhos em Aparelhos → Transferir aparelhos.' });
+  }
 
   const connection = await pool.getConnection();
   try {
@@ -29556,6 +29562,9 @@ fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (r
 // ─── Units (inventory de unidades serializadas: 1 linha por aparelho) ──────
 require('./services/unitJournalServer.cjs').registerUnitJournalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 require('./services/unitTimelineServer.cjs').registerUnitTimelineRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
+require('./services/unitLocationServer.cjs').registerUnitLocationRoutes(fastify, {
+  pool, getBearerAuthContext: getVpsBearerAuthContext, requireSyncKey, syncProductStock, ensureIncomingStockLocation, getDefaultStockCompanyId,
+});
 
 // Lista unidades — filtra por product_id, order_id ou sale_id (FIFO por created_at)
 fastify.get('/units', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
@@ -29654,6 +29663,9 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
   }
   const conflict = await findUnitSerializedIdentifierConflict(collectUnitSerializedIdentifiers(u), id);
   if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
+  // Todo aparelho nasce no Depósito / Entrada / Conferencia quando a entrada não informa o local.
+  const [[unitCompanyRow]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [u.product_id]);
+  const loc = withIncomingDefault(u, await ensureIncomingStockLocation(unitCompanyRow?.company_id));
 
   await pool.query(
     `INSERT INTO units (
@@ -29667,7 +29679,7 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
       u.condition || 'new',
       u.internal_notes || null,
       u.cost_price ?? null,
-      u.deposit_id || null, u.location_id || null,
+      loc.deposit_id, loc.location_id,
       u.order_id || null, u.sale_id || null,
       u.reserved_at || null, u.sold_at || null,
     ]
@@ -29701,6 +29713,15 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
       return reply.code(409).send({ error: 'Aparelho não pode ficar no produto pai. Use a variação (cor/memória).' });
     }
   }
+  // Todo aparelho nasce no Depósito / Entrada / Conferencia quando a entrada não informa o local.
+  const incomingByProduct = new Map();
+  const incomingFor = async productId => {
+    if (!incomingByProduct.has(productId)) {
+      const [[productRow]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [productId]);
+      incomingByProduct.set(productId, await ensureIncomingStockLocation(productRow?.company_id));
+    }
+    return incomingByProduct.get(productId);
+  };
 
   const results = { inserted: 0, errors: [] };
   const productIds = new Set();
@@ -29713,6 +29734,7 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
         results.errors.push({ serial: u.serial, imei_1: u.imei_1, ...serializedIdentifierConflictPayload(conflict) });
         continue;
       }
+      const loc = withIncomingDefault(u, await incomingFor(u.product_id));
 
       await pool.query(
         `INSERT INTO units (
@@ -29726,8 +29748,8 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
           u.condition || 'new',
           u.internal_notes || null,
           u.cost_price ?? null,
-          u.deposit_id || null,
-          u.location_id || null,
+          loc.deposit_id,
+          loc.location_id,
         ]
       );
       productIds.add(u.product_id);
@@ -29770,6 +29792,15 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
   const conflict = await findUnitSerializedIdentifierConflict(collectUnitSerializedIdentifiers(u), req.params.id);
   if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
 
+  // Aparelho que sai de uma venda volta para conferência no Depósito (o local é dele, não da venda).
+  const [[previousUnit]] = await pool.query('SELECT status, product_id, deposit_id, location_id FROM units WHERE id = ?', [req.params.id]);
+  let returnedToIncoming = null;
+  if (isReturnFromSale(previousUnit?.status, u.status) && !('deposit_id' in u) && !('location_id' in u)) {
+    const [[productRow]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [previousUnit.product_id]);
+    returnedToIncoming = await ensureIncomingStockLocation(productRow?.company_id);
+    sets.push('deposit_id = ?', 'location_id = ?');
+    vals.push(returnedToIncoming.depositId, returnedToIncoming.locationId);
+  }
   vals.push(req.params.id);
   const soldTransitionGuard = u.status === 'sold'
     ? (u.order_id ? " AND status IN ('available', 'reserved')" : " AND status = 'available'")
@@ -29789,6 +29820,14 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
         message: 'A unidade selecionada nao esta mais disponivel. Confira o IMEI e escolha outra unidade.',
       });
     }
+  }
+  if (returnedToIncoming && updateResult.affectedRows === 1) {
+    await recordUnitEvent(pool, {
+      unitId: req.params.id, productId: rows[0].product_id, eventType: 'returned_to_incoming',
+      from: { depositId: previousUnit.deposit_id, locationId: previousUnit.location_id },
+      to: { depositId: returnedToIncoming.depositId, locationId: returnedToIncoming.locationId },
+      statusBefore: 'sold', statusAfter: 'available', reason: 'Saiu de uma venda: volta para conferência no Depósito.',
+    });
   }
   await syncProductStock(rows[0].product_id);
   return rows[0];
@@ -42188,6 +42227,8 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] sale_partial_refunds table: OK');
+  await require('./services/unitLocationServer.cjs').ensureUnitEventsTable(pool);
+  console.log('[migration] unit_events table: OK');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS delivery_credits (
@@ -43817,7 +43858,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 
 
 // Start
-const photoIntakeRoutes = registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
+const photoIntakeRoutes = registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname, getIncomingStockLocation: ensureIncomingStockLocation });
 registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey });
 require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify, { pool, auth: requireSyncKeyOrAdmin, getActorId: async (request) => (await getVpsBearerAuthContext(request))?.userId || null, deps: { syncProductStock: (id, db) => syncProductStock(id, db, { stockLocationInTransaction: true }), syncProductStockFromLocations: (id, db) => syncProductStockFromLocations(id, db), insertStockMovement: (row, db) => insertStockMovement(row, db), getDefaultCompanyId: () => getDefaultStockCompanyId(), finalizePhotoIntake: photoIntakeRoutes.finalizePhotoIntake, ensurePhotoIntakeSchema: photoIntakeRoutes.ensureSchema } });
 registerMercadoLivreRoutes(fastify, {

@@ -72,6 +72,9 @@ function loadUnitsContext({ parents = new Set(), conflictIds = new Set() } = {})
       ? { table: 'units', field: 'imei_1', value: ids.find(id => conflictIds.has(id)) } : null),
     serializedIdentifierConflictPayload: c => ({ error: `IMEI ja cadastrado: ${c.value}`, conflict: c }),
     syncProductStock: async () => {},
+    // local do aparelho (v1.2.863): entrada sem local nasce no Depósito / Entrada / Conferencia
+    withIncomingDefault: require('../services/unitLocation.cjs').withIncomingDefault,
+    ensureIncomingStockLocation: async () => ({ depositId: 'dep-entrada', locationId: 'loc-entrada' }),
     isValidTable: name => /^[a-zA-Z0-9_]+$/.test(name),
     getPrimaryKey: async () => 'id',
     normalizeTableDataValue: v => (v === undefined ? null : v),
