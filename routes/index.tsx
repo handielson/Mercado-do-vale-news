@@ -153,6 +153,7 @@ const PDVPage = lazy(() => import('../pages/pdv/PDVPage'));
 const CatalogConfigPage = lazy(() => import('../pages/admin/CatalogConfigPage'));
 const MarketingPage = lazy(() => import('../pages/admin/settings/MarketingPage'));
 const SalesPage = lazy(() => import('../pages/admin/sales/SalesPage'));
+const SaleReturnsPage = lazy(() => import('../pages/admin/sales/SaleReturnsPage'));
 const BlingPage = lazy(() => import('../pages/admin/settings/BlingPage'));
 const ShopeePage = lazy(() => import('../pages/admin/settings/ShopeePage'));
 const ShopeeTemplatesPage = lazy(() => import('../pages/admin/settings/ShopeeTemplatesPage'));
@@ -396,6 +397,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductStorefrontOffersPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/devolucoes",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SaleReturnsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

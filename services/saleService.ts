@@ -1070,7 +1070,7 @@ export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWith
 
 // Estornos pertencem ao caixa aberto no momento da operacao, nunca ao caixa
 // historico da venda original.
-async function resolveRefundCashSessionId(): Promise<string | null> {
+export async function resolveRefundCashSessionId(): Promise<string | null> {
     try {
         const { cashRegisterService } = await import('./cashRegisterService');
         const current = await cashRegisterService.getCurrentSession();

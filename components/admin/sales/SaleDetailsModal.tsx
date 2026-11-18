@@ -39,6 +39,8 @@ import { SaleItemInventoryInfo } from './SaleItemInventoryInfo';
 import { SaleStockReconciliation } from './SaleStockReconciliation';
 import { SaleItemCostEditor } from './SaleItemCostEditor';
 import { printDocumentWhenReady } from '../../../utils/documentPrintAssets';
+import { SaleReturnModal } from './SaleReturnModal';
+import { getSaleReturns, type SaleReturnRecord } from '../../../services/saleReturnService';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -83,6 +85,11 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [isRefunding, setIsRefunding] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [confirmAction, setConfirmAction] = useState<'cancel' | 'refund' | 'delete' | null>(null);
+    // Devolução de itens (Parte 3): abre o modal novo ou reabre uma devolução já registrada.
+    const [returnModal, setReturnModal] = useState<{ existing: SaleReturnRecord | null } | null>(null);
+    const [saleReturns, setSaleReturns] = useState<SaleReturnRecord[]>([]);
+    const reloadSaleReturns = () => { if (sale?.id) getSaleReturns(sale.id).then(data => setSaleReturns(data.returns)).catch(() => setSaleReturns([])); };
+    useEffect(() => { if (isOpen) reloadSaleReturns(); }, [isOpen, sale?.id]);
     const [isPrintingWarranty, setIsPrintingWarranty] = useState(false);
     const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
     const [isPrintingAll, setIsPrintingAll] = useState(false);
@@ -1061,6 +1068,39 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                     );
                                 })}
                             </div>
+
+                            {(sale.status === 'completed' || saleReturns.length > 0) && (
+                                <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
+                                    {sale.status === 'completed' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setReturnModal({ existing: null })}
+                                            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+                                        >
+                                            Devolver itens
+                                        </button>
+                                    )}
+                                    {saleReturns.length > 0 && (
+                                        <div className="rounded-lg border border-slate-200 p-3 text-sm">
+                                            <p className="mb-2 font-semibold text-slate-800">Devoluções desta venda</p>
+                                            {saleReturns.map(ret => (
+                                                <button key={ret.id} type="button" onClick={() => setReturnModal({ existing: ret })} className="flex w-full justify-between gap-2 py-1 text-left hover:underline">
+                                                    <span>#{ret.code} · {formatCurrencyCents(ret.total_cents)}</span>
+                                                    <span className={ret.status === 'finalizada' ? 'text-emerald-700' : 'text-amber-700'}>{ret.status === 'finalizada' ? 'Finalizada' : 'Pendente'}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {returnModal && (
+                                        <SaleReturnModal
+                                            sale={sale as any}
+                                            existing={returnModal.existing}
+                                            onClose={() => setReturnModal(null)}
+                                            onDone={() => { reloadSaleReturns(); onStatusChange(); }}
+                                        />
+                                    )}
+                                </div>
+                            )}
 
                             {(['completed', 'cancelled'] as const).includes(sale.status) && (
                                 <div className="mt-4 border-t border-slate-200 pt-4">

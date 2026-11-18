@@ -220,7 +220,8 @@ async function loadReturns(pool, where, params) {
   const [returns] = await pool.query(`SELECT * FROM sale_returns WHERE ${where} ORDER BY created_at DESC LIMIT 200`, params);
   if (!returns.length) return [];
   const ids = returns.map(r => r.id);
-  const [items] = await pool.query('SELECT * FROM sale_return_items WHERE return_id IN (?)', [ids]);
+  const [items] = await pool.query(`SELECT ri.*, si.product_name AS name, si.product_sku AS sku, si.imei
+      FROM sale_return_items ri LEFT JOIN sale_items si ON si.id = ri.sale_item_id WHERE ri.return_id IN (?)`, [ids]);
   const [refunds] = await pool.query('SELECT * FROM sale_return_refunds WHERE return_id IN (?)', [ids]);
   const [files] = await pool.query('SELECT id, return_id, kind, refund_id, file_name, mime, size_bytes, created_at FROM sale_return_files WHERE return_id IN (?)', [ids]);
   return returns.map(r => {
