@@ -28,7 +28,7 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque."
   },
-  "site_source_base": "pendente",
+  "site_source_base": "916b39c",
   "changed_files": [
     "services/unitTimeline.cjs",
     "services/unitTimelineServer.cjs",
@@ -61,27 +61,28 @@
     "sale-partial-refund/sale-cancel-serialized-bling/serialized-units-vps-only/marketplace-sale-details estáticos ok",
     "node --check vps_server.js/.cjs",
     "npm run build ok",
-    "revisão independente do branch: 0 crítico; 2 importantes + 2 regraduados corrigidos com teste"
+    "revisão independente do branch: 0 crítico; 2 importantes + 2 regraduados corrigidos com teste",
+    "produção 18/11: /admin/aparelhos/868499080873669, 868499080873677 (IMEI 2) e 81346W6V100217 (serial) abrem o Poco: entrada por foto 30/10, vendido #8D7563B4 R$ 1.999,00, venda cancelada 18/11, voltou ao estoque, Disponível"
   ],
   "site_release": {
     "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261118-115140-v1-2-862-pagina-do-aparelho",
     "previous": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
-    "source_commit": "pendente",
+    "source_commit": "916b39c",
     "note": "Página Aparelhos; nenhum outro arquivo de frontend mudou desde a 922455f2."
   },
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
     "mode": "upload manual (2 módulos + server.js/vps_server.js/.cjs)",
-    "commit": "pendente",
-    "deployed_at": "pendente",
-    "backup": "pendente",
-    "note": ""
+    "commit": "789b3f6",
+    "deployed_at": "2026-11-18T14:52Z",
+    "backup": "/var/www/mdv-api/backups/unit-timeline-1795013524432",
+    "note": "/status 200; PM2 online; rota sem login → 401. Sem escrita de env."
   },
   "nginx_release": {
     "status": "publicada",
-    "note": "mdv-site-production.conf: regras SPA com /admin/aparelhos e /admin/aparelhos/[^/]+ (listen de produção 172.17.0.1:8085/8445 preservados)."
+    "note": "mdv-site-production.conf: regras SPA com /admin/aparelhos e /admin/aparelhos/[^/]+ (listen de produção 172.17.0.1:8085/8445 preservados). Backup: /var/www/mdv-api/backups/unit-timeline-1795013524432/mdv-site-production.conf.bak; nginx -t ok; reload."
   },
   "evolution_release": {
     "status": "publicada",
