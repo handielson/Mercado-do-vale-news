@@ -102,6 +102,15 @@ async function createSaleReturn({ db, saleId, body = {}, actor, request, deps })
       const [open] = cashSessionId ? await db.query('SELECT status FROM pdv_cash_sessions WHERE id = ?', [cashSessionId]) : [[]];
       if (open?.[0]?.status !== 'open') fail(409, 'Abra o caixa para devolver em dinheiro.');
     }
+    const cashCents = plan.filter(r => ['money', 'cash'].includes(r.method)).reduce((a, r) => a + r.refund_cents, 0);
+    const cashWords = cashCents ? core.amountInWords(cashCents) : null;
+    if (body.dry_run) {
+      await db.rollback();
+      return {
+        preview: true, suggested_cents: suggested, total_cents: amount, cash_cents: cashCents, cash_words: cashWords,
+        refunds: plan.map(r => ({ method: r.method, goods_cents: r.goods_cents, refund_cents: r.refund_cents, payment_index: r.payment_index, gateway_payment_id: r.gateway_payment_id })),
+      };
+    }
 
     const id = crypto.randomUUID();
     const code = saleCode(id);
@@ -164,6 +173,7 @@ async function createSaleReturn({ db, saleId, body = {}, actor, request, deps })
     await db.commit();
     return {
       id, code, sale_id: saleId, status: 'pendente', reason, total_cents: amount, refund_mode: mode, full: fullyReturned,
+      cash_cents: cashCents, cash_words: cashWords, operator_name: actor?.name || null, created_at: new Date().toISOString(),
       items: chosen.map(c => ({ sale_item_id: c.row.saleItemId, name: c.row.name, sku: c.row.sku, quantity: c.qty, value_cents: c.stored, imei: c.row.imei, serialized_unit_id: c.row.serializedUnitId })),
       refunds: plan.map(r => ({ id: r.id, method: r.method, goods_cents: r.goods_cents, refund_cents: r.refund_cents, gateway_refund_id: r.gateway_refund_id, payment_index: r.payment_index })),
     };
@@ -216,7 +226,9 @@ async function loadReturns(pool, where, params) {
   return returns.map(r => {
     const rf = refunds.filter(x => x.return_id === r.id);
     const fl = files.filter(x => x.return_id === r.id);
+    const cashCents = rf.filter(x => ['money', 'cash'].includes(x.method)).reduce((a, x) => a + Number(x.refund_cents || 0), 0);
     return { ...r, items: items.filter(x => x.return_id === r.id), refunds: rf, files: fl,
+      cash_cents: cashCents, cash_words: cashCents ? core.amountInWords(cashCents) : null,
       missing_proofs: core.requiredProofs(rf).filter(idr => !fl.some(f => f.kind === 'proof' && String(f.refund_id) === idr)),
       missing_signed: !fl.some(f => f.kind === 'signed') };
   });

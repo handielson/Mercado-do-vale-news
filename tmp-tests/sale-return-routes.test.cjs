@@ -164,3 +164,21 @@ test('deploy sobe os módulos da devolução', () => {
   const deploy = fs.readFileSync('deploy-vps-server-only.cjs', 'utf8');
   for (const mod of ['services/saleReturnCore.cjs', 'services/saleReturnServer.cjs']) assert.ok(deploy.includes(`'${mod}'`), mod);
 });
+
+test('prévia calcula valor e divisão sem gravar nem estornar', async () => {
+  const db = fakeDb(); const d = deps(db);
+  const r = await run(db, d, { items: [{ sale_item_id: poco.id, quantity: 1 }], reason: 'x', refund_mode: 'same', cash_session_id: 'cx', dry_run: true });
+  assert.equal(r.preview, true);
+  assert.equal(r.suggested_cents, 191617);
+  assert.deepEqual(r.refunds.map(x => [x.method, x.refund_cents]), [['money', 30000], ['credit', 180849]]);
+  assert.equal(r.cash_words, 'trezentos reais');
+  assert.equal(db.s.returns.length, 0); assert.equal(db.s.unit.status, 'sold'); assert.equal(db.s.committed, false);
+  assert.equal(d.calls.mp.length, 0); assert.equal(d.calls.cash.length, 0);
+});
+
+test('devolução gravada traz o valor em dinheiro por extenso para o recibo', async () => {
+  const db = fakeDb(); const d = deps(db);
+  const r = await run(db, d, { items: [{ sale_item_id: poco.id, quantity: 1 }], reason: 'x', refund_mode: 'same', cash_session_id: 'cx' });
+  assert.equal(r.cash_cents, 30000);
+  assert.equal(r.cash_words, 'trezentos reais');
+});
