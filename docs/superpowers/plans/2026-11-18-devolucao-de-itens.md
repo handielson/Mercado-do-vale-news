@@ -14,7 +14,7 @@
 
 - Valor pago do item = total do item × (total da venda − taxas de cartão − frete cobrado) ÷ soma dos totais dos itens; centavos, arredondamento no último item para fechar a soma. Caso Eliany: Poco = **191617** (R$ 1.916,17).
 - O total da devolução pode ser reduzido pelo operador, nunca aumentado acima do devolvível (soma dos itens escolhidos menos o já devolvido daquela venda).
-- "Mesma forma": dinheiro → Pix → débito → crédito → demais, limitado pelo que entrou em cada forma menos o já estornado (`sale_partial_refunds` + devoluções). Cartão com juros: estorno = parte do produto × `total_with_fee ÷ amount`. Caso Eliany só o Poco: dinheiro 30000 + crédito 161617 de produto → **180852** no cartão.
+- "Mesma forma": dinheiro → Pix → débito → crédito → demais, limitado pelo que entrou em cada forma menos o já estornado (`sale_partial_refunds` + devoluções). Cartão com juros: estorno = parte do produto × `total_with_fee ÷ amount`. Caso Eliany só o Poco: dinheiro 30000 + crédito 161617 de produto → **180849** no cartão.
 - "Outra forma": métodos `money`, `pix`, `transfer`, `card`, `other`; soma = total da devolução.
 - Comprovante obrigatório: Pix manual (sem id de estorno do Mercado Pago), transferência e cartão. Dinheiro: o comprovante é o recibo assinado.
 - Recibo assinado sempre obrigatório. `pendente` → `finalizada` quando tudo que é obrigatório estiver enviado.
