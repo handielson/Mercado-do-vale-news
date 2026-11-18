@@ -46,10 +46,18 @@ function registerUnitTimelineRoutes(app, { pool, getBearerAuthContext }) {
     const intakes = unit.intake_id ? await rows('SELECT id, created_at, created_by, status FROM smartphone_photo_intakes WHERE id = ? LIMIT 1', [unit.intake_id]) : [];
     const warranties = await rows('SELECT id, sale_id, serialized_unit_id, created_at FROM warranty_documents WHERE serialized_unit_id = ?', [unit.id]);
     const signedWarranties = await inList('SELECT id, sale_id, status, created_at FROM signed_warranty_documents WHERE sale_id IN (?)', saleIds);
-    const deposits = unit.deposit_id ? await rows('SELECT id, name FROM stock_deposits WHERE id = ? LIMIT 1', [unit.deposit_id]) : [];
-    const locations = unit.location_id ? await rows('SELECT id, name, deposit_id FROM stock_locations WHERE id = ? LIMIT 1', [unit.location_id]) : [];
+    let unitEvents = [];
+    try {
+      unitEvents = await rows(`SELECT id, unit_id, product_id, event_type, DATE_FORMAT(occurred_at,'%Y-%m-%dT%H:%i:%s.%fZ') occurred_at,
+          actor_name, from_deposit_id, from_location_id, to_deposit_id, to_location_id, reason
+        FROM unit_events WHERE unit_id = ? ORDER BY occurred_at LIMIT 2000`, [unit.id]);
+    } catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
+    const depositIds = uniq([unit.deposit_id, ...unitEvents.flatMap(e => [e.from_deposit_id, e.to_deposit_id])]);
+    const locationIds = uniq([unit.location_id, ...unitEvents.flatMap(e => [e.from_location_id, e.to_location_id])]);
+    const deposits = await inList('SELECT id, name FROM stock_deposits WHERE id IN (?)', depositIds);
+    const locations = await inList('SELECT id, name, deposit_id FROM stock_locations WHERE id IN (?)', locationIds);
 
-    const { current, events } = buildUnitTimeline({ unit, product, journal, sales, saleItems, customers, teamMembers, intakes, warranties, signedWarranties, deposits, locations });
+    const { current, events } = buildUnitTimeline({ unit, product, journal, sales, saleItems, customers, teamMembers, intakes, warranties, signedWarranties, deposits, locations, unitEvents });
     const images = parse(product?.images);
     return {
       unit: Object.fromEntries(UNIT_FIELDS.filter(k => k in unit).map(k => [k, unit[k] ?? null])),

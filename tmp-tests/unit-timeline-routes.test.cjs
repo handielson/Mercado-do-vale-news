@@ -146,3 +146,31 @@ test('IMEI antigo ou aparelho apagado: acha pelo diário', async t => {
   assert.equal(byId.statusCode, 200);
   assert.equal(byId.json().unit.deleted, true);
 });
+
+test('unit_events ausente (tabela não criada) não quebra a rota', async t => {
+  const app = Fastify();
+  const base = fakePool([fixture.unit]);
+  const pool = { async query(sql, params) {
+    if (/FROM unit_events/i.test(sql)) throw Object.assign(new Error('no table'), { code: 'ER_NO_SUCH_TABLE' });
+    return base.query(sql, params);
+  } };
+  registerUnitTimelineRoutes(app, { pool, getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }) });
+  t.after(() => app.close());
+  const r = await app.inject({ url: `/admin/units/${UNIT}/timeline` });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.json().events.length, 4);
+});
+
+test('eventos de local entram na resposta da rota', async t => {
+  const app = Fastify();
+  const base = fakePool([fixture.unit]);
+  const pool = { async query(sql, params) {
+    if (/FROM unit_events/i.test(sql)) return [[{ id: 'e1', unit_id: UNIT, event_type: 'location_set', occurred_at: '2026-11-18 15:00:00', to_deposit_id: fixture.deposits[0].id, to_location_id: fixture.locations[0].id, reason: 'inicial' }]];
+    return base.query(sql, params);
+  } };
+  registerUnitTimelineRoutes(app, { pool, getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }) });
+  t.after(() => app.close());
+  const ev = (await app.inject({ url: `/admin/units/${UNIT}/timeline` })).json().events[0];
+  assert.equal(ev.type, 'location_set');
+  assert.match(ev.detail, /Loja Principal \/ Estoque Geral · inicial/);
+});

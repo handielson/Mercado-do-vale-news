@@ -143,6 +143,26 @@ function buildUnitTimeline(input = {}) {
     }
   }
 
+  // Mudanças de local (Parte 2): unit_events, gravado só pela API, com quem fez.
+  const place = (depositId, locationId) => {
+    const location = locations.get(String(locationId || ''));
+    if (!location) return 'local removido';
+    const deposit = deposits.get(String(depositId || location.deposit_id || ''));
+    return deposit ? `${deposit.name} / ${location.name}` : location.name;
+  };
+  const withReason = (text, reason) => (reason ? `${text} · ${reason}` : text);
+  for (const e of input.unitEvents || []) {
+    const to = place(e.to_deposit_id, e.to_location_id);
+    const base = { at: iso(e.occurred_at), actor: e.actor_name || null };
+    if (e.event_type === 'transfer') {
+      add(`ue:${e.id}`, { ...base, type: 'transfer', title: 'Transferido', detail: withReason(`${place(e.from_deposit_id, e.from_location_id)} → ${to}`, e.reason) }, 0);
+    } else if (e.event_type === 'location_set') {
+      add(`ue:${e.id}`, { ...base, type: 'location_set', title: 'Local definido', detail: withReason(to, e.reason) }, 0);
+    } else if (e.event_type === 'returned_to_incoming') {
+      add(`ue:${e.id}`, { ...base, type: 'returned_to_incoming', title: 'Foi para conferência', detail: withReason(to, e.reason) }, 0);
+    }
+  }
+
   for (const w of input.warranties || []) {
     if (String(w.serialized_unit_id || '') !== String(unit.id)) continue;
     add(`warranty_issued:${w.id}`, { type: 'warranty_issued', at: iso(w.created_at), title: 'Garantia emitida', saleId: w.sale_id || null }, `w${w.id}`);

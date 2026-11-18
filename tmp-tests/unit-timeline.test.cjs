@@ -139,3 +139,39 @@ test('data inválida em um registro não derruba a linha do tempo', () => {
   assert.ok(bad);
   assert.equal(bad.at, null);
 });
+
+// Parte 2: mudanças de local vêm de unit_events, com quem fez e os nomes dos locais.
+const places = {
+  deposits: [{ id: 'dep-d', name: 'Deposito' }, { id: 'dep-l', name: 'Loja Principal' }],
+  locations: [{ id: 'loc-e', name: 'Entrada / Conferencia', deposit_id: 'dep-d' }, { id: 'loc-g', name: 'Estoque Geral', deposit_id: 'dep-l' }],
+};
+const ev = (id, event_type, occurred_at, extra = {}) => ({ id, unit_id: fixture.unit.id, product_id: fixture.unit.product_id, event_type, occurred_at, actor_name: null, from_deposit_id: null, from_location_id: null, to_deposit_id: null, to_location_id: null, reason: null, ...extra });
+
+test('transferência e local definido aparecem com quem fez e os nomes dos locais', () => {
+  const input = { ...clone(), ...places, unitEvents: [
+    ev('e1', 'location_set', '2026-11-18 15:00:00', { to_deposit_id: 'dep-d', to_location_id: 'loc-e', reason: 'Local inicial na implantação' }),
+    ev('e2', 'transfer', '2026-11-18 16:00:00', { actor_name: 'Operador Teste', from_deposit_id: 'dep-d', from_location_id: 'loc-e', to_deposit_id: 'dep-l', to_location_id: 'loc-g', reason: 'vitrine' }),
+  ] };
+  const { events } = buildUnitTimeline(input);
+  assert.deepEqual(events.slice(0, 2).map(e => e.type), ['transfer', 'location_set']);
+  assert.equal(events[0].title, 'Transferido');
+  assert.equal(events[0].detail, 'Deposito / Entrada / Conferencia → Loja Principal / Estoque Geral · vitrine');
+  assert.equal(events[0].actor, 'Operador Teste');
+  assert.equal(events[1].title, 'Local definido');
+  assert.equal(events[1].detail, 'Deposito / Entrada / Conferencia · Local inicial na implantação');
+});
+
+test('volta da venda para o Depósito aparece logo acima do "Voltou ao estoque"', () => {
+  const input = { ...clone(), ...places, unitEvents: [
+    ev('e3', 'returned_to_incoming', '2026-11-18 13:50:16.900', { to_deposit_id: 'dep-d', to_location_id: 'loc-e', reason: 'Saiu de uma venda: volta para conferência no Depósito.' }),
+  ] };
+  const { events } = buildUnitTimeline(input);
+  assert.deepEqual(events.slice(0, 2).map(e => e.type), ['returned_to_incoming', 'returned_to_stock']);
+  assert.equal(events[0].title, 'Foi para conferência');
+  assert.match(events[0].detail, /^Deposito \/ Entrada \/ Conferencia/);
+});
+
+test('local sem nome conhecido aparece como "local removido"', () => {
+  const input = { ...clone(), unitEvents: [ev('e4', 'transfer', '2026-11-19 10:00:00', { from_location_id: 'x', to_location_id: 'y' })] };
+  assert.equal(buildUnitTimeline(input).events[0].detail, 'local removido → local removido');
+});
