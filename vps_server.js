@@ -29626,6 +29626,34 @@ require('./services/unitTimelineServer.cjs').registerUnitTimelineRoutes(fastify,
 require('./services/unitLocationServer.cjs').registerUnitLocationRoutes(fastify, {
   pool, getBearerAuthContext: getVpsBearerAuthContext, requireSyncKey, syncProductStock, ensureIncomingStockLocation, getDefaultStockCompanyId,
 });
+// Devolução de itens da venda (Parte 3): estorno documentado, estoque e aparelho de volta.
+require('./services/saleReturnServer.cjs').registerSaleReturnRoutes(fastify, {
+  pool, getBearerAuthContext: getVpsBearerAuthContext,
+  privateRoot: process.env.PRIVATE_UPLOADS_DIR || path.join(__dirname, 'private-uploads'),
+  restoreStock: (db, saleId, limits, reason) => require('./services/stockMovementRestoration.cjs').restoreStockMovements(pool, {
+    referenceType: 'sale', restoreReferenceType: 'sale_restore', referenceId: saleId, reason, notes: null, limits, connection: db,
+  }, { getStockLocationRow, upsertStockLocationBalance, insertStockMovement, syncProductStockFromLocations, getDefaultStockCompanyId }),
+  recordUnitEvent, syncProductStock, recordCashEvent, ensureIncomingStockLocation,
+  refundMercadoPagoPix: refundSalePixViaMercadoPago,
+  sendWhatsappDocument: sendDeliveryWhatsappDocument,
+});
+
+async function refundSalePixViaMercadoPago(paymentId, amountCents) {
+  const mp = await getPdvMercadoPagoAccessToken();
+  if (!mp?.accessToken) throw Object.assign(new Error('Mercado Pago nao configurado.'), { statusCode: 400 });
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}/refunds`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${mp.accessToken}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `sale-return-${crypto.randomUUID()}` },
+    body: JSON.stringify({ amount: amountCents / 100 }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = payload?.message || payload?.cause?.[0]?.description || 'Solicitacao recusada.';
+    throw Object.assign(new Error(`Nao foi possivel estornar o Pix: ${detail}`), { statusCode: 502 });
+  }
+  return { refundId: payload?.id ? String(payload.id) : null };
+}
 
 // Lista unidades — filtra por product_id, order_id ou sale_id (FIFO por created_at)
 fastify.get('/units', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
@@ -34422,6 +34450,22 @@ async function computeCashSessionSummary(db, sessionId) {
     refunds.push({ id: row.id, status: row.status, total_cents: normalizeCashAmountCents(row.total), payments });
   }
 
+  // Devoluções de itens estornadas neste caixa. Venda devolvida inteira no mesmo caixa já saiu das entradas acima.
+  try {
+    const [returnRefundRows] = await db.query(
+      `SELECT rr.method, rr.refund_cents, s.cash_session_id AS sale_session_id, s.payment_status
+         FROM sale_return_refunds rr
+         JOIN sale_returns sr ON sr.id = rr.return_id
+         JOIN sales s ON s.id = rr.sale_id
+        WHERE sr.cash_session_id = ?`,
+      [sessionId]
+    );
+    for (const row of returnRefundRows || []) {
+      const alreadyOut = ['cancelled', 'refunded'].includes(String(row.payment_status)) && row.sale_session_id === sessionId;
+      if (!alreadyOut) addToMethod(normalizeCashMethodKey(row.method), -normalizeCashAmountCents(row.refund_cents));
+    }
+  } catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
+
   // Pix avulso: somente source standalone (Pix de venda PDV ja esta em sales.payment_methods).
   const [pixRows] = await db.query(
     `SELECT id, amount, status, description, created_at FROM pdv_pix_payments
@@ -36000,6 +36044,18 @@ fastify.get('/customer/purchases', async (req, reply) => {
     );
     saleItems = rows;
   }
+  // Item devolvido por inteiro (devolução parcial) também esconde os dados do aparelho para a cliente.
+  const returnedSaleItemIds = new Set();
+  if (saleIds.length > 0) {
+    try {
+      const [returnedRows] = await pool.query(
+        'SELECT sale_item_id, SUM(quantity) AS quantity FROM sale_return_items WHERE sale_id IN (?) GROUP BY sale_item_id', [saleIds]);
+      const soldQuantity = new Map(saleItems.map(item => [String(item.id), Number(item.quantity || 0)]));
+      for (const row of returnedRows || []) {
+        if (Number(row.quantity) >= (soldQuantity.get(String(row.sale_item_id)) || Infinity)) returnedSaleItemIds.add(String(row.sale_item_id));
+      }
+    } catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
+  }
   const productIds = Array.from(new Set(saleItems.map((item) => String(item.product_id || '')).filter(Boolean)));
   const productById = new Map();
   if (productIds.length > 0) {
@@ -36078,7 +36134,7 @@ fastify.get('/customer/purchases', async (req, reply) => {
     sales: sales.map(sale => ({
       ...sanitizeCustomerSale(sale),
       coins_earned: Number(coinsBySaleId.get(String(sale.id)) || 0),
-      items: sanitizeCustomerSaleItems(sale, saleItemsBySaleId.get(String(sale.id)) || []),
+      items: sanitizeCustomerSaleItems(sale, saleItemsBySaleId.get(String(sale.id)) || [], returnedSaleItemIds),
       customer: {
         id: String(customer.id),
         name: String(customer.name || ''),
@@ -42327,6 +42383,8 @@ async function runMigrations() {
   console.log('[migration] sale_partial_refunds table: OK');
   await require('./services/unitLocationServer.cjs').ensureUnitEventsTable(pool);
   console.log('[migration] unit_events table: OK');
+  await require('./services/saleReturnServer.cjs').ensureSaleReturnSchema(pool, addColumnIfMissing);
+  console.log('[migration] sale_returns tables: OK');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS delivery_credits (

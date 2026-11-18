@@ -22,10 +22,13 @@ function maskDeviceIdentifier(value) {
   return `${text.slice(0, 4)}${'•'.repeat(text.length - 8)}${text.slice(-4)}`;
 }
 
-function sanitizeCustomerSaleItems(sale, items) {
+// returnedItemIds: itens devolvidos de uma venda que continua valendo (devolução parcial).
+function sanitizeCustomerSaleItems(sale, items, returnedItemIds = null) {
   const list = Array.isArray(items) ? items : [];
-  if (!isCancelledSale(sale)) return list;
+  const cancelled = isCancelledSale(sale);
+  if (!cancelled && !(returnedItemIds && returnedItemIds.size)) return list;
   return list.map((item) => {
+    if (!cancelled && !returnedItemIds.has(String(item.id))) return item;
     const copy = { ...item };
     let masked = false;
     for (const key of DEVICE_FIELDS_TO_MASK) {

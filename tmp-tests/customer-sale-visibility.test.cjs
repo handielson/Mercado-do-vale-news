@@ -45,6 +45,13 @@ test('venda cancelada: itens sem aparelho identificavel para a cliente', () => {
   assert.equal(items[0].imei, '868499080873669', 'nao altera o objeto original (admin continua vendo)');
 });
 
+test('venda com item devolvido: só o item devolvido sai mascarado', () => {
+  const out = sanitizeCustomerSaleItems({ payment_status: 'paid' }, items, new Set(['a']));
+  assert.equal(out[0].imei, '8684•••••••3669');
+  assert.equal(out[0].device_masked, true);
+  assert.deepEqual(out[1], items[1]);
+});
+
 test('venda concluida: itens intactos', () => {
   const out = sanitizeCustomerSaleItems({ payment_status: 'paid' }, items);
   assert.deepEqual(out, items);
@@ -74,7 +81,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
     const src = fs.readFileSync(file, 'utf8');
     assert.match(src, /customerSaleVisibility\.cjs/);
     assert.match(src, /shouldRecordSaleCancellationCashEvent\(previousSaleRow, updatedRow\)/);
-    assert.match(src, /items: sanitizeCustomerSaleItems\(sale, saleItemsBySaleId\.get\(String\(sale\.id\)\) \|\| \[\]\)/);
+    assert.match(src, /items: sanitizeCustomerSaleItems\(sale, saleItemsBySaleId\.get\(String\(sale\.id\)\) \|\| \[\], returnedSaleItemIds\)/);
+    assert.match(src, /FROM sale_return_items WHERE sale_id IN \(\?\)/);
     assert.match(src, /\.\.\.sanitizeCustomerSale\(sale\)/);
     assert.match(src, /'SELECT id, customer_id, payment_status FROM sales WHERE id = \? LIMIT 1'[\s\S]{0,400}isCancelledSale\(sale\)[\s\S]{0,120}documents: \[\]/);
     assert.match(src, /!access\.isAdmin && isCancelledSale\(sale\)\) return \{ sale_id: saleId, active: null, history: \[\], pending: \[\] \}/);
