@@ -84,6 +84,16 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
     assert.match(put, /isReturnFromSale\(previousUnit\?\.status, u\.status\)/);
     assert.match(put, /eventType: 'returned_to_incoming'/);
   });
+  test(`${file}: falha ao gravar o evento não impede o recálculo do saldo na volta da venda`, () => {
+    const put = route('put', '/units/:id');
+    assert.match(put, /try \{\s*await recordUnitEvent\(pool, \{[\s\S]*?\} catch \(eventError\) \{[\s\S]*?\}\s*\}\s*await syncProductStock\(rows\[0\]\.product_id\);/);
+  });
+  test(`${file}: Depósito / Entrada só é regravado quando algo difere`, () => {
+    const i = src.indexOf('async function ensureIncomingStockLocation');
+    const body = src.slice(i, src.indexOf('\n}\n', i));
+    assert.match(body, /WHERE id=\? AND NOT \(name <=> 'Deposito' AND type <=> 'warehouse' AND is_active <=> 1\)/);
+    assert.match(body, /WHERE id=\? AND NOT \(name <=> 'Entrada \/ Conferencia' AND is_active <=> 1/);
+  });
   test(`${file}: transferência por quantidade recusa produto com IMEI`, () => {
     assert.match(route('post', '/stock-locations/transfers'), /Produto com IMEI: transfira pelos aparelhos em Aparelhos → Transferir aparelhos\./);
   });

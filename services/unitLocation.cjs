@@ -70,9 +70,12 @@ async function transferUnits({ db, identifiers, toDepositId, toLocationId, actor
   try {
     const [destRows] = await db.query('SELECT id, deposit_id, name FROM stock_locations WHERE id = ? AND deposit_id = ? LIMIT 1', [toLocationId, toDepositId]);
     if (!destRows?.length) fail(404, 'Local de destino não encontrado.');
-    const [rows] = await db.query(
-      `SELECT * FROM units WHERE (imei_1 IN (?) OR imei_2 IN (?) OR imei IN (?) OR serial IN (?) OR id IN (?)) FOR UPDATE`,
+    // Acha os ids sem travar e depois trava só esses aparelhos, sempre na mesma ordem (evita travar a tabela e deadlock).
+    const [found] = await db.query(
+      'SELECT id FROM units WHERE imei_1 IN (?) OR imei_2 IN (?) OR imei IN (?) OR serial IN (?) OR id IN (?)',
       Array(5).fill(wanted));
+    const ids = [...new Set((found || []).map(r => String(r.id)))].sort();
+    const [rows] = ids.length ? await db.query('SELECT * FROM units WHERE id IN (?) ORDER BY id FOR UPDATE', [ids]) : [[]];
     const plan = [];
     for (const identifier of wanted) {
       const matches = (rows || []).filter(u => ['imei_1', 'imei_2', 'imei', 'serial', 'id'].some(k => u[k] != null && String(u[k]) === identifier));
@@ -102,8 +105,16 @@ async function transferUnits({ db, identifiers, toDepositId, toLocationId, actor
     return { moved };
   } catch (error) {
     await db.rollback();
-    throw error;
+    throw lockConflict(error);
   }
+}
+
+// Concorrência com venda/outra transferência: o operador só precisa tentar de novo.
+function lockConflict(error) {
+  if (['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT'].includes(error?.code)) {
+    return Object.assign(new Error('Outro movimento estava mexendo nesses aparelhos. Tente de novo.'), { statusCode: 409 });
+  }
+  return error;
 }
 
 async function stockMismatches(db) {

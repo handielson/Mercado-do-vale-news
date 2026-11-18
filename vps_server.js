@@ -27366,9 +27366,10 @@ async function ensureIncomingStockLocation(companyId, db = pool) {
     );
   } else {
     await db.query(
+      // So grava quando algo difere: dentro da transacao da entrada, um UPDATE sem mudanca prende a linha ate o commit.
       `UPDATE stock_deposits
        SET name='Deposito', type='warehouse', is_active=1, updated_at=CURRENT_TIMESTAMP
-       WHERE id=?`,
+       WHERE id=? AND NOT (name <=> 'Deposito' AND type <=> 'warehouse' AND is_active <=> 1)`,
       [depositId]
     );
   }
@@ -27390,7 +27391,8 @@ async function ensureIncomingStockLocation(companyId, db = pool) {
       `UPDATE stock_locations
        SET name='Entrada / Conferencia', description='Local automatico para saldo recebido de integracoes antes da conferencia fisica.',
            is_active=1, updated_at=CURRENT_TIMESTAMP
-       WHERE id=?`,
+       WHERE id=? AND NOT (name <=> 'Entrada / Conferencia' AND is_active <=> 1
+         AND description <=> 'Local automatico para saldo recebido de integracoes antes da conferencia fisica.')`,
       [locationId]
     );
   }
@@ -29881,12 +29883,17 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
     }
   }
   if (returnedToIncoming && updateResult.affectedRows === 1) {
-    await recordUnitEvent(pool, {
-      unitId: req.params.id, productId: rows[0].product_id, eventType: 'returned_to_incoming',
-      from: { depositId: previousUnit.deposit_id, locationId: previousUnit.location_id },
-      to: { depositId: returnedToIncoming.depositId, locationId: returnedToIncoming.locationId },
-      statusBefore: 'sold', statusAfter: 'available', reason: 'Saiu de uma venda: volta para conferência no Depósito.',
-    });
+    // O evento é registro; se falhar, o saldo ainda precisa ser recalculado e o estorno seguir.
+    try {
+      await recordUnitEvent(pool, {
+        unitId: req.params.id, productId: rows[0].product_id, eventType: 'returned_to_incoming',
+        from: { depositId: previousUnit.deposit_id, locationId: previousUnit.location_id },
+        to: { depositId: returnedToIncoming.depositId, locationId: returnedToIncoming.locationId },
+        statusBefore: 'sold', statusAfter: 'available', reason: 'Saiu de uma venda: volta para conferência no Depósito.',
+      });
+    } catch (eventError) {
+      console.error('[units] evento returned_to_incoming não gravado', req.params.id, eventError?.message);
+    }
   }
   await syncProductStock(rows[0].product_id);
   return rows[0];

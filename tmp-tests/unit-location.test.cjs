@@ -23,6 +23,11 @@ function fakeDb({ units, products, balances = {}, locations }) {
     async rollback() { state.rolledBack = true; state.units = JSON.parse(state.snapshot); state.events.length = state.eventsBefore; },
     async query(sql, params = []) {
       state.queries.push(sql);
+      if (state.failOn && state.failOn.test(sql)) throw Object.assign(new Error('Deadlock found'), { code: 'ER_LOCK_DEADLOCK' });
+      if (/^\s*SELECT id FROM units WHERE/i.test(sql) && !/FOR UPDATE/i.test(sql)) {
+        const wanted = new Set(params.flat().map(String));
+        return [state.units.filter(u => ['id', 'imei', 'imei_1', 'imei_2', 'serial'].some(k => u[k] != null && wanted.has(String(u[k])))).map(u => ({ id: u.id }))];
+      }
       if (/FROM units\b[\s\S]*FOR UPDATE/i.test(sql)) {
         const wanted = new Set(params.flat().map(String));
         return [state.units.filter(u => ['id', 'imei', 'imei_1', 'imei_2', 'serial'].some(k => u[k] != null && wanted.has(String(u[k]))))];
@@ -154,4 +159,25 @@ test('migração cria unit_events e triggers que barram UPDATE/DELETE', () => {
   assert.match(sql, /CREATE TRIGGER `mdv_unit_events_no_update` BEFORE UPDATE ON `unit_events`[\s\S]*SIGNAL SQLSTATE '45000'/);
   assert.match(sql, /CREATE TRIGGER `mdv_unit_events_no_delete` BEFORE DELETE ON `unit_events`[\s\S]*SIGNAL SQLSTATE '45000'/);
   assert.match(sql, /INDEX `idx_unit_events_unit` \(`unit_id`, `occurred_at`\)/);
+});
+
+test('trava só os aparelhos escolhidos, por id e em ordem', async () => {
+  const db = fakeDb({ units: [unit('u2', 'pA'), unit('u1', 'pA')], products });
+  await transferUnits({ db, identifiers: ['IMEI-u2', 'IMEI-u1'], toDepositId: LOJA.depositId, toLocationId: LOJA.locationId, actor, syncProductStock: syncSpy() });
+  const locking = db.state.queries.filter(q => /FOR UPDATE/i.test(q));
+  assert.equal(locking.length, 1);
+  assert.match(locking[0], /WHERE id IN \(\?\) ORDER BY id FOR UPDATE/);
+  assert.doesNotMatch(locking[0], /imei/i);
+  const lookupAt = db.state.queries.findIndex(q => /^\s*SELECT id FROM units WHERE/i.test(q));
+  assert.ok(lookupAt >= 0 && lookupAt < db.state.queries.indexOf(locking[0]));
+});
+
+test('deadlock ou espera de trava vira 409 "tente de novo" sem mudança', async () => {
+  const db = fakeDb({ units: [unit('u1', 'pA')], products });
+  db.state.failOn = /^\s*UPDATE units SET deposit_id/i;
+  await assert.rejects(
+    transferUnits({ db, identifiers: ['IMEI-u1'], toDepositId: LOJA.depositId, toLocationId: LOJA.locationId, actor, syncProductStock: syncSpy() }),
+    e => e.statusCode === 409 && /tente de novo/i.test(e.message));
+  assert.equal(db.state.rolledBack, true);
+  assert.equal(db.state.units[0].location_id, INC.locationId);
 });
