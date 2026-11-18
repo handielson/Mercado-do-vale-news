@@ -283,6 +283,9 @@ function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): Re
         finalization_error_summary: row.finalization_error_summary || null,
         cash_session_id: row.cash_session_id || null,
         refund_cash_session_id: row.refund_cash_session_id || null,
+        return_status: row.return_status || null,
+        returned_cents: row.returned_cents == null ? null : Number(row.returned_cents),
+        returned_cost_cents: row.returned_cost_cents == null ? null : Number(row.returned_cost_cents),
     };
 }
 

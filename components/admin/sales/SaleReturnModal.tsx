@@ -20,7 +20,7 @@ const NEEDS_PROOF = new Set(['pix', 'transfer', 'card', 'credit', 'debit']);
 
 type SaleLike = {
     id: string; created_at?: string; customer?: { name?: string; cpf_cnpj?: string | null } | null;
-    items: Array<{ id: string; product_name: string; quantity: number; total: number; product_id?: string | null }>;
+    items: Array<{ id: string; product_name: string; quantity: number; total: number; product_id?: string | null; combo_selections?: unknown; comboSelections?: unknown }>;
 };
 
 export function SaleReturnModal({ sale, existing, onClose, onDone }: { sale: SaleLike; existing?: SaleReturnRecord | null; onClose: () => void; onDone: () => void }) {
@@ -35,6 +35,8 @@ export function SaleReturnModal({ sale, existing, onClose, onDone }: { sale: Sal
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    // Uma chave por abertura do modal: repetir o envio (rede, duas abas) não cria outra devolução.
+    const [requestId] = useState(() => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`));
 
     useEffect(() => {
         if (existing) return;
@@ -47,6 +49,7 @@ export function SaleReturnModal({ sale, existing, onClose, onDone }: { sale: Sal
         amount_cents: amountText ? toCents(amountText) : undefined,
         refunds: mode === 'other' ? otherRows.filter(r => r.amount).map(r => ({ method: r.method, amount_cents: toCents(r.amount) })) : undefined,
         cash_session_id: await resolveRefundCashSessionId(),
+        client_request_id: requestId,
     });
 
     // Prévia: o servidor calcula valor e divisão sem gravar nada.
@@ -68,9 +71,11 @@ export function SaleReturnModal({ sale, existing, onClose, onDone }: { sale: Sal
         if (!reason.trim()) { setError('Informe o motivo da devolução.'); return; }
         setBusy(true); setError('');
         try {
-            const productIds = new Map(returnable.map(r => [r.saleItemId, r.productId]));
-            const created = await createSaleReturn(sale.id, await request(), productIds);
+            const combos = new Map(sale.items.filter(i => i.product_id).map(i => [String(i.product_id), i.combo_selections || i.comboSelections || null]));
+            const created = await createSaleReturn(sale.id, await request(), combos);
+            if (created.replay) { onDone(); onClose(); return; }
             setResult(created); onDone();
+            if (created.warnings?.length) setError(created.warnings.join(' '));
         } catch (err) { setError(apiError(err)); } finally { setBusy(false); }
     };
 

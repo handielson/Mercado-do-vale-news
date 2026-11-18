@@ -205,10 +205,13 @@ export function getSaleRealProfit(sale: SaleWithItems, profitData?: SaleProfitDa
         || (sale.items || []).length > 0;
 
     if (canRecalculateFromSaleData) {
+        // Devolução de itens: o valor devolvido sai da receita e o custo devolvido volta (centavos).
+        const returnedNet = Math.round(Number((sale as any).returned_cents || 0)) - Math.round(Number((sale as any).returned_cost_cents || 0));
         return getSaleCollectedTotal(sale, profitData)
             - getSaleCostTotal(sale, profitData)
             - operatorFeeTotal
-            - moneyToCents((sale as any).delivery_total || 0);
+            - moneyToCents((sale as any).delivery_total || 0)
+            - returnedNet;
     }
     if (Number(sale.profit) !== 0) return moneyToCents(sale.profit);
     return getSaleCollectedTotal(sale, profitData) - getSaleCostTotal(sale, profitData);

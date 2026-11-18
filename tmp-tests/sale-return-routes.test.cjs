@@ -26,7 +26,7 @@ function fakeDb(overrides = {}) {
     async query(sql, p = []) {
       if (/^SELECT \* FROM sales WHERE id = \? FOR UPDATE/.test(sql)) return [[s.sale]];
       if (/^SELECT \* FROM sale_items WHERE sale_id = \?/.test(sql)) return [s.items];
-      if (/^SELECT sale_item_id, quantity, value_cents FROM sale_return_items WHERE sale_id = \?/.test(sql)) return [s.returnItems];
+      if (/^SELECT sale_item_id, quantity, value_cents, suggested_cents FROM sale_return_items WHERE sale_id = \?/.test(sql)) return [s.returnItems];
       if (/^SELECT payment_index, goods_cents FROM sale_return_refunds WHERE sale_id = \?/.test(sql)) return [s.refunds.map(r => ({ payment_index: r[3], goods_cents: r[5] }))];
       if (/^SELECT payment_index, amount FROM sale_partial_refunds/.test(sql)) return [s.partial];
       if (/^SELECT status FROM pdv_cash_sessions WHERE id = \?/.test(sql)) return [s.cashOpen ? [{ status: 'open' }] : []];
@@ -34,7 +34,7 @@ function fakeDb(overrides = {}) {
       if (/^SELECT \* FROM units WHERE id = \? FOR UPDATE/.test(sql)) return [[s.unit]];
       if (/^UPDATE units SET status = 'available'/.test(sql)) { Object.assign(s.unit, { status: 'available', sale_id: null, deposit_id: p[0], location_id: p[1] }); return [{ affectedRows: 1 }]; }
       if (/^INSERT INTO sale_returns /.test(sql)) { s.returns.push(p); return [{}]; }
-      if (/^INSERT INTO sale_return_items /.test(sql)) { s.returnItems.push({ sale_item_id: p[3], quantity: p[5], value_cents: p[6] }); return [{}]; }
+      if (/^INSERT INTO sale_return_items /.test(sql)) { s.returnItems.push({ sale_item_id: p[3], quantity: p[5], value_cents: p[6], suggested_cents: p[7] }); return [{}]; }
       if (/^INSERT INTO sale_return_refunds /.test(sql)) { s.refunds.push(p); return [{}]; }
       if (/^UPDATE sales SET /.test(sql)) { s.saleUpdates.push({ sql, p }); return [{}]; }
       if (/^SELECT \* FROM sale_return_refunds WHERE return_id = \?/.test(sql)) return [s.refunds.map(r => ({ id: r[0], method: r[4], gateway_refund_id: r[9] }))];
@@ -42,6 +42,8 @@ function fakeDb(overrides = {}) {
       if (/^INSERT INTO sale_return_files /.test(sql)) { s.files.push({ kind: p[2], refund_id: p[3] }); return [{}]; }
       if (/^UPDATE sale_returns SET status = \?/.test(sql)) { s.lastStatus = p[0]; return [{}]; }
       if (/^SELECT \* FROM sale_returns WHERE id = \?/.test(sql)) return [[{ id: p[0], sale_id: SALE, code: 'D1' }]];
+      if (/^SELECT id FROM sale_returns WHERE client_request_id = \?/.test(sql)) return [s.returns.filter(r => r[9] === p[0]).map(r => ({ id: r[0] }))];
+      if (/^UPDATE sale_return_refunds SET gateway_status = \?/.test(sql)) { const r = s.refunds.find(x => x[0] === p[2]); if (r) { r.gatewayStatus = p[0]; r[9] = p[1]; } s.gatewayUpdates = (s.gatewayUpdates || 0) + 1; return [{}]; }
       throw new Error('SQL inesperado: ' + sql.slice(0, 90));
     },
   };
@@ -51,12 +53,12 @@ function deps(db, extra = {}) {
   const calls = { restore: [], events: [], syncs: [], cash: [], mp: [] };
   return {
     calls,
-    restoreStock: async (conn, saleId, limits, reason) => { calls.restore.push({ saleId, limits: Object.fromEntries(limits), reason }); },
+    restoreStock: async (conn, saleId, limits, reason) => { calls.restore.push({ saleId, limits: Object.fromEntries(limits), reason }); return [...limits].map(([product_id, q]) => ({ product_id, quantity_restored: q })); },
     recordUnitEvent: async (conn, ev) => { calls.events.push(ev); },
     syncProductStock: async (pid, conn, opts) => { calls.syncs.push({ pid, inTx: opts?.stockLocationInTransaction }); },
     recordCashEvent: async (conn, req, ev) => { calls.cash.push(ev); },
     ensureIncomingStockLocation: async () => ({ depositId: 'dep-d', locationId: 'loc-e' }),
-    refundMercadoPagoPix: async (id, cents) => { calls.mp.push([id, cents]); return { refundId: 'mp-r1' }; },
+    refundMercadoPagoPix: async (id, cents, key) => { calls.mp.push([id, cents]); calls.mpKeys = [...(calls.mpKeys || []), key]; calls.mpAfterCommit = db.s.committed; return { refundId: 'mp-r1' }; },
     ...extra,
   };
 }
@@ -182,3 +184,100 @@ test('devolução gravada traz o valor em dinheiro por extenso para o recibo', a
   assert.equal(r.cash_cents, 30000);
   assert.equal(r.cash_words, 'trezentos reais');
 });
+
+
+// Correções da revisão final
+const pixSale = () => {
+  const db = fakeDb({ sale: { total: 1490, payment_methods: JSON.stringify([{ method: 'pix', amount: 1490, total_with_fee: 1490, mercado_pago_payment_id: '987' }]) } });
+  db.s.items = [fixture.saleItems.find(i => i.product_sku === 'P3DRN15PRO')];
+  return db;
+};
+
+test('Pix do Mercado Pago só é estornado depois do commit, com chave fixa do estorno', async () => {
+  const db = pixSale(); const d = deps(db);
+  const r = await run(db, d, { items: [{ sale_item_id: db.s.items[0].id, quantity: 1 }], reason: 'x', refund_mode: 'same' });
+  assert.equal(d.calls.mpAfterCommit, true);
+  assert.equal(d.calls.mpKeys[0], `sale-return-${r.refunds[0].id}`);
+  assert.equal(r.refunds[0].gateway_refund_id, 'mp-r1');
+  assert.equal(db.s.refunds[0].gatewayStatus, 'done');
+});
+
+test('falha no Mercado Pago não desfaz a devolução: fica estorno manual com comprovante', async () => {
+  const db = pixSale(); const d = deps(db, { refundMercadoPagoPix: async () => { throw Object.assign(new Error('recusado'), { statusCode: 502 }); } });
+  const r = await run(db, d, { items: [{ sale_item_id: db.s.items[0].id, quantity: 1 }], reason: 'x', refund_mode: 'same' });
+  assert.equal(db.s.committed, true);
+  assert.equal(db.s.refunds[0].gatewayStatus, 'failed');
+  assert.match(r.warnings[0], /Pix não foi estornado no Mercado Pago/);
+  assert.equal(r.refunds[0].gateway_refund_id, null);
+});
+
+test('aparelho fora do estado esperado: nada é estornado no Mercado Pago', async () => {
+  const db = fakeDb({ sale: { payment_methods: JSON.stringify([{ method: 'pix', amount: 195432, total_with_fee: 195432, mercado_pago_payment_id: '987' }]), total: 195432 } });
+  db.s.unit.status = 'available';
+  const d = deps(db);
+  await assert.rejects(run(db, d, { items: [{ sale_item_id: poco.id, quantity: 1 }], reason: 'x', refund_mode: 'same' }), e => e.statusCode === 409);
+  assert.equal(d.calls.mp.length, 0);
+});
+
+test('mesma requisição repetida não cria outra devolução', async () => {
+  const db = fakeDb(); const d = deps(db);
+  const body = { items: [{ sale_item_id: cup.id, quantity: 1 }], reason: 'x', refund_mode: 'same', cash_session_id: 'cx', client_request_id: 'req-1' };
+  const first = await run(db, d, body);
+  const again = await run(db, d, body);
+  assert.equal(db.s.returns.length, 1);
+  assert.equal(again.id, first.id);
+  assert.equal(again.replay, true);
+});
+
+test('outra forma não passa do que ainda pode ser estornado da venda', async () => {
+  const db = fakeDb({ partial: [{ payment_index: 1, amount: 185118 }] });   // cartão já estornado inteiro antes
+  await assert.rejects(run(db, deps(db), { items: [{ sale_item_id: poco.id, quantity: 1 }], reason: 'x', refund_mode: 'other', refunds: [{ method: 'pix', amount_cents: 191617 }] }),
+    e => e.statusCode === 409 && /já foi estornado/i.test(e.message));
+});
+
+test('valor reduzido numa leva não volta na leva seguinte', async () => {
+  const db = fakeDb({ sale: { total: 30000, payment_methods: JSON.stringify([{ method: 'money', amount: 30000, total_with_fee: 30000 }]) } });
+  db.s.items = [{ ...cup, id: 'tri', quantity: 3, total: 30000, subtotal: 30000, unit_cost: 1000, serialized_unit_id: null }];
+  await run(db, deps(db), { items: [{ sale_item_id: 'tri', quantity: 1 }], reason: 'x', refund_mode: 'same', amount_cents: 5000, cash_session_id: 'cx' });
+  const prev = await run(db, deps(db), { items: [{ sale_item_id: 'tri', quantity: 2 }], reason: 'x', refund_mode: 'same', cash_session_id: 'cx', dry_run: true });
+  assert.equal(prev.suggested_cents, 20000);
+});
+
+test('venda antiga gravada em reais é recusada para estorno manual', async () => {
+  const db = fakeDb({ sale: { total: '199.90', payment_methods: JSON.stringify([{ method: 'money', amount: 199.9, total_with_fee: 199.9 }]) } });
+  await assert.rejects(run(db, deps(db), { items: [{ sale_item_id: cup.id, quantity: 1 }], reason: 'x', refund_mode: 'same', cash_session_id: 'cx' }),
+    e => e.statusCode === 409 && /reais/i.test(e.message));
+});
+
+test('resposta diz o que voltou ao estoque por produto (para o Bling)', async () => {
+  const db = fakeDb(); const d = deps(db);
+  const r = await run(db, d, { items: fixture.saleItems.map(i => ({ sale_item_id: i.id, quantity: 1 })), reason: 'x', refund_mode: 'same', cash_session_id: 'cx' });
+  const map = Object.fromEntries(r.restored.map(x => [x.product_id, x.quantity]));
+  assert.equal(map[poco.product_id], 1);
+  assert.equal(map[cup.product_id], 1);
+});
+
+test('venda guarda o devolvido e o custo devolvido em centavos', async () => {
+  const db = fakeDb(); const d = deps(db);
+  await run(db, d, { items: [{ sale_item_id: cup.id, quantity: 1 }], reason: 'x', refund_mode: 'other', amount_cents: 2386, refunds: [{ method: 'money', amount_cents: 2386 }], cash_session_id: 'cx' });
+  const upd = db.s.saleUpdates.at(-1);
+  assert.match(upd.sql, /returned_cents = COALESCE\(returned_cents, 0\) \+ \?/);
+  assert.match(upd.sql, /returned_cost_cents = COALESCE\(returned_cost_cents, 0\) \+ \?/);
+});
+
+for (const file of ['vps_server.js', 'vps_server.cjs']) {
+  const src = fs.readFileSync(file, 'utf8');
+  test(`${file}: estorno parcial antigo e cancelar bloqueados em venda com devolução`, () => {
+    const partial = src.slice(src.indexOf("fastify.post('/sales/:saleId/partial-refunds'"), src.indexOf("fastify.post('/sales/:saleId/partial-refunds'") + 3000);
+    assert.match(partial, /sale\.return_status[\s\S]{0,200}Esta venda tem devolução registrada: use Devolver itens\./);
+    assert.match(src, /name === 'sales' && previousSaleRow\?\.return_status[\s\S]{0,300}Esta venda tem devolução registrada: use Devolver itens\./);
+  });
+  test(`${file}: caixa trata venda devolvida inteira como entrada e sempre desconta a devolução`, () => {
+    assert.match(src, /CASE WHEN s\.payment_status = 'paid' OR s\.return_status = 'full' THEN 'completed' ELSE s\.payment_status END AS status/);
+    assert.doesNotMatch(src, /alreadyOut/);
+  });
+  test(`${file}: estorno Pix da devolução usa a chave de idempotência recebida`, () => {
+    assert.match(src, /async function refundSalePixViaMercadoPago\(paymentId, amountCents, idempotencyKey\)/);
+    assert.match(src, /'X-Idempotency-Key': idempotencyKey \|\| `sale-return-\$\{crypto\.randomUUID\(\)\}`/);
+  });
+}

@@ -28296,6 +28296,8 @@ fastify.post('/sales/:saleId/partial-refunds', { preHandler: requireSyncKeyOrAdm
   const [sales] = await pool.query('SELECT * FROM sales WHERE id = ? LIMIT 1', [saleId]);
   const sale = sales?.[0] || null;
   if (!sale) return reply.code(404).send({ error: 'Venda nao encontrada.' });
+  // Venda com devolução de itens: o saldo de cada forma de pagamento é controlado pela devolução.
+  if (sale.return_status) return reply.code(409).send({ error: 'Esta venda tem devolução registrada: use Devolver itens.' });
   const paymentStatus = String(sale.payment_status || '').trim().toLowerCase();
   const saleStatus = String(
     sale.status || (paymentStatus === 'paid' ? 'completed' : paymentStatus)
@@ -29579,12 +29581,12 @@ require('./services/saleReturnServer.cjs').registerSaleReturnRoutes(fastify, {
   sendWhatsappDocument: sendDeliveryWhatsappDocument,
 });
 
-async function refundSalePixViaMercadoPago(paymentId, amountCents) {
+async function refundSalePixViaMercadoPago(paymentId, amountCents, idempotencyKey) {
   const mp = await getPdvMercadoPagoAccessToken();
   if (!mp?.accessToken) throw Object.assign(new Error('Mercado Pago nao configurado.'), { statusCode: 400 });
   const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}/refunds`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${mp.accessToken}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': `sale-return-${crypto.randomUUID()}` },
+    headers: { Authorization: `Bearer ${mp.accessToken}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': idempotencyKey || `sale-return-${crypto.randomUUID()}` },
     body: JSON.stringify({ amount: amountCents / 100 }),
     signal: AbortSignal.timeout(15000),
   });
@@ -33305,6 +33307,10 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
     const [previousRows] = await pool.query(`SELECT * FROM \`${name}\` WHERE \`${pkCol}\` = ? LIMIT 1`, [pkValue]);
     previousSaleRow = previousRows?.[0] || null;
   }
+  // Cancelar/estornar a venda inteira depois de uma devolução de itens contaria o devolvido duas vezes.
+  if (name === 'sales' && previousSaleRow?.return_status && ['cancelled', 'refunded'].includes(String(body.payment_status || ''))) {
+    return reply.code(409).send({ error: 'Esta venda tem devolução registrada: use Devolver itens.' });
+  }
 
   // order-coin-redemption-v1: cancelar o pedido devolve as moedas resgatadas, uma unica vez.
   if (name === 'orders' && String(body.status || '') === 'cancelled') {
@@ -34314,7 +34320,7 @@ async function computeCashSessionSummary(db, sessionId) {
 
   const [salesRows] = await db.query(
     `SELECT s.id, s.total, s.payment_methods, s.payment_method,
-            CASE WHEN s.payment_status = 'paid' THEN 'completed' ELSE s.payment_status END AS status,
+            CASE WHEN s.payment_status = 'paid' OR s.return_status = 'full' THEN 'completed' ELSE s.payment_status END AS status,
             s.created_at, s.customer_id,
             c.name AS customer_name
        FROM sales s
@@ -34358,7 +34364,7 @@ async function computeCashSessionSummary(db, sessionId) {
     refunds.push({ id: row.id, status: row.status, total_cents: normalizeCashAmountCents(row.total), payments });
   }
 
-  // Devoluções de itens estornadas neste caixa. Venda devolvida inteira no mesmo caixa já saiu das entradas acima.
+  // Devoluções de itens estornadas neste caixa (a venda devolvida continua nas entradas do caixa dela).
   try {
     const [returnRefundRows] = await db.query(
       `SELECT rr.method, rr.refund_cents, s.cash_session_id AS sale_session_id, s.payment_status
@@ -34369,8 +34375,7 @@ async function computeCashSessionSummary(db, sessionId) {
       [sessionId]
     );
     for (const row of returnRefundRows || []) {
-      const alreadyOut = ['cancelled', 'refunded'].includes(String(row.payment_status)) && row.sale_session_id === sessionId;
-      if (!alreadyOut) addToMethod(normalizeCashMethodKey(row.method), -normalizeCashAmountCents(row.refund_cents));
+      addToMethod(normalizeCashMethodKey(row.method), -normalizeCashAmountCents(row.refund_cents));
     }
   } catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') throw error; }
 

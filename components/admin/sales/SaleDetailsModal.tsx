@@ -1102,7 +1102,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 </div>
                             )}
 
-                            {(['completed', 'cancelled'] as const).includes(sale.status) && (
+                            {saleReturns.length === 0 && (['completed', 'cancelled'] as const).includes(sale.status) && (
                                 <div className="mt-4 border-t border-slate-200 pt-4">
                                     {!showPartialRefund ? (
                                         <button
@@ -1435,7 +1435,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                         {/* Right: destructive actions */}
                         <div className="flex items-center gap-2">
 
-                            {sale.status === 'completed' && !confirmAction && (
+                            {sale.status === 'completed' && !confirmAction && saleReturns.length === 0 && (
                                 <>
                                     <button
                                         onClick={() => setConfirmAction('refund')}

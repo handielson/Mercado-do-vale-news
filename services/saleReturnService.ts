@@ -18,6 +18,7 @@ export interface SaleReturnRefund {
 }
 export interface SaleReturnFile { id: string; kind: 'proof' | 'signed'; refund_id: string | null; file_name: string; mime: string; created_at: string }
 export interface SaleReturnRecord {
+    replay?: boolean; warnings?: string[]; restored?: Array<{ product_id: string; quantity: number }>;
     id: string; code: string; sale_id: string; status: 'pendente' | 'finalizada'; reason: string; total_cents: number;
     refund_mode: 'same' | 'other'; created_at: string; operator_name?: string | null;
     cash_cents: number; cash_words: string | null;
@@ -35,6 +36,7 @@ export interface SaleReturnRequest {
     refund_mode: 'same' | 'other';
     refunds?: Array<{ method: string; amount_cents: number }>;
     cash_session_id?: string | null;
+    client_request_id?: string;
 }
 
 export const REFUND_METHOD_LABELS: Record<string, string> = {
@@ -51,12 +53,17 @@ export function previewSaleReturn(saleId: string, body: SaleReturnRequest) {
 }
 
 // Grava a devolução e, como no cancelamento, devolve o estoque no Bling; venda inteira também estorna moedas e créditos de entrega.
-export async function createSaleReturn(saleId: string, body: SaleReturnRequest, productIdsByItem: Map<string, string | null>) {
+// comboSelections: por produto, as escolhas de combo do item da venda (como no cancelamento).
+export async function createSaleReturn(saleId: string, body: SaleReturnRequest, comboSelectionsByProduct: Map<string, any>) {
     const created = await vpsClient.post<SaleReturnRecord>(`/admin/sales/${encodeURIComponent(saleId)}/returns`, body);
+    if (created.replay) return created;
     const notes = `Devolução #${created.code} da venda #${saleId.slice(0, 8).toUpperCase()}`;
-    for (const item of body.items) {
-        const productId = productIdsByItem.get(item.sale_item_id);
-        if (productId) await syncStockToBling(productId, item.quantity, notes, { operation: 'E' }).catch(error => console.error('[devolução] Bling', error));
+    // Só o que de fato voltou ao estoque local entra no Bling.
+    for (const row of created.restored || []) {
+        if (row.quantity > 0) {
+            await syncStockToBling(row.product_id, row.quantity, notes, { operation: 'E', comboSelections: comboSelectionsByProduct.get(row.product_id) || undefined })
+                .catch(error => console.error('[devolução] Bling', error));
+        }
     }
     if (created.full) {
         await deliveryCreditService.cancelBySaleId(saleId).catch(error => console.error('[devolução] créditos de entrega', error));

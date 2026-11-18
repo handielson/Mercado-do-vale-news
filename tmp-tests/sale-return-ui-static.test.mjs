@@ -24,3 +24,18 @@ assert.match(page, /Devoluções pendentes/);
 assert.match(routes, /path: "\/admin\/devolucoes"/);
 assert.match(layout, /to: '\/admin\/devolucoes'/);
 console.log('sale-return-ui static checks passed');
+
+// Correções da revisão final
+const presentation = read('utils/salePresentation.ts');
+const saleService = read('services/saleService.ts');
+assert.match(presentation, /returned_cents[\s\S]{0,200}returned_cost_cents/, 'lucro real desconta o devolvido');
+assert.match(saleService, /returned_cents: row\.returned_cents/);
+assert.match(saleService, /return_status: row\.return_status/);
+assert.match(details, /saleReturns\.length === 0 && \(\['completed', 'cancelled'\] as const\)\.includes\(sale\.status\)/, 'estorno parcial antigo some com devolução');
+assert.match(details, /sale\.status === 'completed' && !confirmAction && saleReturns\.length === 0/, 'cancelar/estornar somem com devolução');
+assert.match(modal, /client_request_id: requestId/);
+assert.match(modal, /crypto\.randomUUID\(\)/);
+assert.match(modal, /created\.warnings/);
+assert.match(service, /created\.restored/);
+assert.match(service, /comboSelections/);
+console.log('sale-return-ui fixes static checks passed');
