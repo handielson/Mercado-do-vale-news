@@ -32,11 +32,15 @@ function fakeDb({ units, products, balances = {}, locations }) {
         const wanted = new Set(params.flat().map(String));
         return [state.units.filter(u => ['id', 'imei', 'imei_1', 'imei_2', 'serial'].some(k => u[k] != null && wanted.has(String(u[k]))))];
       }
+      if (/SELECT DISTINCT company_id FROM products/i.test(sql)) {
+        const ids = new Set(params.flat().map(String));
+        return [[...new Set(Object.entries(products).filter(([pid]) => ids.has(pid)).map(([, p]) => p.company_id || 'co'))].map(company_id => ({ company_id }))];
+      }
       if (/FROM stock_locations/i.test(sql)) {
-        const [locationId, depositId, companyId] = params;
+        const [locationId, depositId] = params;
         const checksActive = /is_active\s*=\s*1/i.test(sql);
         return [locs.filter(l => l.id === locationId && (!depositId || l.deposit_id === depositId)
-          && (!checksActive || l.active !== false) && (companyId == null || l.company_id === companyId))];
+          && (!checksActive || l.active !== false))];
       }
       if (/^\s*UPDATE units SET deposit_id/i.test(sql)) {
         const [depositId, locationId, id] = params;
@@ -193,16 +197,16 @@ test('aparelho que já está no destino é pulado e avisado; os outros vão', as
   assert.equal(db.state.committed, true);
 });
 
-test('destino inativo ou de outra empresa → 404 sem mudar nada', async () => {
+test('destino inativo → 404; de outra empresa que a do produto → 409; sem mudar nada', async () => {
   const locations = [
     { id: INC.locationId, deposit_id: INC.depositId, name: 'Entrada', company_id: 'co', active: true },
     { id: 'loc-off', deposit_id: LOJA.depositId, name: 'Desativado', company_id: 'co', active: false },
     { id: 'loc-outra', deposit_id: LOJA.depositId, name: 'Outra empresa', company_id: 'co-2', active: true },
   ];
-  for (const toLocationId of ['loc-off', 'loc-outra']) {
+  for (const [toLocationId, code, pattern] of [['loc-off', 404, /Local de destino/], ['loc-outra', 409, /outra empresa/]]) {
     const db = fakeDb({ units: [unit('u1', 'pA')], products, locations });
-    await assert.rejects(transferUnits({ db, identifiers: ['IMEI-u1'], toDepositId: LOJA.depositId, toLocationId, companyId: 'co', actor, syncProductStock: syncSpy() }),
-      e => e.statusCode === 404 && /Local de destino/.test(e.message));
+    await assert.rejects(transferUnits({ db, identifiers: ['IMEI-u1'], toDepositId: LOJA.depositId, toLocationId, actor, syncProductStock: syncSpy() }),
+      e => e.statusCode === code && pattern.test(e.message));
     assert.equal(db.state.units[0].location_id, INC.locationId);
   }
 });
@@ -223,4 +227,11 @@ test('local pela metade (só depósito ou só local) → 400', () => {
   assert.throws(() => withIncomingDefault({ deposit_id: 'd' }, INC), e => e.statusCode === 400 && /depósito e o local/i.test(e.message));
   assert.throws(() => withIncomingDefault({ location_id: 'l' }, INC), e => e.statusCode === 400);
   assert.deepEqual(withIncomingDefault({}, INC), { deposit_id: INC.depositId, location_id: INC.locationId });
+});
+
+test('destino da empresa do produto vale mesmo fora da empresa padrão', async () => {
+  const locations = [{ id: 'loc-2', deposit_id: 'dep-2', name: 'Filial', company_id: 'co-2', active: true }];
+  const db = fakeDb({ units: [unit('u1', 'pC')], products: { ...products, pC: { sku: 'C', name: 'Produto C', company_id: 'co-2' } }, locations });
+  const result = await transferUnits({ db, identifiers: ['IMEI-u1'], toDepositId: 'dep-2', toLocationId: 'loc-2', actor, syncProductStock: syncSpy() });
+  assert.equal(result.moved.length, 1);
 });

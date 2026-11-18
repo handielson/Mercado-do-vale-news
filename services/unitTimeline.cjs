@@ -210,8 +210,9 @@ function buildUnitTimeline(input = {}) {
       costCents: unit.cost_price != null ? Number(unit.cost_price) : null,
       priceCents: input.product?.price_retail != null ? Math.round(Number(input.product.price_retail)) : null,
       daysInStock,
-      timesSold: list.filter(e => e.type === 'sold' || (e.type === 'legacy_sale' && !e._closed)).length,
-      timesReturned: list.filter(e => e.type === 'returned_to_stock').length,
+      // Venda antiga cancelada/estornada: foi vendida e voltou antes do diário existir.
+      timesSold: list.filter(e => e.type === 'sold' || e.type === 'legacy_sale').length,
+      timesReturned: list.filter(e => e.type === 'returned_to_stock' || (e.type === 'legacy_sale' && e._closed)).length,
     },
     events: list.map(({ _closed, ...event }) => event),
   };

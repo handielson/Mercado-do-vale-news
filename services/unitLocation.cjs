@@ -65,17 +65,17 @@ async function recordUnitEvent(db, e) {
   return id;
 }
 
-async function transferUnits({ db, identifiers, toDepositId, toLocationId, companyId = null, actor, reason, syncProductStock }) {
+async function transferUnits({ db, identifiers, toDepositId, toLocationId, actor, reason, syncProductStock }) {
   const wanted = [...new Set((Array.isArray(identifiers) ? identifiers : []).map(v => String(v ?? '').trim()).filter(Boolean))];
   if (!wanted.length) fail(400, 'Bipe ou digite pelo menos um IMEI ou serial.');
   if (wanted.length > MAX_IDENTIFIERS) fail(400, `No máximo ${MAX_IDENTIFIERS} aparelhos por transferência.`);
   await db.beginTransaction();
   try {
-    // Destino precisa estar ativo (local e depósito) e ser da mesma empresa.
+    // Destino precisa estar ativo (local e depósito); a empresa é conferida com a dos produtos logo abaixo.
     const [destRows] = await db.query(
-      `SELECT l.id, l.deposit_id, l.name FROM stock_locations l JOIN stock_deposits d ON d.id = l.deposit_id
-        WHERE l.id = ? AND l.deposit_id = ? AND (? IS NULL OR l.company_id = ?) AND l.is_active = 1 AND d.is_active = 1 LIMIT 1`,
-      [toLocationId, toDepositId, companyId, companyId]);
+      `SELECT l.id, l.deposit_id, l.name, l.company_id FROM stock_locations l JOIN stock_deposits d ON d.id = l.deposit_id
+        WHERE l.id = ? AND l.deposit_id = ? AND l.is_active = 1 AND d.is_active = 1 LIMIT 1`,
+      [toLocationId, toDepositId]);
     if (!destRows?.length) fail(404, 'Local de destino não encontrado.');
     // Acha os ids sem travar e depois trava só esses aparelhos, sempre na mesma ordem (evita travar a tabela e deadlock).
     const [found] = await db.query(
@@ -96,6 +96,12 @@ async function transferUnits({ db, identifiers, toDepositId, toLocationId, compa
         continue;
       }
       if (!plan.some(p => p.unit.id === unit.id)) plan.push({ unit, identifier });
+    }
+    if (plan.length) {
+      const [companies] = await db.query('SELECT DISTINCT company_id FROM products WHERE id IN (?)', [[...new Set(plan.map(p => p.unit.product_id))]]);
+      if ((companies || []).some(c => c.company_id && String(c.company_id) !== String(destRows[0].company_id))) {
+        fail(409, 'O local de destino é de outra empresa que a dos aparelhos.');
+      }
     }
     const moved = [];
     for (const { unit } of plan) {

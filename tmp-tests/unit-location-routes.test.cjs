@@ -116,10 +116,10 @@ test('deploy da API sobe os módulos novos', () => {
   for (const mod of ['services/unitLocation.cjs', 'services/unitLocationServer.cjs']) assert.ok(deploy.includes(`'${mod}'`), mod);
 });
 
-test('transferência confere o destino na empresa da loja', async t => {
+test('transferência não fixa a empresa padrão (a regra usa a empresa do produto)', async t => {
   const { app, calls } = setup(t);
   await app.inject({ method: 'POST', url: '/admin/units/transfers', payload: transferBody });
-  assert.equal(calls.transfer[0].companyId, 'company');
+  assert.equal(calls.transfer[0].companyId, undefined);
 });
 
 test('entrada por foto recalcula o saldo por local na mesma transação', () => {

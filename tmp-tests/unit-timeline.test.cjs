@@ -187,14 +187,36 @@ test('venda anterior ao diário que também tem registro de venda aparece uma ve
   assert.equal(current.timesSold, 1);
 });
 
-test('venda antiga cancelada não conta como vendida e diz que foi cancelada', () => {
+test('venda antiga cancelada conta como vendida e devolvida (a volta foi antes do diário) e diz que foi cancelada', () => {
   const input = clone();
   const old = { ...input.sales[0], id: 'old-sale', payment_status: 'cancelled' };
   input.sales.push(old);
   input.journal.unshift(journalRow(input, 'existing_sale_reference', '2026-09-01T10:00:00.000000Z', null, { unit: input.unit, sale: old }));
   const { events, current } = buildUnitTimeline(input);
   assert.match(events.find(e => e.saleId === 'old-sale').title, /\(cancelada\)/);
-  assert.equal(current.timesSold, 1);
+  assert.equal(current.timesSold, 2);
+  assert.equal(current.timesReturned, 2);
+});
+
+test('venda antiga estornada segue a mesma regra da cancelada', () => {
+  const input = clone();
+  const old = { ...input.sales[0], id: 'old-refund', payment_status: 'refunded' };
+  input.sales.push(old);
+  input.journal.unshift(journalRow(input, 'existing_sale_reference', '2026-09-01T10:00:00.000000Z', null, { unit: input.unit, sale: old }));
+  const { events, current } = buildUnitTimeline(input);
+  assert.match(events.find(e => e.saleId === 'old-refund').title, /\(estornada\)/);
+  assert.equal(current.timesSold, 2);
+  assert.equal(current.timesReturned, 2);
+});
+
+test('venda antiga ainda ativa conta só como vendida', () => {
+  const input = clone();
+  const old = { ...input.sales[0], id: 'old-paid', payment_status: 'paid' };
+  input.sales.push(old);
+  input.journal.unshift(journalRow(input, 'existing_sale_reference', '2026-09-01T10:00:00.000000Z', null, { unit: input.unit, sale: old }));
+  const { current } = buildUnitTimeline(input);
+  assert.equal(current.timesSold, 2);
+  assert.equal(current.timesReturned, 1);
 });
 
 test('vendido mostra também o total da venda', () => {

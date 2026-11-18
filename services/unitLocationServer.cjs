@@ -31,7 +31,6 @@ function registerUnitLocationRoutes(app, deps) {
     try {
       return await impl.transferUnits({
         db: conn, identifiers: body.identifiers, toDepositId: body.to_deposit_id, toLocationId: body.to_location_id,
-        companyId: await getDefaultStockCompanyId(),
         reason: body.reason ? String(body.reason).trim() : null, actor: await actorOf(req.unitLocationAuth), syncProductStock,
       });
     } catch (error) { return send(reply, error); }

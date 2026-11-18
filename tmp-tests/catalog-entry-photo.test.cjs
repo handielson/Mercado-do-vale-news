@@ -25,13 +25,13 @@ const photoLine = (patch = {}) => ({ source: 'foto', photo_intake_id: 'I1', labe
 const manualLine = (patch = {}) => ({ source: 'manual', model_id: 'm1', configuration: { ram: '8GB', storage: '256GB' }, color: 'Verde',
   identity: { imei1: IMEI_B }, quantity: 1, cost_cents: 95000, location_id: 'L1', prices: PRICES, ...patch });
 
-async function setup(t, seed = {}) {
+async function setup(t, seed = {}, extraDeps = {}) {
   const db = fakeDb({ intakes: [intake()], ...seed });
   const app = Fastify();
   t.after(() => app.close());
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-photo-entry-'));
   const photo = registerSmartphonePhotoIntakeRoutes(app, { pool: db.pool, requireSyncKey: async () => {},
-    inventoryCostSync: async () => {}, baseDir });
+    inventoryCostSync: async () => {}, baseDir, ...extraDeps });
   db.deps.finalizePhotoIntake = photo.finalizePhotoIntake;
   return { db, app, photo };
 }
@@ -349,4 +349,16 @@ test('vps_server.js e vps_server.cjs repassam finalizePhotoIntake à porta únic
   }
   const entry = fs.readFileSync(path.join(__dirname, '..', 'services', 'catalogEntryServer.cjs'), 'utf8');
   assert.equal((entry.match(/requestHeaders: request\.headers/g) || []).length, 2, 'prévia e confirmação repassam request.headers');
+});
+
+test('entrada por foto com recálculo de saldo não roda o custo duas vezes', async t => {
+  const calls = { cost: 0, stock: [] };
+  const { db } = await setup(t, {}, {
+    inventoryCostSync: async () => { calls.cost++; },
+    syncProductStock: async (pid, conn, opts) => { calls.stock.push(opts); },
+  });
+  await preview(db, [photoLine()]);
+  assert.equal(calls.stock.length, 1);
+  assert.equal(calls.stock[0].stockLocationInTransaction, true);
+  assert.equal(calls.cost, 0, 'o recálculo de saldo já sincroniza o custo');
 });
