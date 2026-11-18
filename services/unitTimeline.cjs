@@ -150,7 +150,8 @@ function buildUnitTimeline(input = {}) {
 
   // Mudanças de local (Parte 2): unit_events, gravado só pela API, com quem fez.
   const place = (depositId, locationId) => {
-    const location = locations.get(String(locationId || ''));
+    if (!locationId) return 'sem local';
+    const location = locations.get(String(locationId));
     if (!location) return 'local removido';
     const deposit = deposits.get(String(depositId || location.deposit_id || ''));
     return deposit ? `${deposit.name} / ${location.name}` : location.name;

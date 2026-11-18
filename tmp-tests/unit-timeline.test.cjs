@@ -171,9 +171,11 @@ test('volta da venda para o Depósito aparece logo acima do "Voltou ao estoque"'
   assert.match(events[0].detail, /^Deposito \/ Entrada \/ Conferencia/);
 });
 
-test('local sem nome conhecido aparece como "local removido"', () => {
+test('local sem nome conhecido aparece como "local removido"; sem local, "sem local"', () => {
   const input = { ...clone(), unitEvents: [ev('e4', 'transfer', '2026-11-19 10:00:00', { from_location_id: 'x', to_location_id: 'y' })] };
   assert.equal(buildUnitTimeline(input).events[0].detail, 'local removido → local removido');
+  const empty = { ...clone(), unitEvents: [ev('e5', 'transfer', '2026-11-19 10:00:00', { from_location_id: null, to_location_id: 'y' })] };
+  assert.equal(buildUnitTimeline(empty).events[0].detail, 'sem local → local removido');
 });
 
 // Ajustes pequenos (parte 1)

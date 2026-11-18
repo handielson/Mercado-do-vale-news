@@ -1365,7 +1365,8 @@ export function StockLocationsPage() {
 
     const okCount = transferRequests.length - failed.length;
     if (failed.length > 0) {
-      setBatchError(`${okCount} transferência(s) ok, ${failed.length} falharam: ${failed.slice(0, 3).map(f => f.sku || '?').join(', ')}${failed.length > 3 ? '…' : ''}`);
+      const serializedHint = failed.some(f => /IMEI/.test(f.error)) ? ' Produto com IMEI se transfere pelos aparelhos em Aparelhos → Transferir aparelhos.' : '';
+      setBatchError(`${okCount} transferência(s) ok, ${failed.length} falharam: ${failed.slice(0, 3).map(f => `${f.sku || '?'}: ${f.error}`).join('; ')}${failed.length > 3 ? '…' : ''}${serializedHint}`);
     } else {
       // Sucesso total: limpa lista e fecha
       setBatchItems([]);

@@ -39,6 +39,9 @@ function unitEventsMigration() {
 }
 
 function withIncomingDefault(unit = {}, incoming) {
+  if (Boolean(unit.deposit_id) !== Boolean(unit.location_id)) {
+    throw Object.assign(new Error('Informe o depósito e o local juntos, ou nenhum dos dois.'), { statusCode: 400, halfLocation: true });
+  }
   if (unit.deposit_id && unit.location_id) return { deposit_id: unit.deposit_id, location_id: unit.location_id };
   return { deposit_id: incoming.depositId, location_id: incoming.locationId };
 }
@@ -62,13 +65,17 @@ async function recordUnitEvent(db, e) {
   return id;
 }
 
-async function transferUnits({ db, identifiers, toDepositId, toLocationId, actor, reason, syncProductStock }) {
+async function transferUnits({ db, identifiers, toDepositId, toLocationId, companyId = null, actor, reason, syncProductStock }) {
   const wanted = [...new Set((Array.isArray(identifiers) ? identifiers : []).map(v => String(v ?? '').trim()).filter(Boolean))];
   if (!wanted.length) fail(400, 'Bipe ou digite pelo menos um IMEI ou serial.');
   if (wanted.length > MAX_IDENTIFIERS) fail(400, `No máximo ${MAX_IDENTIFIERS} aparelhos por transferência.`);
   await db.beginTransaction();
   try {
-    const [destRows] = await db.query('SELECT id, deposit_id, name FROM stock_locations WHERE id = ? AND deposit_id = ? LIMIT 1', [toLocationId, toDepositId]);
+    // Destino precisa estar ativo (local e depósito) e ser da mesma empresa.
+    const [destRows] = await db.query(
+      `SELECT l.id, l.deposit_id, l.name FROM stock_locations l JOIN stock_deposits d ON d.id = l.deposit_id
+        WHERE l.id = ? AND l.deposit_id = ? AND (? IS NULL OR l.company_id = ?) AND l.is_active = 1 AND d.is_active = 1 LIMIT 1`,
+      [toLocationId, toDepositId, companyId, companyId]);
     if (!destRows?.length) fail(404, 'Local de destino não encontrado.');
     // Acha os ids sem travar e depois trava só esses aparelhos, sempre na mesma ordem (evita travar a tabela e deadlock).
     const [found] = await db.query(
@@ -77,6 +84,7 @@ async function transferUnits({ db, identifiers, toDepositId, toLocationId, actor
     const ids = [...new Set((found || []).map(r => String(r.id)))].sort();
     const [rows] = ids.length ? await db.query('SELECT * FROM units WHERE id IN (?) ORDER BY id FOR UPDATE', [ids]) : [[]];
     const plan = [];
+    const skipped = [];
     for (const identifier of wanted) {
       const matches = (rows || []).filter(u => ['imei_1', 'imei_2', 'imei', 'serial', 'id'].some(k => u[k] != null && String(u[k]) === identifier));
       if (!matches.length) fail(404, `IMEI ou serial não encontrado: ${identifier}.`);
@@ -84,7 +92,8 @@ async function transferUnits({ db, identifiers, toDepositId, toLocationId, actor
       const unit = matches[0];
       if (!MOVABLE.has(String(unit.status))) fail(409, `${identifier} está ${STATUS_WORDS[unit.status] || unit.status} e não pode ser transferido.`);
       if (String(unit.deposit_id || '') === String(toDepositId) && String(unit.location_id || '') === String(toLocationId)) {
-        fail(409, `${identifier} já está nesse local.`);
+        if (!skipped.some(s => s.unitId === unit.id)) skipped.push({ identifier, unitId: unit.id, reason: 'já está nesse local' });
+        continue;
       }
       if (!plan.some(p => p.unit.id === unit.id)) plan.push({ unit, identifier });
     }
@@ -102,7 +111,7 @@ async function transferUnits({ db, identifiers, toDepositId, toLocationId, actor
       await syncProductStock(productId, db, { stockLocationInTransaction: true });
     }
     await db.commit();
-    return { moved };
+    return { moved, skipped };
   } catch (error) {
     await db.rollback();
     throw lockConflict(error);
@@ -142,7 +151,7 @@ async function backfillUnitLocations({ db, incoming, apply, actor, syncProductSt
   try {
     const moved = [];
     for (const u of candidates) {
-      const [result] = await db.query('UPDATE units SET deposit_id = ?, location_id = ? WHERE id = ? AND deposit_id IS NULL',
+      const [result] = await db.query("UPDATE units SET deposit_id = ?, location_id = ? WHERE id = ? AND deposit_id IS NULL AND status IN ('available','reserved')",
         [incoming.depositId, incoming.locationId, u.id]);
       if (result?.affectedRows !== 1) continue;
       await recordUnitEvent(db, { unitId: u.id, productId: u.product_id, eventType: 'location_set', actor,

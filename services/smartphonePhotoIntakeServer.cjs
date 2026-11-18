@@ -1160,6 +1160,8 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
       [PHOTO_INTAKE_STATUS.COMPLETED, productId, unitId, intake.price_retail, intake.price_reseller, intake.price_wholesale, intake.id]
     );
     await (dependencies.inventoryCostSync || require('./smartphoneMovingAverageServer.cjs').synchronizeProduct)(pool, productId, connection);
+    // Saldo por local acompanha o aparelho novo no Depósito.
+    if (dependencies.syncProductStock) await dependencies.syncProductStock(productId, connection, { stockLocationInTransaction: true });
     // Lido na própria transação: quem chama ainda não fez COMMIT.
     return { intake: toPublicIntake(await loadIntake(intake.id, connection)), product_id: productId, parent_id: localFamily.parent_id, unit_id: unitId, idempotent: false,
       created: { family: Boolean(localFamily.created), variation: !existingProductId } };

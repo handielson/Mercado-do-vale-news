@@ -15,13 +15,19 @@ export interface StockMismatch {
     balance: number;
 }
 
+export interface UnitTransferSkipped {
+    identifier: string;
+    unitId: string;
+    reason: string;
+}
+
 export async function transferUnits(input: {
     identifiers: string[];
     toDepositId: string;
     toLocationId: string;
     reason?: string;
-}): Promise<{ moved: UnitTransferMoved[] }> {
-    return vpsClient.post<{ moved: UnitTransferMoved[] }>('/admin/units/transfers', {
+}): Promise<{ moved: UnitTransferMoved[]; skipped?: UnitTransferSkipped[] }> {
+    return vpsClient.post<{ moved: UnitTransferMoved[]; skipped?: UnitTransferSkipped[] }>('/admin/units/transfers', {
         identifiers: input.identifiers,
         to_deposit_id: input.toDepositId,
         to_location_id: input.toLocationId,

@@ -64,7 +64,9 @@ export default function UnitTransferPage() {
         try {
             const result = await transferUnits({ identifiers: ready.map(r => r.identifier), toDepositId: depositId, toLocationId: locationId, reason });
             const dest = [deposits.find(d => d.id === depositId)?.name, locations.find(l => l.id === locationId)?.name].filter(Boolean).join(' / ');
-            setNotice(`${result.moved.length} aparelho(s) transferido(s) para ${dest}.`);
+            const skipped = result.skipped || [];
+            const skippedText = skipped.length ? ` ${skipped.length} já estava(m) nesse local: ${skipped.map(s => s.identifier).join(', ')}.` : '';
+            setNotice(`${result.moved.length} aparelho(s) transferido(s) para ${dest}.${skippedText}`);
             setRows(list => list.filter(r => !ready.includes(r)));
         } catch (err) {
             setError(errorText(err));

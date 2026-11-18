@@ -60,13 +60,13 @@ test('conferência devolve os produtos com saldo sem IMEI', async t => {
   assert.deepEqual((await app.inject({ url: '/admin/units/stock-mismatches' })).json(), { rows });
 });
 
-test('preenchimento inicial exige chave de sync e respeita dryRun', async t => {
+test('preenchimento inicial exige chave de sync e só grava com ?apply=1', async t => {
   const denied = setup(t);
-  assert.equal((await denied.app.inject({ method: 'POST', url: '/admin/units/location-backfill?dryRun=1' })).statusCode, 401);
+  assert.equal((await denied.app.inject({ method: 'POST', url: '/admin/units/location-backfill' })).statusCode, 401);
   const { app, calls } = setup(t, { sync: true });
-  assert.equal((await app.inject({ method: 'POST', url: '/admin/units/location-backfill?dryRun=1' })).statusCode, 200);
+  assert.equal((await app.inject({ method: 'POST', url: '/admin/units/location-backfill' })).statusCode, 200);
   assert.equal(calls.backfill[0].apply, false);
-  await app.inject({ method: 'POST', url: '/admin/units/location-backfill' });
+  await app.inject({ method: 'POST', url: '/admin/units/location-backfill?apply=1' });
   assert.equal(calls.backfill[1].apply, true);
   assert.deepEqual(calls.backfill[1].incoming, { depositId: 'D', locationId: 'L', });
 });
@@ -112,4 +112,25 @@ test('entrada por foto sem local usa o Depósito', () => {
 test('deploy da API sobe os módulos novos', () => {
   const deploy = fs.readFileSync('deploy-vps-server-only.cjs', 'utf8');
   for (const mod of ['services/unitLocation.cjs', 'services/unitLocationServer.cjs']) assert.ok(deploy.includes(`'${mod}'`), mod);
+});
+
+test('transferência confere o destino na empresa da loja', async t => {
+  const { app, calls } = setup(t);
+  await app.inject({ method: 'POST', url: '/admin/units/transfers', payload: transferBody });
+  assert.equal(calls.transfer[0].companyId, 'company');
+});
+
+test('entrada por foto recalcula o saldo por local na mesma transação', () => {
+  const src = fs.readFileSync('services/smartphonePhotoIntakeServer.cjs', 'utf8');
+  assert.match(src, /dependencies\.syncProductStock\(productId, connection, \{ stockLocationInTransaction: true \}\)/);
+  for (const file of ['vps_server.js', 'vps_server.cjs']) {
+    assert.match(fs.readFileSync(file, 'utf8'), /getIncomingStockLocation: ensureIncomingStockLocation, syncProductStock \}/, file);
+  }
+});
+
+test('servidor devolve 400 quando o local vem pela metade', () => {
+  for (const file of ['vps_server.js', 'vps_server.cjs']) {
+    const src = fs.readFileSync(file, 'utf8');
+    assert.ok((src.match(/err\.statusCode === 400 && err\.halfLocation/g) || []).length >= 2, file);
+  }
 });

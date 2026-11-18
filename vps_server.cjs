@@ -29697,7 +29697,9 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
   if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
   // Todo aparelho nasce no Depósito / Entrada / Conferencia quando a entrada não informa o local.
   const [[unitCompanyRow]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [u.product_id]);
-  const loc = withIncomingDefault(u, await ensureIncomingStockLocation(unitCompanyRow?.company_id));
+  let loc;
+  try { loc = withIncomingDefault(u, await ensureIncomingStockLocation(unitCompanyRow?.company_id)); }
+  catch (err) { if (err.statusCode === 400 && err.halfLocation) return reply.code(400).send({ error: err.message }); throw err; }
 
   await pool.query(
     `INSERT INTO units (
@@ -29787,6 +29789,7 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
       productIds.add(u.product_id);
       results.inserted++;
     } catch (err) {
+      // err.statusCode === 400 && err.halfLocation: local pela metade vira erro do item, os outros seguem.
       results.errors.push({ serial: u.serial, imei_1: u.imei_1, error: err.message });
     }
   }
@@ -43928,7 +43931,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 
 
 // Start
-const photoIntakeRoutes = registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname, getIncomingStockLocation: ensureIncomingStockLocation });
+const photoIntakeRoutes = registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname, getIncomingStockLocation: ensureIncomingStockLocation, syncProductStock });
 registerSmartphonePriceGroupRoutes(fastify, { pool, requireSyncKey });
 require('./services/catalogEntryServer.cjs').registerCatalogEntryRoutes(fastify, { pool, auth: requireSyncKeyOrAdmin, getActorId: async (request) => (await getVpsBearerAuthContext(request))?.userId || null, deps: { syncProductStock: (id, db) => syncProductStock(id, db, { stockLocationInTransaction: true }), syncProductStockFromLocations: (id, db) => syncProductStockFromLocations(id, db), insertStockMovement: (row, db) => insertStockMovement(row, db), getDefaultCompanyId: () => getDefaultStockCompanyId(), finalizePhotoIntake: photoIntakeRoutes.finalizePhotoIntake, ensurePhotoIntakeSchema: photoIntakeRoutes.ensureSchema } });
 registerMercadoLivreRoutes(fastify, {

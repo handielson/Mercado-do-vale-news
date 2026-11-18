@@ -343,7 +343,7 @@ test('rota antiga de finalização responde igual', async t => {
 test('vps_server.js e vps_server.cjs repassam finalizePhotoIntake à porta única', () => {
   for (const file of ['vps_server.js', 'vps_server.cjs']) {
     const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-    assert.match(source, /const photoIntakeRoutes = registerSmartphonePhotoIntakeRoutes\(fastify, \{ pool, requireSyncKey, baseDir: __dirname, getIncomingStockLocation: ensureIncomingStockLocation \}\);/, file);
+    assert.match(source, /const photoIntakeRoutes = registerSmartphonePhotoIntakeRoutes\(fastify, \{ pool, requireSyncKey, baseDir: __dirname, getIncomingStockLocation: ensureIncomingStockLocation, syncProductStock \}\);/, file);
     assert.match(source, /registerCatalogEntryRoutes\(fastify, \{[^\n]*deps: \{[^\n]*finalizePhotoIntake: photoIntakeRoutes\.finalizePhotoIntake/, file);
     assert.match(source, /registerCatalogEntryRoutes\(fastify, \{[^\n]*ensurePhotoIntakeSchema: photoIntakeRoutes\.ensureSchema/, file);
   }
