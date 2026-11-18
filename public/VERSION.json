@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.865-ajustes-aparelho-devolucao",
+  "version": "v1.2.866-aparelho-itens-de-fora",
   "date": "2026-11-18",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.865-ajustes-aparelho-devolucao",
+  "tag": "v1.2.866-aparelho-itens-de-fora",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Ajustes pequenos das versões 862 a 864: página do aparelho (venda antiga sem repetir, cancelada não conta, total da venda, quem cadastrou por foto, diário pelos mais novos, mensagens), local do aparelho (aparelho já no destino é pulado e avisado, destino ativo da loja, local pela metade recusado, preenchimento inicial só com ?apply=1, entrada por foto acerta o saldo por local) e devolução (arquivo de devolução inexistente, falha do WhatsApp registrada, caixa fechado não recebe estorno sem dinheiro, centavos dos juros do crédito nunca passam do pago).",
+  "summary": "Itens deixados de fora da 865: entrada por foto sincroniza o custo médio uma vez só; venda antiga (anterior ao diário) cancelada ou estornada conta como vendida e devolvida; transferência de aparelho confere o destino com a empresa do produto, não com a empresa padrão.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,60 +30,38 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "services/unitTimeline.cjs",
-    "services/unitTimelineServer.cjs",
+    "services/smartphonePhotoIntakeServer.cjs",
     "services/unitLocation.cjs",
     "services/unitLocationServer.cjs",
-    "services/smartphonePhotoIntakeServer.cjs",
-    "services/saleReturnCore.cjs",
-    "services/saleReturnServer.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
-    "services/unitLocationService.ts",
-    "pages/admin/inventory/UnitHistoryPage.tsx",
-    "pages/admin/inventory/UnitTransferPage.tsx",
-    "pages/admin/inventory/StockLocationsPage.tsx",
-    "tmp-tests/unit-timeline.test.cjs",
-    "tmp-tests/unit-timeline-routes.test.cjs",
+    "services/unitTimeline.cjs",
+    "tmp-tests/catalog-entry-photo.test.cjs",
     "tmp-tests/unit-location.test.cjs",
     "tmp-tests/unit-location-routes.test.cjs",
-    "tmp-tests/sale-return-core.test.cjs",
-    "tmp-tests/sale-return-routes.test.cjs",
-    "tmp-tests/catalog-entry-photo.test.cjs",
-    "tmp-tests/signed-warranty-core.test.cjs",
-    "tmp-tests/smartphone-price-groups.test.cjs",
-    "tmp-tests/unit-history-page-static.test.mjs",
-    "tmp-tests/unit-transfer-page-static.test.mjs",
+    "tmp-tests/unit-timeline.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-18-v1.2.865-ajustes-aparelho-devolucao.md"
+    "docs/versoes/2026-11-18-v1.2.866-aparelho-itens-de-fora.md"
   ],
   "validations": [
-    "unit-timeline + rotas 30/30",
-    "unit-location + rotas 37/37",
-    "sale-return core + rotas 45/45",
-    "catalog-entry-photo, signed-warranty-core, smartphone-price-groups verdes",
-    "static: página do aparelho, transferir, devolução ok",
-    "suíte tmp-tests: nenhuma falha nova contra a v1.2.864; 2 testes antigos voltaram a passar",
-    "tsc sem erro novo (239 linhas, igual à base)",
-    "npm run build ok",
-    "revisão independente: 1 importante (ordem do diário) + 4 menores corrigidos com teste"
+    "unit-location + rotas, unit-timeline + rotas, catalog-entry-photo: 95/95",
+    "suíte tmp-tests: nenhuma falha nova contra a v1.2.865 (1 teste de busca instável em paralelo, passa sozinho)",
+    "node --check dos módulos na VPS"
   ],
   "site_release": {
     "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
     "previous": "/var/www/mdv-site/releases/20261118-131117-v1-2-864-devolucao-de-itens",
     "source_commit": "a0bc9b4",
-    "note": "Ajustes da página do aparelho, transferir aparelhos e lote de locais."
+    "note": "Site sem mudança nesta versão (segue a release da v1.2.865)."
   },
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
     "mode": "upload manual",
-    "commit": "a0bc9b4",
-    "deployed_at": "2026-11-18T16:41Z",
-    "backup": "/var/www/mdv-api/backups/ajustes-865-1795020092",
-    "note": "7 módulos + servidores; node --check ok; /status 200; PM2 online; sem erro no log; rotas sem login/chave → 401."
+    "commit": "f0119ef0",
+    "deployed_at": "2026-11-18T16:52Z",
+    "backup": "/var/www/mdv-api/backups/itens-866-1795020765",
+    "note": "4 módulos; /status 200; PM2 online; sem erro no log; transferir sem login → 401."
   },
   "nginx_release": {
     "status": "sem mudança",
@@ -138,7 +116,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.864 publicada (site + API + nginx).",
+  "pending_previous": "v1.2.865 publicada (site + API).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

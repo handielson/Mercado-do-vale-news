@@ -1,3 +1,10 @@
+# v1.2.866-aparelho-itens-de-fora
+
+Data: 18/11/2026. Branch: `main`. Status: **publicada** (API, 18/11). Site segue a v1.2.865; robô segue a versão anterior.
+Itens deixados de fora da 865: custo da entrada por foto uma vez só, venda antiga fechada conta como vendida e devolvida, transferência confere a empresa do produto. Registro: `docs/versoes/2026-11-18-v1.2.866-aparelho-itens-de-fora.md`.
+
+---
+
 # v1.2.865-ajustes-aparelho-devolucao
 
 Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API, 18/11). Robô segue a versão anterior.
