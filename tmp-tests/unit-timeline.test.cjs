@@ -129,3 +129,13 @@ test('garantia emitida e termo assinado entram na linha do tempo', () => {
   assert.equal(types.filter(t => t === 'warranty_issued').length, 1);
   assert.equal(types.filter(t => t === 'warranty_signed').length, 1);
 });
+
+test('data inválida em um registro não derruba a linha do tempo', () => {
+  const input = clone();
+  input.warranties = [{ id: 'w-bad', sale_id: SALE, serialized_unit_id: input.unit.id, created_at: '0000-00-00 00:00:00' }];
+  input.unit = { ...input.unit, created_at: 'invalid' };
+  const { events } = buildUnitTimeline(input);
+  const bad = events.find(e => e.key === 'warranty_issued:w-bad');
+  assert.ok(bad);
+  assert.equal(bad.at, null);
+});

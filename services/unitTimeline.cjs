@@ -24,12 +24,13 @@ const money = cents => brl.format((Number(cents) || 0) / 100);
 const saleCode = id => String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
 
 // Datas do MySQL vêm sem fuso e estão em UTC.
+// Data inválida (ex.: 0000-00-00) vira null em vez de derrubar a página.
 function iso(value) {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString();
   const text = String(value).trim();
-  if (/Z$|[+-]\d\d:?\d\d$/.test(text)) return new Date(text).toISOString();
-  return new Date(text.replace(' ', 'T') + 'Z').toISOString();
+  const date = value instanceof Date ? value
+    : /Z$|[+-]\d\d:?\d\d$/.test(text) ? new Date(text) : new Date(text.replace(' ', 'T') + 'Z');
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 const parse = v => (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch { return null; } })() : v) || null;
 const status = snap => String(snap?.unit?.status || '').toLowerCase();

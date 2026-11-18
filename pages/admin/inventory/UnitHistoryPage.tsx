@@ -89,6 +89,9 @@ function Summary({ data, onTechnical }: { data: UnitTimelineResponse; onTechnica
                 <span className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[current.status] || 'bg-slate-100 text-slate-700'}`}>{current.statusLabel}</span>
             </div>
         </div>
+        {unit.deleted && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-900">
+            O cadastro deste aparelho foi apagado. Os dados abaixo são o último registro guardado no diário.
+        </p>}
         {current.sale && <p className="mt-3 rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
             Vendido para <strong>{current.sale.customerName}</strong> na venda #{current.sale.code} · <Link className="underline" to={`/admin/sales?sale=${encodeURIComponent(current.sale.id)}`}>Abrir venda</Link>
         </p>}

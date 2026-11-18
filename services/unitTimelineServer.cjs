@@ -4,7 +4,8 @@ const { buildUnitTimeline } = require('./unitTimeline.cjs');
 // Leitor admin da página do aparelho. Só lê; nada aqui grava no banco.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UNIT_FIELDS = ['id', 'product_id', 'imei', 'imei_1', 'imei_2', 'serial', 'condition', 'status', 'cost_price',
-  'created_at', 'updated_at', 'sold_at', 'reserved_at', 'sale_id', 'order_id', 'deposit_id', 'location_id', 'intake_id'];
+  'created_at', 'updated_at', 'sold_at', 'reserved_at', 'sale_id', 'order_id', 'deposit_id', 'location_id', 'intake_id', 'deleted'];
+const snapshotSales = journal => journal.flatMap(j => [j.after_data?.sale, j.before_data?.sale]).filter(Boolean);
 const parse = v => { if (typeof v !== 'string') return v ?? null; try { return JSON.parse(v); } catch { return null; } };
 const uniq = list => [...new Set(list.filter(Boolean).map(String))];
 
@@ -31,9 +32,11 @@ function registerUnitTimelineRoutes(app, { pool, getBearerAuthContext }) {
     ]);
     const sales = (await inList('SELECT * FROM sales WHERE id IN (?)', saleIds)).map(({ finalization_log, ...s }) => s);
     const saleItems = await inList('SELECT * FROM sale_items WHERE sale_id IN (?)', saleIds);
-    const customers = await inList('SELECT id, name FROM customers WHERE id IN (?)', uniq(sales.map(s => s.customer_id)));
+    // Cliente e vendedor também pelos ids guardados no diário (a venda pode ter sido apagada).
+    const knownSales = [...sales, ...snapshotSales(journal)];
+    const customers = await inList('SELECT id, name FROM customers WHERE id IN (?)', uniq(knownSales.map(s => s.customer_id)));
     // Vendedor = usuário de login; o nome dele está no cadastro de cliente ligado à conta.
-    const sellerIds = uniq(sales.map(s => s.seller_id));
+    const sellerIds = uniq(knownSales.map(s => s.seller_id));
     const sellerRows = sellerIds.length
       ? await rows('SELECT id, name, auth_user_id, user_id FROM customers WHERE auth_user_id IN (?) OR user_id IN (?)', [sellerIds, sellerIds]) : [];
     const teamMembers = sellerIds.map(id => {
@@ -57,17 +60,41 @@ function registerUnitTimelineRoutes(app, { pool, getBearerAuthContext }) {
 
   const notFound = reply => reply.code(404).send({ error: 'Aparelho não encontrado.' });
 
+  // Aparelho apagado: o último retrato dele no diário faz o papel do cadastro.
+  async function deletedUnit(unitId) {
+    const [last] = await rows(
+      'SELECT before_data, after_data FROM unit_journal_events WHERE unit_id = ? ORDER BY id DESC LIMIT 1', [unitId]);
+    if (!last) return null;
+    const snap = parse(last.after_data)?.unit || parse(last.before_data)?.unit;
+    return snap ? { ...snap, id: unitId, deleted: true } : null;
+  }
+  async function unitsByIds(ids) {
+    const live = await inList('SELECT * FROM units WHERE id IN (?)', ids);
+    const gone = [];
+    for (const id of ids.filter(id => !live.some(u => String(u.id) === id))) {
+      const unit = await deletedUnit(id);
+      if (unit) gone.push(unit);
+    }
+    return [...live, ...gone];
+  }
+
   app.get('/admin/units/:unitId/timeline', { preHandler: admin }, async (req, reply) => {
     const unitId = String(req.params?.unitId || '');
     if (!UUID.test(unitId)) return reply.code(400).send({ error: 'Informe um identificador de unidade válido.' });
-    const [unit] = await rows('SELECT * FROM units WHERE id = ? LIMIT 1', [unitId]);
+    const [unit] = await unitsByIds([unitId]);
     return unit ? timelineFor(unit) : notFound(reply);
   });
 
   app.get('/admin/units/timeline', { preHandler: admin }, async (req, reply) => {
     const identifier = String(req.query?.identifier || '').trim();
     if (!identifier || identifier.length > 100) return reply.code(400).send({ error: 'Informe um IMEI, serial ou identificador de unidade válido.' });
-    const found = await rows('SELECT * FROM units WHERE id = ? OR imei = ? OR imei_1 = ? OR imei_2 = ? OR serial = ? LIMIT 20', Array(5).fill(identifier));
+    const current = await rows('SELECT * FROM units WHERE id = ? OR imei = ? OR imei_1 = ? OR imei_2 = ? OR serial = ? LIMIT 20', Array(5).fill(identifier));
+    // IMEI/serial antigo (corrigido depois) ou aparelho apagado: procura no diário.
+    const past = await rows(`SELECT DISTINCT unit_id FROM unit_journal_events
+      WHERE imei_1_before = ? OR imei_1_after = ? OR imei_2_before = ? OR imei_2_after = ? OR serial_before = ? OR serial_after = ?
+      LIMIT 20`, Array(6).fill(identifier));
+    const extraIds = uniq(past.map(r => r.unit_id)).filter(id => !current.some(u => String(u.id) === id));
+    const found = [...current, ...(extraIds.length ? await unitsByIds(extraIds) : [])];
     if (!found.length) return notFound(reply);
     if (found.length === 1) return timelineFor(found[0]);
     const names = new Map((await inList('SELECT id, name FROM products WHERE id IN (?)', uniq(found.map(u => u.product_id)))).map(p => [String(p.id), p.name]));

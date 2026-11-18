@@ -28,6 +28,14 @@ function fakePool(units) {
         const wanted = params.map(String);
         return [units.filter(u => ['id', 'imei', 'imei_1', 'imei_2', 'serial'].some(k => u[k] != null && wanted.includes(String(u[k]))))];
       }
+      if (table === 'unit_journal_events' && /imei_1_before/.test(sql)) {   // busca por IMEI/serial antigo
+        const wanted = params.map(String);
+        const hit = j => [j.before_data?.unit, j.after_data?.unit].some(u => u && ['imei_1', 'imei_2', 'serial'].some(k => u[k] != null && wanted.includes(String(u[k]))));
+        return [[...new Set(fixture.journal.filter(hit).map(j => j.unit_id))].map(unit_id => ({ unit_id }))];
+      }
+      if (table === 'unit_journal_events' && /unit_id = \?/.test(sql)) {
+        return [fixture.journal.filter(j => String(j.unit_id) === String(params[0]))];
+      }
       return [tables[table] || []];
     },
   };
@@ -92,4 +100,49 @@ test('vps_server.js e .cjs registram registerUnitTimelineRoutes', () => {
   for (const f of ['vps_server.js', 'vps_server.cjs']) {
     assert.match(fs.readFileSync(f, 'utf8'), /unitTimelineServer\.cjs'\)\.registerUnitTimelineRoutes\(fastify, \{ pool, getBearerAuthContext: getVpsBearerAuthContext \}\)/, f);
   }
+});
+
+test('venda apagada: cliente e vendedor vêm dos ids guardados no diário', async t => {
+  const app = Fastify();
+  const base = fakePool([fixture.unit]);
+  const pool = { queries: [], async query(sql, params = []) {
+    this.queries.push({ sql, params });
+    if (/\bFROM\s+`?sales`?/i.test(sql)) return [[]];                     // venda apagada
+    if (/FROM customers WHERE id IN/i.test(sql)) {
+      const ids = params.flat().map(String);
+      return [fixture.customers.filter(c => ids.includes(String(c.id)))];
+    }
+    return base.query(sql, params);
+  } };
+  registerUnitTimelineRoutes(app, { pool, getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }) });
+  t.after(() => app.close());
+  const body = (await app.inject({ url: `/admin/units/${UNIT}/timeline` })).json();
+  const sold = body.events.find(e => e.type === 'sold');
+  assert.match(sold.detail, /Cliente Teste/);
+  assert.match(sold.actor, /Vendedor Teste/);
+});
+
+test('IMEI antigo ou aparelho apagado: acha pelo diário', async t => {
+  const app = Fastify();
+  const OLD_IMEI = '999999999999999';
+  const base = fakePool([]);                                            // unidade não existe mais em units
+  const pool = { queries: [], async query(sql, params = []) {
+    this.queries.push({ sql, params });
+    if (/FROM unit_journal_events/i.test(sql) && /imei_1_before/i.test(sql)) {
+      return [params.map(String).includes(OLD_IMEI) ? [{ unit_id: UNIT }] : []];
+    }
+    return base.query(sql, params);
+  } };
+  registerUnitTimelineRoutes(app, { pool, getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }) });
+  t.after(() => app.close());
+  const r = await app.inject({ url: `/admin/units/timeline?identifier=${OLD_IMEI}` });
+  assert.equal(r.statusCode, 200);
+  const body = r.json();
+  assert.equal(body.unit.id, UNIT);
+  assert.equal(body.unit.deleted, true);
+  assert.equal(body.current.status, 'available');                        // último snapshot do diário
+  assert.ok(body.events.some(e => e.type === 'sold'));
+  const byId = await app.inject({ url: `/admin/units/${UNIT}/timeline` });
+  assert.equal(byId.statusCode, 200);
+  assert.equal(byId.json().unit.deleted, true);
 });

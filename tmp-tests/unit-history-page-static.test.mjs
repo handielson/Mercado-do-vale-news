@@ -21,6 +21,8 @@ assert.match(page, /Ver dados técnicos/);
 assert.match(page, /UnitJournalModal/);
 assert.match(page, /\/admin\/sales\?sale=/);
 assert.match(page, /IMEI 1, IMEI 2 ou serial/);
+assert.match(page, /unit\.deleted && [\s\S]{0,200}cadastro deste aparelho foi apagado/);
+assert.match(service, /deleted\?: boolean/);
 assert.doesNotMatch(page, /product_stock_locations|stock_location_movements/);
 
 // Atalhos: lista de unidades e itens da venda abrem a página do aparelho.

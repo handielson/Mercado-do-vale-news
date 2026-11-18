@@ -36,6 +36,7 @@ export interface UnitTimelineResponse {
         id: string; product_id: string; imei: string | null; imei_1: string | null; imei_2: string | null;
         serial: string | null; condition: string | null; status: string; cost_price: number | null; created_at: string | null;
         intake_id: string | null;
+        deleted?: boolean;
     };
     product: { id: string; name: string; sku: string | null; image_url: string | null } | null;
     current: UnitTimelineCurrent;
