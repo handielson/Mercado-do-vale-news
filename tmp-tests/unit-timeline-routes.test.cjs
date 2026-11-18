@@ -181,9 +181,9 @@ test('diário lido só com os tipos que viram linha do tempo, do mais novo para 
   registerUnitTimelineRoutes(app, { pool, getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }) });
   t.after(() => app.close());
   await app.inject({ url: `/admin/units/${UNIT}/timeline` });
-  const q = pool.queries.find(x => /FROM unit_journal_events WHERE unit_id = \?/.test(x.sql) && /event_type IN/.test(x.sql));
+  const q = pool.queries.find(x => /FROM unit_journal_events e WHERE e\.unit_id = \?/.test(x.sql) && /event_type IN/.test(x.sql));
   assert.ok(q, 'consulta filtra event_type');
-  assert.match(q.sql, /ORDER BY id DESC LIMIT 2000/);
+  assert.match(q.sql, /FROM unit_journal_events e\b[\s\S]*ORDER BY e\.id DESC LIMIT 2000/); // id numérico, não o apelido texto
 });
 
 test('quem fez a entrada por foto vem do cadastro ligado ao login', async t => {

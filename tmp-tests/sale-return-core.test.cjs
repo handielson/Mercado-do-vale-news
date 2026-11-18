@@ -107,3 +107,12 @@ test('crédito devolvido aos poucos nunca passa do que o cliente pagou com juros
   }
   assert.equal(total, withFee);
 });
+
+test('forma já devolvida inteira com juros não gera estorno de zero', () => {
+  const credit = payments[1];
+  const goodsDone = Math.round(credit.amount) - 1;          // arredondamento antigo deixou 1 centavo de mercadoria
+  let plan = [];
+  try { plan = planSameMethodRefund(payments, 1, new Map([[0, Math.round(payments[0].amount)], [1, goodsDone]]), new Map([[1, Math.round(credit.total_with_fee)]])); }
+  catch (error) { assert.equal(error.statusCode, 409); }
+  assert.ok(plan.every(p => p.refundCents > 0), JSON.stringify(plan));
+});

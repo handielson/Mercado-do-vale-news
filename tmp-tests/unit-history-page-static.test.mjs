@@ -39,6 +39,8 @@ for (const mod of ['services/unitTimeline.cjs', 'services/unitTimelineServer.cjs
   assert.match(deploy, new RegExp(`'${mod.replace(/[.\/]/g, m => '\\' + m)}'`), mod);
 }
 
+assert.match(page, /\^\\\[VPS\\\] 404\\b/);
+assert.match(page, /\^\\\[VPS\\\] 40\[13\]\\b/);
 console.log('unit-history-page static checks passed');
 const page2 = read('pages/admin/inventory/UnitHistoryPage.tsx');
 assert.match(page2, /Sua sessão expirou\. Entre de novo\./);

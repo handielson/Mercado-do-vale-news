@@ -58,11 +58,16 @@ function planSameMethodRefund(payments, amountCents, refundedByIndex = new Map()
     const goods = Math.min(remaining, available);
     if (goods <= 0) continue;
     const amount = cents(p.amount), withFee = cents(p.total_with_fee ?? p.amount);
-    // Com juros: proporcional, nunca passa do que sobrou pago; a última leva da forma leva o resto exato.
-    const feeLeft = Math.max(0, withFee - cents(refundedFeeByIndex.get(index)));
-    const refundCents = amount > 0 && withFee > amount
-      ? (goods === available ? feeLeft : Math.min(feeLeft, Math.round((goods * withFee) / amount)))
-      : goods;
+    // Com juros: proporcional ao acumulado (as levas somam exato), nunca passa do que sobrou pago;
+    // a última leva da forma leva o resto. Forma já estornada inteira não gera estorno de zero.
+    let refundCents = goods;
+    if (amount > 0 && withFee > amount) {
+      const feeDone = cents(refundedFeeByIndex.get(index));
+      const feeLeft = Math.max(0, withFee - feeDone);
+      const target = Math.round(((cents(refundedByIndex.get(index)) + goods) * withFee) / amount) - feeDone;
+      refundCents = goods === available ? feeLeft : Math.min(feeLeft, Math.max(0, target));
+      if (refundCents <= 0) continue;
+    }
     plan.push({ paymentIndex: index, method: p.method, goodsCents: goods, refundCents, gatewayPaymentId: p.mercado_pago_payment_id ? String(p.mercado_pago_payment_id) : null });
     remaining -= goods;
   }

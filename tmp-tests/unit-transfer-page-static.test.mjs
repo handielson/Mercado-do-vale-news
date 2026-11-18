@@ -28,4 +28,7 @@ assert.match(service, /skipped\?: UnitTransferSkipped\[\]/);
 const locationsPage = read('pages/admin/inventory/StockLocationsPage.tsx');
 assert.match(locationsPage, /failed\.slice\(0, 3\)\.map\(f => `\$\{f\.sku \|\| '\?'\}: \$\{f\.error\}`\)/);
 assert.match(locationsPage, /Aparelhos → Transferir aparelhos/);
+assert.match(locationsPage, /replace\(\/\^\\\[VPS\\\] \\d\+ \\S\+ — \//);
+assert.match(locationsPage, /!\/Transferir aparelhos\/\.test/);
+assert.match(locationsPage, /!\/Transferir aparelhos\/\.test/);
 console.log('unit-transfer-page static checks passed');

@@ -66,8 +66,10 @@ test('preenchimento inicial exige chave de sync e só grava com ?apply=1', async
   const { app, calls } = setup(t, { sync: true });
   assert.equal((await app.inject({ method: 'POST', url: '/admin/units/location-backfill' })).statusCode, 200);
   assert.equal(calls.backfill[0].apply, false);
-  await app.inject({ method: 'POST', url: '/admin/units/location-backfill?apply=1' });
+  const applied = await app.inject({ method: 'POST', url: '/admin/units/location-backfill?apply=1' });
   assert.equal(calls.backfill[1].apply, true);
+  assert.equal(applied.json().applied, true);
+  assert.equal((await app.inject({ method: 'POST', url: '/admin/units/location-backfill' })).json().applied, false);
   assert.deepEqual(calls.backfill[1].incoming, { depositId: 'D', locationId: 'L', });
 });
 

@@ -1357,7 +1357,7 @@ export function StockLocationsPage() {
           notes: batchNotes.trim() || undefined,
         });
       } catch (err: any) {
-        failed.push({ sku: request.item.product.sku || null, error: err?.message || 'falha' });
+        failed.push({ sku: request.item.product.sku || null, error: String(err?.message || 'falha').replace(/^\[VPS\] \d+ \S+ — /, '') });
       }
       setBatchProgress({ done: i + 1, total: transferRequests.length });
     }
@@ -1365,7 +1365,7 @@ export function StockLocationsPage() {
 
     const okCount = transferRequests.length - failed.length;
     if (failed.length > 0) {
-      const serializedHint = failed.some(f => /IMEI/.test(f.error)) ? ' Produto com IMEI se transfere pelos aparelhos em Aparelhos → Transferir aparelhos.' : '';
+      const serializedHint = failed.some(f => /IMEI/.test(f.error) && !/Transferir aparelhos/.test(f.error)) ? ' Produto com IMEI se transfere pelos aparelhos em Aparelhos → Transferir aparelhos.' : '';
       setBatchError(`${okCount} transferência(s) ok, ${failed.length} falharam: ${failed.slice(0, 3).map(f => `${f.sku || '?'}: ${f.error}`).join('; ')}${failed.length > 3 ? '…' : ''}${serializedHint}`);
     } else {
       // Sucesso total: limpa lista e fecha

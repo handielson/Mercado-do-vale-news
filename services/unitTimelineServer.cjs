@@ -23,9 +23,9 @@ function registerUnitTimelineRoutes(app, { pool, getBearerAuthContext }) {
   async function timelineFor(unit) {
     const [product] = await rows('SELECT id, name, sku, price_retail, images, image_url FROM products WHERE id = ? LIMIT 1', [unit.product_id]);
     const journal = (await rows(
-      `SELECT CAST(id AS CHAR) id, unit_id, product_id, event_type,
-        DATE_FORMAT(recorded_at,'%Y-%m-%dT%H:%i:%s.%fZ') recorded_at, before_data, after_data
-       FROM unit_journal_events WHERE unit_id = ? AND event_type IN (?) ORDER BY id DESC LIMIT 2000`, [unit.id, JOURNAL_TYPES]))
+      `SELECT CAST(e.id AS CHAR) id, e.unit_id, e.product_id, e.event_type,
+        DATE_FORMAT(e.recorded_at,'%Y-%m-%dT%H:%i:%s.%fZ') recorded_at, e.before_data, e.after_data
+       FROM unit_journal_events e WHERE e.unit_id = ? AND e.event_type IN (?) ORDER BY e.id DESC LIMIT 2000`, [unit.id, JOURNAL_TYPES]))
       .reverse()
       .map(r => ({ ...r, before_data: parse(r.before_data), after_data: parse(r.after_data) }));
     const ownItems = await rows('SELECT * FROM sale_items WHERE serialized_unit_id = ?', [unit.id]);

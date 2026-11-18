@@ -27,6 +27,7 @@ test('existing unit update route changes only the selected purchase cost and pre
     vm.runInNewContext(source.slice(start, end), { fastify: app, requireSyncKey: async () => {},
       collectUnitSerializedIdentifiers: () => [], findUnitSerializedIdentifierConflict: async () => null,
       syncProductStock: async id => assert.equal(id, 'phone'),
+      isReturnFromSale: () => false, recordUnitEvent: async () => {}, ensureIncomingStockLocation: async () => null,
       pool: { query: async (sql, params) => {
         queries.push(sql);
         if (sql.startsWith('UPDATE units SET')) {
@@ -35,6 +36,7 @@ test('existing unit update route changes only the selected purchase cost and pre
           return [{ affectedRows: 1 }];
         }
         if (sql.startsWith('SELECT * FROM units')) return [[units.find(u => u.id === params[0])]];
+        if (sql.startsWith('SELECT status, product_id, deposit_id, location_id FROM units')) return [[units.find(u => u.id === params[0])]];
         throw new Error('Unexpected write: ' + sql);
       } },
     });
@@ -45,7 +47,9 @@ test('existing unit update route changes only the selected purchase cost and pre
     assert.equal(units[0].imei_1, 'fixture-one');
     assert.equal(units[0].status, 'available');
     assert.deepEqual(product, { ...sale, price_cost: 99000 });
-    assert.equal(queries.length, 2);
+    // fora a leitura do estado anterior (volta da venda → Depósito): só update + leitura final
+    assert.equal(queries.filter(q => !q.startsWith('SELECT status, product_id, deposit_id, location_id FROM units')).length, 2);
+    assert.ok(queries.every(q => !/^UPDATE products/.test(q)));
   }
 });
 

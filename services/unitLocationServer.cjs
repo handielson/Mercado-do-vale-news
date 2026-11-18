@@ -47,10 +47,11 @@ function registerUnitLocationRoutes(app, deps) {
     const incoming = await ensureIncomingStockLocation(await getDefaultStockCompanyId());
     const conn = await pool.getConnection();
     try {
-      return await impl.backfillUnitLocations({
+      const result = await impl.backfillUnitLocations({
         db: conn, incoming: { depositId: incoming.depositId, locationId: incoming.locationId }, apply,
         actor: { userId: null, name: 'Implantação do local do aparelho' }, syncProductStock,
       });
+      return { ...result, applied: apply };
     } catch (error) { return send(reply, error); }
     finally { conn.release(); }
   });

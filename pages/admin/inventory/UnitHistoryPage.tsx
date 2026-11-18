@@ -149,8 +149,8 @@ export default function UnitHistoryPage() {
             .catch(err => {
                 if (!alive) return;
                 const message = err instanceof Error ? err.message : String(err);
-                setError(/\b404\b/.test(message) ? 'Nenhum aparelho com esse IMEI ou serial.'
-                    : /\b40[13]\b/.test(message) ? 'Sua sessão expirou. Entre de novo.'
+                setError(/^\[VPS\] 404\b/.test(message) ? 'Nenhum aparelho com esse IMEI ou serial.'
+                    : /^\[VPS\] 40[13]\b/.test(message) ? 'Sua sessão expirou. Entre de novo.'
                     : 'Não foi possível carregar o histórico do aparelho.');
             })
             .finally(() => { if (alive) setLoading(false); });

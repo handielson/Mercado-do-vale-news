@@ -71,7 +71,9 @@ function loadSignedWarrantyApiFactory() {
     /\/\/ SIGNED_WARRANTY_API_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_API_END/
   );
   assert.ok(match, 'signed warranty API block must exist');
-  return Function(`${match[1]}\nreturn createSignedWarrantyApi;`)();
+  // O bloco usa o helper de venda cancelada importado no topo do servidor.
+  const { isCancelledSale } = require('../services/customerSaleVisibility.cjs');
+  return Function('isCancelledSale', `${match[1]}\nreturn createSignedWarrantyApi;`)(isCancelledSale);
 }
 
 function loadSignedWarrantySyncFactory() {
