@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.862-pagina-do-aparelho",
+  "version": "v1.2.863-local-do-aparelho",
   "date": "2026-11-18",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.862-pagina-do-aparelho",
-  "release_vps": "/var/www/mdv-site/releases/20261118-115140-v1-2-862-pagina-do-aparelho",
+  "tag": "v1.2.863-local-do-aparelho",
+  "release_vps": "/var/www/mdv-site/releases/20261118-122948-v1-2-863-local-do-aparelho",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Página do aparelho no admin (/admin/aparelhos/<IMEI ou serial>): situação atual e linha do tempo legível (entrada, venda, cancelamento/estorno, volta ao estoque, garantias, correções de IMEI/custo), achando também por IMEI antigo e aparelho apagado. Diário bruto em \"Ver dados técnicos\". Site + API + nginx.",
+  "summary": "Local do aparelho: todo aparelho nasce no Depósito / Entrada / Conferencia, volta para lá ao sair de uma venda, e muda de lugar pela tela Transferir aparelhos (bipando IMEI/serial), com quem fez e de onde para onde na página do aparelho. Transferência por quantidade de produto com IMEI passa a ser recusada. Lista de produtos com saldo sem IMEI.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,61 +28,68 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque."
   },
-  "site_source_base": "916b39c",
+  "site_source_base": "pendente",
   "changed_files": [
+    "services/unitLocation.cjs",
+    "services/unitLocationServer.cjs",
     "services/unitTimeline.cjs",
     "services/unitTimelineServer.cjs",
+    "services/smartphonePhotoIntakeServer.cjs",
     "vps_server.js",
     "vps_server.cjs",
     "deploy-vps-server-only.cjs",
+    "scripts/unit-events-triggers-sql.cjs",
+    "services/unitLocationService.ts",
     "services/unitTimelineService.ts",
+    "pages/admin/inventory/UnitTransferPage.tsx",
     "pages/admin/inventory/UnitHistoryPage.tsx",
     "routes/index.tsx",
-    "layouts/AdminLayout.tsx",
-    "pages/admin/inventory/SerializedUnitsPage.tsx",
-    "components/admin/sales/SaleDetailsModal.tsx",
     "infra/nginx/mdv-site-production.conf",
     "infra/nginx/mdv-site-staging.conf",
+    "tmp-tests/unit-location.test.cjs",
+    "tmp-tests/unit-location-routes.test.cjs",
     "tmp-tests/unit-timeline.test.cjs",
     "tmp-tests/unit-timeline-routes.test.cjs",
-    "tmp-tests/unit-history-page-static.test.mjs",
-    "tmp-tests/unit-journal.test.cjs",
-    "tmp-tests/fixtures/unit-timeline-868499080873669.json",
+    "tmp-tests/unit-transfer-page-static.test.mjs",
+    "tmp-tests/catalog-entry-photo.test.cjs",
+    "tmp-tests/stock-entry-lock.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-18-v1.2.862-pagina-do-aparelho.md"
+    "docs/versoes/2026-11-18-v1.2.863-local-do-aparelho.md",
+    "docs/superpowers/plans/2026-11-18-local-do-aparelho.md"
   ],
   "validations": [
-    "unit-timeline 10/10",
-    "unit-timeline-routes 9/9",
+    "unit-location 11/11",
+    "unit-location-routes 19/19",
+    "unit-timeline 13/13",
+    "unit-timeline-routes 11/11",
     "unit-journal 11/11",
-    "unit-history-page-static ok",
-    "customer-sale-visibility 8/8",
-    "sale-partial-refund/sale-cancel-serialized-bling/serialized-units-vps-only/marketplace-sale-details estáticos ok",
+    "stock-entry-lock e catalog-entry-photo ok",
+    "unit-transfer-page-static e unit-history-page-static ok",
     "node --check vps_server.js/.cjs",
+    "tsc sem erro novo",
     "npm run build ok",
-    "revisão independente do branch: 0 crítico; 2 importantes + 2 regraduados corrigidos com teste",
-    "produção 18/11: /admin/aparelhos/868499080873669, 868499080873677 (IMEI 2) e 81346W6V100217 (serial) abrem o Poco: entrada por foto 30/10, vendido #8D7563B4 R$ 1.999,00, venda cancelada 18/11, voltou ao estoque, Disponível"
+    "revisão independente: 0 crítico; travamento/deadlock, evento na volta da venda e UPDATE do Depósito corrigidos com teste"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261118-115140-v1-2-862-pagina-do-aparelho",
-    "previous": "/var/www/mdv-site/releases/20261112-140000-v1-2-851-status-id-collation",
-    "source_commit": "916b39c",
-    "note": "Página Aparelhos; nenhum outro arquivo de frontend mudou desde a 922455f2."
+    "release": "/var/www/mdv-site/releases/20261118-122948-v1-2-863-local-do-aparelho",
+    "previous": "/var/www/mdv-site/releases/20261118-115140-v1-2-862-pagina-do-aparelho",
+    "source_commit": "pendente",
+    "note": "Tela Transferir aparelhos e lista de saldo sem IMEI."
   },
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
-    "mode": "upload manual (2 módulos + server.js/vps_server.js/.cjs)",
-    "commit": "789b3f6",
-    "deployed_at": "2026-11-18T14:52Z",
-    "backup": "/var/www/mdv-api/backups/unit-timeline-1795013524432",
-    "note": "/status 200; PM2 online; rota sem login → 401. Sem escrita de env."
+    "mode": "upload manual (módulos + server.js/vps_server.js/.cjs + entrada por foto)",
+    "commit": "pendente",
+    "deployed_at": "pendente",
+    "backup": "pendente",
+    "note": ""
   },
   "nginx_release": {
     "status": "publicada",
-    "note": "mdv-site-production.conf: regras SPA com /admin/aparelhos e /admin/aparelhos/[^/]+ (listen de produção 172.17.0.1:8085/8445 preservados). Backup: /var/www/mdv-api/backups/unit-timeline-1795013524432/mdv-site-production.conf.bak; nginx -t ok; reload."
+    "note": "regra SPA /admin/aparelhos/transferir; listen de produção preservados."
   },
   "evolution_release": {
     "status": "publicada",
@@ -133,7 +140,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.861 publicada (API).",
+  "pending_previous": "v1.2.862 publicada (site + API + nginx).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -149,5 +156,8 @@
     "candidate": "ac2b4034ab67612e8879c96f634a767aa8b8682e457d1c76c4a5c08de458da3b",
     "applied_at": "2026-11-16T23:37Z",
     "backup": "/root/n8n-backups/meta-attendance-2026-11-16T23-37-35-466Z-d79016ed.aes256gcm.json"
+  },
+  "data_fix": {
+    "note": "pendente"
   }
 }

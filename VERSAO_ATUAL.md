@@ -1,3 +1,10 @@
+# v1.2.863-local-do-aparelho
+
+Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API + nginx, 18/11). Robô segue a versão anterior.
+Aparelho com local de verdade: nasce no Depósito, volta para lá ao sair de venda, muda de lugar bipando o IMEI em "Transferir aparelhos"; saldo sem IMEI corrigido (Athomics zerado, Redmi 15 igual aos IMEIs). Registro: `docs/versoes/2026-11-18-v1.2.863-local-do-aparelho.md`.
+
+---
+
 # v1.2.862-pagina-do-aparelho
 
 Data: 18/11/2026. Branch: `main`. Status: **publicada** (site + API + nginx, 18/11). Robô segue a versão anterior.
