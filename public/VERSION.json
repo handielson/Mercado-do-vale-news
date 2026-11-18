@@ -28,7 +28,7 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque."
   },
-  "site_source_base": "f0314e2",
+  "site_source_base": "a0bc9b4",
   "changed_files": [
     "services/unitTimeline.cjs",
     "services/unitTimelineServer.cjs",
@@ -73,17 +73,17 @@
     "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
     "previous": "/var/www/mdv-site/releases/20261118-131117-v1-2-864-devolucao-de-itens",
-    "source_commit": "(ver tag)",
+    "source_commit": "a0bc9b4",
     "note": "Ajustes da página do aparelho, transferir aparelhos e lote de locais."
   },
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
     "mode": "upload manual",
-    "commit": "(ver tag)",
-    "deployed_at": "pendente",
-    "backup": "pendente",
-    "note": "pendente"
+    "commit": "a0bc9b4",
+    "deployed_at": "2026-11-18T16:41Z",
+    "backup": "/var/www/mdv-api/backups/ajustes-865-1795020092",
+    "note": "7 módulos + servidores; node --check ok; /status 200; PM2 online; sem erro no log; rotas sem login/chave → 401."
   },
   "nginx_release": {
     "status": "sem mudança",
