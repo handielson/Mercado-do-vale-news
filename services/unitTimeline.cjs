@@ -71,6 +71,8 @@ function buildUnitTimeline(input = {}) {
     if (item?.unit_price != null) parts.push(money(item.unit_price));
     const pay = paymentText(sale || snapSale);
     if (pay) parts.push(pay);
+    const saleTotal = (sale || snapSale)?.total;
+    if (saleTotal != null) parts.push(`venda de ${money(saleTotal)}`);
     add(`sold:${saleId}`, {
       type: 'sold', at: iso(row.recorded_at), title: `Vendido · venda #${saleCode(saleId)}`,
       detail: parts.join(' · '), actor: sellerName(sale, snapSale), saleId: String(saleId),
@@ -99,8 +101,11 @@ function buildUnitTimeline(input = {}) {
       case 'existing_sale_reference': {
         const saleId = after?.sale?.id || after?.unit?.sale_id;
         const sale = sales.get(String(saleId || ''));
+        const pay = String((sale || after?.sale)?.payment_status || '');
+        const closed = CANCELLED.has(pay) ? ' (cancelada)' : REFUNDED.has(pay) ? ' (estornada)' : '';
         add(`legacy_sale:${saleId || row.id}`, { type: 'legacy_sale', at: iso(sale?.created_at || after?.sale?.created_at || after?.unit?.sold_at) || at,
-          title: saleId ? `Venda anterior ao diário · #${saleCode(saleId)}` : 'Venda anterior ao diário',
+          closed: Boolean(closed),
+          title: saleId ? `Venda anterior ao diário · #${saleCode(saleId)}${closed}` : 'Venda anterior ao diário',
           detail: saleId ? customerName(sale, after?.sale) : null, saleId: saleId ? String(saleId) : null }, row.id);
         break;
       }
@@ -173,9 +178,12 @@ function buildUnitTimeline(input = {}) {
   }
 
   const orderNum = v => (/^\d+$/.test(String(v)) ? Number(v) : 0);
+  // Venda vista pelo diário e pela referência antiga vira um item só (o "Vendido" completo).
+  const soldSales = new Set([...events.values()].filter(e => e.type === 'sold' && e.saleId).map(e => e.saleId));
+  for (const [key, e] of events) if (e.type === 'legacy_sale' && e.saleId && soldSales.has(e.saleId)) events.delete(key);
   const list = [...events.values()]
     .sort((a, b) => (b.at || '').localeCompare(a.at || '') || orderNum(b._order) - orderNum(a._order))
-    .map(({ _order, ...event }) => event);
+    .map(({ _order, closed, ...event }) => ({ ...event, _closed: closed }));
 
   const unitStatus = String(unit.status || '').toLowerCase();
   const currentSaleId = unitStatus === 'sold' ? unit.sale_id : null;
@@ -201,10 +209,10 @@ function buildUnitTimeline(input = {}) {
       costCents: unit.cost_price != null ? Number(unit.cost_price) : null,
       priceCents: input.product?.price_retail != null ? Math.round(Number(input.product.price_retail)) : null,
       daysInStock,
-      timesSold: list.filter(e => e.type === 'sold' || e.type === 'legacy_sale').length,
+      timesSold: list.filter(e => e.type === 'sold' || (e.type === 'legacy_sale' && !e._closed)).length,
       timesReturned: list.filter(e => e.type === 'returned_to_stock').length,
     },
-    events: list,
+    events: list.map(({ _closed, ...event }) => event),
   };
 }
 

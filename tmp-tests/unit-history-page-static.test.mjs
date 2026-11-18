@@ -40,3 +40,7 @@ for (const mod of ['services/unitTimeline.cjs', 'services/unitTimelineServer.cjs
 }
 
 console.log('unit-history-page static checks passed');
+const page2 = read('pages/admin/inventory/UnitHistoryPage.tsx');
+assert.match(page2, /Sua sessão expirou\. Entre de novo\./);
+assert.match(page2, /STATUS_LABEL\[m\.status\]/);
+console.log('ajustes parte 1 ok');

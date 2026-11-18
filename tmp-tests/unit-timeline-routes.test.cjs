@@ -174,3 +174,27 @@ test('eventos de local entram na resposta da rota', async t => {
   assert.equal(ev.type, 'location_set');
   assert.match(ev.detail, /Loja Principal \/ Estoque Geral · inicial/);
 });
+
+test('diário lido só com os tipos que viram linha do tempo, do mais novo para o mais antigo', async t => {
+  const pool = fakePool([fixture.unit]);
+  const app = Fastify();
+  registerUnitTimelineRoutes(app, { pool, getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }) });
+  t.after(() => app.close());
+  await app.inject({ url: `/admin/units/${UNIT}/timeline` });
+  const q = pool.queries.find(x => /FROM unit_journal_events WHERE unit_id = \?/.test(x.sql) && /event_type IN/.test(x.sql));
+  assert.ok(q, 'consulta filtra event_type');
+  assert.match(q.sql, /ORDER BY id DESC LIMIT 2000/);
+});
+
+test('quem fez a entrada por foto vem do cadastro ligado ao login', async t => {
+  const base = fakePool([{ ...fixture.unit }]);
+  const pool = { queries: [], async query(sql, params) {
+    if (/FROM smartphone_photo_intakes/.test(sql)) return [[{ ...fixture.intakes[0], created_by: fixture.sales[0].seller_id }]];
+    return base.query(sql, params);
+  } };
+  const app = Fastify();
+  registerUnitTimelineRoutes(app, { pool, getBearerAuthContext: async () => ({ isAdmin: true, userId: 'op' }) });
+  t.after(() => app.close());
+  const body = (await app.inject({ url: `/admin/units/${UNIT}/timeline` })).json();
+  assert.equal(body.events.find(e => e.type === 'entry').actor, 'Vendedor Teste');
+});

@@ -175,3 +175,33 @@ test('local sem nome conhecido aparece como "local removido"', () => {
   const input = { ...clone(), unitEvents: [ev('e4', 'transfer', '2026-11-19 10:00:00', { from_location_id: 'x', to_location_id: 'y' })] };
   assert.equal(buildUnitTimeline(input).events[0].detail, 'local removido → local removido');
 });
+
+// Ajustes pequenos (parte 1)
+test('venda anterior ao diário que também tem registro de venda aparece uma vez só', () => {
+  const input = clone();
+  input.journal.unshift(journalRow(input, 'existing_sale_reference', '2026-11-17T21:12:00.000000Z', null, { unit: input.unit, sale: input.sales[0] }));
+  const { events, current } = buildUnitTimeline(input);
+  assert.equal(events.filter(e => e.saleId === SALE && ['sold', 'legacy_sale'].includes(e.type)).length, 1);
+  assert.equal(current.timesSold, 1);
+});
+
+test('venda antiga cancelada não conta como vendida e diz que foi cancelada', () => {
+  const input = clone();
+  const old = { ...input.sales[0], id: 'old-sale', payment_status: 'cancelled' };
+  input.sales.push(old);
+  input.journal.unshift(journalRow(input, 'existing_sale_reference', '2026-09-01T10:00:00.000000Z', null, { unit: input.unit, sale: old }));
+  const { events, current } = buildUnitTimeline(input);
+  assert.match(events.find(e => e.saleId === 'old-sale').title, /\(cancelada\)/);
+  assert.equal(current.timesSold, 1);
+});
+
+test('vendido mostra também o total da venda', () => {
+  const sold = buildUnitTimeline(clone()).events.find(e => e.type === 'sold');
+  assert.match(sold.detail, /venda de R\$\s2\.151,18/);
+});
+
+test('entrada por foto mostra quem cadastrou', () => {
+  const input = clone();
+  input.intakes = [{ ...input.intakes[0], created_by_name: 'Operador Foto' }];
+  assert.equal(buildUnitTimeline(input).events.find(e => e.type === 'entry').actor, 'Operador Foto');
+});

@@ -16,6 +16,9 @@ const brl = (cents: number | null | undefined) =>
 const when = (value: string | null) =>
     value ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }) : '';
 
+const STATUS_LABEL: Record<string, string> = {
+    available: 'Disponível', reserved: 'Reservado', sold: 'Vendido', rma: 'RMA', hidden: 'Oculto', scrapped: 'Descartado',
+};
 const STATUS_STYLE: Record<string, string> = {
     available: 'bg-emerald-100 text-emerald-800', reserved: 'bg-amber-100 text-amber-800', sold: 'bg-blue-100 text-blue-800',
     rma: 'bg-orange-100 text-orange-800', hidden: 'bg-slate-200 text-slate-700', scrapped: 'bg-red-100 text-red-800',
@@ -83,7 +86,7 @@ function Matches({ data }: { data: UnitTimelineMatches }) {
         <ul className="divide-y">{data.matches.map(m => <li key={m.id}>
             <Link to={`/admin/aparelhos/${m.id}`} className="block py-3 hover:bg-slate-50">
                 <p className="font-medium">{m.productName || 'Produto não encontrado'}</p>
-                <p className="text-sm text-slate-600">IMEI 1: {m.imei1 || '—'} · IMEI 2: {m.imei2 || '—'} · Serial: {m.serial || '—'} · {m.status}</p>
+                <p className="text-sm text-slate-600">IMEI 1: {m.imei1 || '—'} · IMEI 2: {m.imei2 || '—'} · Serial: {m.serial || '—'} · {STATUS_LABEL[m.status] || m.status}</p>
             </Link>
         </li>)}</ul>
     </section>;
@@ -146,7 +149,9 @@ export default function UnitHistoryPage() {
             .catch(err => {
                 if (!alive) return;
                 const message = err instanceof Error ? err.message : String(err);
-                setError(/\b404\b/.test(message) ? 'Nenhum aparelho com esse IMEI ou serial.' : 'Não foi possível carregar o histórico do aparelho.');
+                setError(/\b404\b/.test(message) ? 'Nenhum aparelho com esse IMEI ou serial.'
+                    : /\b40[13]\b/.test(message) ? 'Sua sessão expirou. Entre de novo.'
+                    : 'Não foi possível carregar o histórico do aparelho.');
             })
             .finally(() => { if (alive) setLoading(false); });
         return () => { alive = false; };

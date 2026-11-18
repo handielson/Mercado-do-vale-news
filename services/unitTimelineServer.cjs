@@ -5,6 +5,8 @@ const { buildUnitTimeline } = require('./unitTimeline.cjs');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const UNIT_FIELDS = ['id', 'product_id', 'imei', 'imei_1', 'imei_2', 'serial', 'condition', 'status', 'cost_price',
   'created_at', 'updated_at', 'sold_at', 'reserved_at', 'sale_id', 'order_id', 'deposit_id', 'location_id', 'intake_id', 'deleted'];
+// Só o que vira linha do tempo (eventos de produto e de saldo por local ficam nos dados técnicos).
+const JOURNAL_TYPES = ['unit_insert', 'unit_update', 'baseline', 'existing_sale_reference', 'sale_items_insert', 'sale_update'];
 const snapshotSales = journal => journal.flatMap(j => [j.after_data?.sale, j.before_data?.sale]).filter(Boolean);
 const parse = v => { if (typeof v !== 'string') return v ?? null; try { return JSON.parse(v); } catch { return null; } };
 const uniq = list => [...new Set(list.filter(Boolean).map(String))];
@@ -23,7 +25,8 @@ function registerUnitTimelineRoutes(app, { pool, getBearerAuthContext }) {
     const journal = (await rows(
       `SELECT CAST(id AS CHAR) id, unit_id, product_id, event_type,
         DATE_FORMAT(recorded_at,'%Y-%m-%dT%H:%i:%s.%fZ') recorded_at, before_data, after_data
-       FROM unit_journal_events WHERE unit_id = ? ORDER BY id LIMIT 2000`, [unit.id]))
+       FROM unit_journal_events WHERE unit_id = ? AND event_type IN (?) ORDER BY id DESC LIMIT 2000`, [unit.id, JOURNAL_TYPES]))
+      .reverse()
       .map(r => ({ ...r, before_data: parse(r.before_data), after_data: parse(r.after_data) }));
     const ownItems = await rows('SELECT * FROM sale_items WHERE serialized_unit_id = ?', [unit.id]);
     const saleIds = uniq([
@@ -36,14 +39,15 @@ function registerUnitTimelineRoutes(app, { pool, getBearerAuthContext }) {
     const knownSales = [...sales, ...snapshotSales(journal)];
     const customers = await inList('SELECT id, name FROM customers WHERE id IN (?)', uniq(knownSales.map(s => s.customer_id)));
     // Vendedor = usuário de login; o nome dele está no cadastro de cliente ligado à conta.
-    const sellerIds = uniq(knownSales.map(s => s.seller_id));
+    const intakes = unit.intake_id ? await rows('SELECT id, created_at, created_by, status FROM smartphone_photo_intakes WHERE id = ? LIMIT 1', [unit.intake_id]) : [];
+    const sellerIds = uniq([...knownSales.map(s => s.seller_id), ...intakes.map(i => i.created_by)]);
     const sellerRows = sellerIds.length
       ? await rows('SELECT id, name, auth_user_id, user_id FROM customers WHERE auth_user_id IN (?) OR user_id IN (?)', [sellerIds, sellerIds]) : [];
     const teamMembers = sellerIds.map(id => {
       const match = sellerRows.find(c => String(c.auth_user_id || '') === id || String(c.user_id || '') === id);
       return match ? { id, name: match.name } : null;
     }).filter(Boolean);
-    const intakes = unit.intake_id ? await rows('SELECT id, created_at, created_by, status FROM smartphone_photo_intakes WHERE id = ? LIMIT 1', [unit.intake_id]) : [];
+    for (const intake of intakes) intake.created_by_name = teamMembers.find(m => m.id === String(intake.created_by || ''))?.name || null;
     const warranties = await rows('SELECT id, sale_id, serialized_unit_id, created_at FROM warranty_documents WHERE serialized_unit_id = ?', [unit.id]);
     const signedWarranties = await inList('SELECT id, sale_id, status, created_at FROM signed_warranty_documents WHERE sale_id IN (?)', saleIds);
     let unitEvents = [];
