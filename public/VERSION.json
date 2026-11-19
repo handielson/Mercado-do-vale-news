@@ -48,9 +48,12 @@
     "note": "Site sem mudança nesta versão (segue a release da v1.2.865)."
   },
   "api_release": {
-    "status": "pendente",
+    "status": "publicada",
     "service": "mdv-api",
-    "mode": "upload manual"
+    "mode": "upload manual",
+    "deployed_at": "2026-11-19T23:32Z",
+    "backup": "/var/www/mdv-api/backups/agente-custo-869-1795131010",
+    "note": "services/agentCostApi.cjs; PM2 online; /status 200; pending com chave devolve next."
   },
   "nginx_release": {
     "status": "sem mudança",
