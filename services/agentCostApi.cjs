@@ -3,7 +3,7 @@
 // Rotas do agente de custo (OpenBot no servidor de casa).
 // O agente lê no Bling (pela tela, com a sessão do dono) o último lançamento de entrada e grava aqui.
 // - acesso só com a chave MDV_AGENT_KEY no cabeçalho x-agent-key (sem a variável, as rotas ficam desligadas);
-// - GET  /agent/cost/pending?limit=N&after=<cursor> : produtos ativos sem custo, com SKU e vínculo Bling, sem IMEI, fora de celular/tablet;
+// - GET  /agent/cost/pending?limit=N&after=<cursor>&com_estoque=1 : produtos ativos sem custo, com SKU e vínculo Bling, sem IMEI, fora de celular/tablet;
 // - POST /agent/cost/:id     : grava pelo mesmo serviço do custo manual do admin (histórico + evidência + concorrência).
 
 const crypto = require('node:crypto');
@@ -45,6 +45,7 @@ function createAgentCostApi({ pool, manualCost, key = process.env.MDV_AGENT_KEY 
     const n = Number.parseInt(query.limit, 10);
     const limit = Number.isFinite(n) && n > 0 ? Math.min(n, 50) : 10;
     const cursor = readCursor(query.after);
+    const inStock = ['1', 'true', 'sim'].includes(String(query.com_estoque || '').toLowerCase());
     const fetchSize = limit * 4;
     const [rows] = await pool.query(
       `SELECT p.id, p.sku, p.name, p.bling_id, p.price_cost, p.custom_fields,
@@ -56,6 +57,7 @@ function createAgentCostApi({ pool, manualCost, key = process.env.MDV_AGENT_KEY 
           AND p.bling_id IS NOT NULL AND p.bling_id <> ''
           AND (p.price_cost IS NULL OR p.price_cost = 0)
           AND NOT EXISTS (SELECT 1 FROM units u WHERE u.product_id = p.id)
+          ${inStock ? 'AND p.stock_quantity > 0' : ''}
           ${cursor ? 'AND (p.name > ? OR (p.name = ? AND p.id > ?))' : ''}
         ORDER BY p.name, p.id
         LIMIT ?`,

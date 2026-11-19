@@ -1,3 +1,10 @@
+# v1.2.870-agente-custo-com-estoque
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (API, 19/11). Site e robô sem mudança.
+Lista do agente de custo com `com_estoque=1` (só produtos com estoque). Registro: `docs/versoes/2026-11-19-v1.2.870-agente-custo-com-estoque.md`.
+
+---
+
 # v1.2.869-agente-custo-cascata
 
 Data: 19/11/2026. Branch: `main`. Status: **publicada** (API, 19/11). Site e robô sem mudança.

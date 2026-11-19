@@ -100,3 +100,13 @@ test('cascata: quando todos do bloco são filtrados, o cursor anda pelo último 
   assert.deepEqual(r.products, []);
   assert.deepEqual(JSON.parse(Buffer.from(r.next, 'base64url').toString()), { name: 'Cel 3', id: '3' });
 });
+
+test('com_estoque=1: só produtos com estoque no MdV (os zerados ficam para depois)', async () => {
+  const sqls = [];
+  const pool = { async query(sql, params) { sqls.push([sql.replace(/\s+/g, ' '), params]); return [[]]; } };
+  const api = createAgentCostApi({ pool, manualCost: {}, key: KEY });
+  await api.pending({ limit: '5', com_estoque: '1' });
+  await api.pending({ limit: '5' });
+  assert.ok(sqls[0][0].includes('AND p.stock_quantity > 0'), 'filtra estoque');
+  assert.ok(!sqls[1][0].includes('stock_quantity > 0'), 'sem o filtro, lista tudo');
+});
