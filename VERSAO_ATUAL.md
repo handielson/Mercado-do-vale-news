@@ -1,3 +1,10 @@
+# v1.2.868-agente-custo-bling
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (API, 19/11). Site e robô sem mudança.
+Rotas do agente de custo do OpenBot: `GET /agent/cost/pending` e `POST /agent/cost/:id` (chave `MDV_AGENT_KEY`). Registro: `docs/versoes/2026-11-19-v1.2.868-agente-custo-bling.md`.
+
+---
+
 # v1.2.867-bot-retentativa-estado
 
 Data: 18/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 18/11). Site e API sem mudança.

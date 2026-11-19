@@ -14054,6 +14054,8 @@ setTimeout(() => marketplaceSalesStoreVps.syncInBackgroundIfStale(), 15_000).unr
 setInterval(() => marketplaceSalesStoreVps.syncInBackgroundIfStale(), 2 * 60_000).unref?.();
 const { createProductManualCostService } = require('./services/productManualCost.cjs');
 const productManualCostVps = createProductManualCostService({ pool });
+// agente-custo-v1: rotas do agente OpenBot (custo do último lançamento do Bling), chave MDV_AGENT_KEY.
+require('./services/agentCostApi.cjs').registerAgentCostRoutes(fastify, { pool, manualCost: productManualCostVps });
 fastify.patch('/admin/products/:id/cost', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   try {
     const auth = await getVpsBearerAuthContext(request);

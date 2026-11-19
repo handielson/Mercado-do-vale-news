@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.867-bot-retentativa-estado",
-  "date": "2026-11-18",
+  "version": "v1.2.868-agente-custo-bling",
+  "date": "2026-11-19",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.867-bot-retentativa-estado",
+  "tag": "v1.2.868-agente-custo-bling",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô do WhatsApp: quando duas mensagens do mesmo cliente chegam juntas, a segunda não some mais sem resposta. Na retentativa depois do conflito de estado, o fluxo grava contra a revisão nova (antes, respostas reconstruídas como a do endereço da loja pediam a revisão velha 3 vezes e eram descartadas).",
+  "summary": "Rotas do agente de custo (OpenBot no servidor de casa): lista os produtos ativos sem custo (fora celular, tablet, IMEI, pai de família e variação que herda custo) e grava o custo do último lançamento de entrada do Bling pelo mesmo serviço do custo manual do admin, com histórico. Acesso só com a chave MDV_AGENT_KEY.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,19 +30,19 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "scripts/n8n-state-rebase-revision.cjs",
-    "scripts/deploy-n8n-state-rebase-revision.cjs",
-    "tmp-tests/n8n-state-rebase-revision.test.cjs",
-    "scripts/run-tmp-tests.cjs",
+    "services/agentCostApi.cjs",
+    "vps_server.js",
+    "vps_server.cjs",
+    "deploy-vps-server-only.cjs",
+    "tmp-tests/agent-cost-api.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-18-v1.2.867-bot-retentativa-estado.md"
+    "docs/versoes/2026-11-19-v1.2.868-agente-custo-bling.md"
   ],
   "validations": [
-    "teste focado 5/5 (reproduz o defeito no fluxo antigo)",
-    "gate comercial 19 arquivos no candidato dd45b398…",
-    "dry run: só 'Estado Conversa - Preparar' muda",
-    "produção: alreadyApplied no dry run seguinte; n8n e runner de pé"
+    "tmp-tests/agent-cost-api.test.cjs 6/6",
+    "tmp-tests/product-manual-cost.test.cjs 5/5",
+    "node --check vps_server.js/.cjs/deploy"
   ],
   "site_release": {
     "status": "publicada",
@@ -52,17 +52,13 @@
     "note": "Site sem mudança nesta versão (segue a release da v1.2.865)."
   },
   "api_release": {
-    "status": "publicada",
+    "status": "pendente",
     "service": "mdv-api",
-    "mode": "upload manual",
-    "commit": "f0119ef0",
-    "deployed_at": "2026-11-18T16:52Z",
-    "backup": "/var/www/mdv-api/backups/itens-866-1795020765",
-    "note": "4 módulos; /status 200; PM2 online; sem erro no log; transferir sem login → 401."
+    "mode": "upload manual"
   },
   "nginx_release": {
     "status": "sem mudança",
-    "note": "nenhuma rota nova"
+    "note": "rotas novas /agent/cost/* na API"
   },
   "evolution_release": {
     "status": "publicada",
@@ -113,7 +109,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.866 publicada (API).",
+  "pending_previous": "v1.2.867-bot-retentativa-estado publicada (robô n8n).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

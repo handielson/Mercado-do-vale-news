@@ -24,6 +24,7 @@ const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_P
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketplaceSaleFinancialsPath = 'services/marketplaceSaleFinancials.cjs';
 const productManualCostPath = 'services/productManualCost.cjs';
+const agentCostApiPath = 'services/agentCostApi.cjs';
 const marketplaceSalesStorePath = 'services/marketplaceSalesStore.cjs';
 const tiktokFinanceFeesPath = 'services/tiktokFinanceFees.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
@@ -279,6 +280,11 @@ async function uploadMobileSalesPushFiles(appDir) {
     remotePathJoin(appDir, productManualCostPath),
   );
   console.log(`Uploaded ${productManualCostPath}`);
+  await upload(
+    path.join(__dirname, agentCostApiPath),
+    remotePathJoin(appDir, agentCostApiPath),
+  );
+  console.log(`Uploaded ${agentCostApiPath}`);
   await upload(
     path.join(__dirname, marketplaceSalesStorePath),
     remotePathJoin(appDir, marketplaceSalesStorePath),
