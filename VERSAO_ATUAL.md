@@ -1,3 +1,10 @@
+# v1.2.869-agente-custo-cascata
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (API, 19/11). Site e robô sem mudança.
+Lista do agente de custo com cursor (`after`/`next`) para rodar em cascata sem repetir os pulados. Registro: `docs/versoes/2026-11-19-v1.2.869-agente-custo-cascata.md`.
+
+---
+
 # v1.2.868-agente-custo-bling
 
 Data: 19/11/2026. Branch: `main`. Status: **publicada** (API, 19/11). Site e robô sem mudança.

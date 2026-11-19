@@ -3,7 +3,7 @@
 // Rotas do agente de custo (OpenBot no servidor de casa).
 // O agente lê no Bling (pela tela, com a sessão do dono) o último lançamento de entrada e grava aqui.
 // - acesso só com a chave MDV_AGENT_KEY no cabeçalho x-agent-key (sem a variável, as rotas ficam desligadas);
-// - GET  /agent/cost/pending : produtos ativos sem custo, com SKU e vínculo Bling, sem IMEI, fora de celular/tablet;
+// - GET  /agent/cost/pending?limit=N&after=<cursor> : produtos ativos sem custo, com SKU e vínculo Bling, sem IMEI, fora de celular/tablet;
 // - POST /agent/cost/:id     : grava pelo mesmo serviço do custo manual do admin (histórico + evidência + concorrência).
 
 const crypto = require('node:crypto');
@@ -30,9 +30,22 @@ function createAgentCostApi({ pool, manualCost, key = process.env.MDV_AGENT_KEY 
     return got.length === expected.length && crypto.timingSafeEqual(got, expected);
   }
 
+  function readCursor(after) {
+    if (!after) return null;
+    try {
+      const c = JSON.parse(Buffer.from(String(after), 'base64url').toString('utf8'));
+      if (c && typeof c.name === 'string' && typeof c.id === 'string') return c;
+    } catch {}
+    throw new AgentCostError(400, 'invalid_cursor', 'Cursor inválido.');
+  }
+  const makeCursor = (row) => Buffer.from(JSON.stringify({ name: String(row.name ?? ''), id: String(row.id) })).toString('base64url');
+
+  // Cascata: ordem por nome+id; o cursor "after" continua de onde parou (pulados e gravados não voltam).
   async function pending(query = {}) {
     const n = Number.parseInt(query.limit, 10);
     const limit = Number.isFinite(n) && n > 0 ? Math.min(n, 50) : 10;
+    const cursor = readCursor(query.after);
+    const fetchSize = limit * 4;
     const [rows] = await pool.query(
       `SELECT p.id, p.sku, p.name, p.bling_id, p.price_cost, p.custom_fields,
               (SELECT c.name FROM categories c WHERE c.id = p.category_id LIMIT 1) AS category_name
@@ -43,15 +56,22 @@ function createAgentCostApi({ pool, manualCost, key = process.env.MDV_AGENT_KEY 
           AND p.bling_id IS NOT NULL AND p.bling_id <> ''
           AND (p.price_cost IS NULL OR p.price_cost = 0)
           AND NOT EXISTS (SELECT 1 FROM units u WHERE u.product_id = p.id)
-        ORDER BY p.name
+          ${cursor ? 'AND (p.name > ? OR (p.name = ? AND p.id > ?))' : ''}
+        ORDER BY p.name, p.id
         LIMIT ?`,
-      [limit * 4],
+      cursor ? [cursor.name, cursor.name, cursor.id, fetchSize] : [fetchSize],
     );
-    const products = (rows || [])
-      .filter((p) => !isDeviceCategory(p.category_name) && parseJson(p.custom_fields).inherit_parent_cost !== true)
-      .slice(0, limit)
-      .map((p) => ({ id: p.id, sku: p.sku, name: p.name, bling_id: String(p.bling_id), price_cost: p.price_cost == null ? null : Number(p.price_cost), category: p.category_name || null }));
-    return { products };
+    const list = rows || [];
+    const products = [];
+    let last = null;
+    for (const p of list) {
+      last = p;
+      if (isDeviceCategory(p.category_name) || parseJson(p.custom_fields).inherit_parent_cost === true) continue;
+      products.push({ id: p.id, sku: p.sku, name: p.name, bling_id: String(p.bling_id), price_cost: p.price_cost == null ? null : Number(p.price_cost), category: p.category_name || null });
+      if (products.length === limit) break;
+    }
+    const more = products.length === limit ? last !== list[list.length - 1] || list.length === fetchSize : list.length === fetchSize;
+    return { products, next: more && last ? makeCursor(last) : null };
   }
 
   async function save(productId, body = {}) {

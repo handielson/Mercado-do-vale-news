@@ -70,3 +70,33 @@ test('as rotas do agente estão ligadas nos dois servidores e no deploy', () => 
   for (const f of ['vps_server.js', 'vps_server.cjs']) assert.match(fs.readFileSync(path.join(raiz, f), 'utf8'), /registerAgentCostRoutes\(fastify/, f);
   assert.match(fs.readFileSync(path.join(raiz, 'deploy-vps-server-only.cjs'), 'utf8'), /services\/agentCostApi\.cjs/);
 });
+
+test('cascata: cursor pelo nome+id, pulados não voltam e a lista acaba', async () => {
+  const linhas = [
+    { id: '1', sku: 'A', name: 'Alfa', bling_id: '1', price_cost: null, category_name: 'X' },
+    { id: '2', sku: 'B', name: 'Beta', bling_id: '2', price_cost: null, category_name: 'Smartphones' },
+    { id: '3', sku: 'C', name: 'Gama', bling_id: '3', price_cost: null, category_name: 'X' },
+  ];
+  const sqls = [];
+  const pool = { async query(sql, params) { sqls.push([sql.replace(/\s+/g, ' '), params]); return [params.length > 1 ? [] : linhas]; } };
+  const api = createAgentCostApi({ pool, manualCost: {}, key: KEY });
+  const r1 = await api.pending({ limit: '1' });
+  assert.deepEqual(r1.products.map((p) => p.sku), ['A']);
+  assert.ok(r1.next, 'tem próxima página');
+  const c = JSON.parse(Buffer.from(r1.next, 'base64url').toString());
+  assert.deepEqual(c, { name: 'Alfa', id: '1' }, 'cursor no último item entregue');
+  const r2 = await api.pending({ limit: '1', after: r1.next });
+  assert.ok(sqls[1][0].includes('(p.name > ? OR (p.name = ? AND p.id > ?))'), 'filtra depois do cursor');
+  assert.deepEqual(sqls[1][1].slice(0, 3), ['Alfa', 'Alfa', '1']);
+  assert.deepEqual(r2, { products: [], next: null }, 'acabou');
+  await assert.rejects(() => api.pending({ after: 'lixo!!' }), (e) => e.statusCode === 400);
+});
+
+test('cascata: quando todos do bloco são filtrados, o cursor anda pelo último lido', async () => {
+  const bloco = Array.from({ length: 4 }, (_, i) => ({ id: String(i), sku: 'S' + i, name: 'Cel ' + i, bling_id: '9', price_cost: null, category_name: 'Smartphones' }));
+  const pool = { async query() { return [bloco]; } };
+  const api = createAgentCostApi({ pool, manualCost: {}, key: KEY });
+  const r = await api.pending({ limit: '1' });
+  assert.deepEqual(r.products, []);
+  assert.deepEqual(JSON.parse(Buffer.from(r.next, 'base64url').toString()), { name: 'Cel 3', id: '3' });
+});

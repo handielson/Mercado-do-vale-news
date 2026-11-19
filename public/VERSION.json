@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.868-agente-custo-bling",
+  "version": "v1.2.869-agente-custo-cascata",
   "date": "2026-11-19",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.868-agente-custo-bling",
+  "tag": "v1.2.869-agente-custo-cascata",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Rotas do agente de custo (OpenBot no servidor de casa): lista os produtos ativos sem custo (fora celular, tablet, IMEI, pai de família e variação que herda custo) e grava o custo do último lançamento de entrada do Bling pelo mesmo serviço do custo manual do admin, com histórico. Acesso só com a chave MDV_AGENT_KEY.",
+  "summary": "Agente de custo em cascata: GET /agent/cost/pending aceita o cursor after (ordem nome+id) e devolve next, para o agente ir descendo a lista sem repetir os pulados.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,18 +31,14 @@
   "site_source_base": "a0bc9b4",
   "changed_files": [
     "services/agentCostApi.cjs",
-    "vps_server.js",
-    "vps_server.cjs",
-    "deploy-vps-server-only.cjs",
     "tmp-tests/agent-cost-api.test.cjs",
     "public/VERSION.json",
     "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-19-v1.2.868-agente-custo-bling.md"
+    "docs/versoes/2026-11-19-v1.2.869-agente-custo-cascata.md"
   ],
   "validations": [
-    "tmp-tests/agent-cost-api.test.cjs 6/6",
-    "tmp-tests/product-manual-cost.test.cjs 5/5",
-    "node --check vps_server.js/.cjs/deploy"
+    "tmp-tests/agent-cost-api.test.cjs 8/8",
+    "tmp-tests/product-manual-cost.test.cjs 5/5"
   ],
   "site_release": {
     "status": "publicada",
@@ -52,13 +48,9 @@
     "note": "Site sem mudança nesta versão (segue a release da v1.2.865)."
   },
   "api_release": {
-    "status": "publicada",
+    "status": "pendente",
     "service": "mdv-api",
-    "mode": "upload manual",
-    "commit": "232a96a",
-    "deployed_at": "2026-11-19T23:01Z",
-    "backup": "/var/www/mdv-api/backups/agente-custo-868-1795129269",
-    "note": "server.js + services/agentCostApi.cjs; MDV_AGENT_KEY criada no .env; PM2 online; /status 200; /agent/cost/pending sem chave → 401, com chave → lista."
+    "mode": "upload manual"
   },
   "nginx_release": {
     "status": "sem mudança",
@@ -113,7 +105,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.867-bot-retentativa-estado publicada (robô n8n).",
+  "pending_previous": "v1.2.868-agente-custo-bling publicada (API).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
