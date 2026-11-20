@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Package, Share2, Images, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store, Camera, LayoutGrid, List, ListTree, FileText } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductFilters } from '../../../components/products/ProductFilters';
-import { Print3dProductEntry } from '../../../components/products/Print3dProductEntry';
 import { ProductList } from '../../../components/products/ProductList';
 import { ProductFamilyList, type ProductFamilyGroup } from '../../../components/products/ProductFamilyList';
 import { ProductCompactList } from '../../../components/products/ProductCompactList';
@@ -427,7 +426,6 @@ export const ProductListPage: React.FC = () => {
                     <section aria-labelledby="product-actions-registration" className="rounded-xl border border-slate-200 bg-white p-3">
                         <h2 id="product-actions-registration" className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Cadastro</h2>
                         <div className="flex flex-wrap gap-2">
-                            <Print3dProductEntry className={productActionClass} />
                             <button onClick={() => navigate('/admin/products/drafts')} className={productActionClass}><FileText className="h-4 w-4" /> Rascunhos de anúncios</button>
                             <button onClick={() => navigate('/admin/entrada?aba=planilha')} className={productActionClass} title="Entrada por planilha"><Package className="h-4 w-4" /> Cadastro em Massa</button>
                             <button onClick={() => navigate('/admin/entrada?aba=foto')} className={productActionClass} title="Cadastrar smartphones lendo a etiqueta da caixa por foto"><Camera className="h-4 w-4" /> Smartphones por Foto</button>

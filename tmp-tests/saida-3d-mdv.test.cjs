@@ -61,3 +61,10 @@ test('cadastro de produto: nada é tratado como 3D e não há marcação 3D', ()
   assert.doesNotMatch(ler('components/products/ProductWorkspaceNav.tsx'), /Produção 3D/);
   assert.doesNotMatch(ler('pages/admin/products/ProductStorefrontOffersPage.tsx'), /\{ code: 'loja_3d'/);
 });
+
+test('lista de produtos: sem botão "Produto 3D" e sem marcar família como 3D', () => {
+  const lista = ler('pages/admin/products/ProductListPage.tsx');
+  assert.doesNotMatch(lista, /Print3dProductEntry/);
+  assert.doesNotMatch(ler('components/products/ProductFamilyList.tsx'), /<Print3dFamilyToggle/);
+  assert.equal(fs.existsSync(path.join(raiz, 'components/products/Print3dProductEntry.tsx')), false);
+});

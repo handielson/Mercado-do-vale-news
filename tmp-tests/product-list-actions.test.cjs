@@ -21,7 +21,8 @@ test('product action groups keep every route and existing handler reachable',()=
   const f=render(),nodes=walk(f.tree),groups=nodes.filter(n=>n.type==='section');
   assert.equal(groups.length,3);
   assert.deepEqual(groups.map(g=>text(walk(g).find(n=>n.type==='h2'))),['Cadastro','Sites e vendas','Mídia e impressão']);
-  assert(walk(groups[0]).some(n=>n.type==='3d-entry' && n.props.className==='neutral'));
+  // Saída do 3D (v1.2.871): o botão "Produto 3D" saiu do cadastro.
+  assert(!walk(groups[0]).some(n=>n.type==='3d-entry'));
   for(const [label,target] of Object.entries({'Rascunhos de anúncios':'/admin/products/drafts','Cadastro em Massa':'/admin/entrada?aba=planilha','Smartphones por Foto':'/admin/entrada?aba=foto','Sites e preços':'/admin/products/storefronts','Ofertas':'/admin/products/offers','Combos':'/admin/products/combos','Etiquetas':'/admin/products/labels','Exportar Catálogo':'export','Banco de Imagens':'/admin/products/image-bank','Gerar Links de Vídeo':'video','Novo Produto':'new','Atualizar':'refresh','Selecionar':'selection'})) {
     const button=nodes.find(n=>n.type==='button' && text(n).trim()===label); assert(button,label); button.props.onClick(); assert.equal(f.calls.at(-1),target);
   }

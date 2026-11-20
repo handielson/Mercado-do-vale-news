@@ -40,9 +40,9 @@
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261119-212553-v1-2-871-saida-3d-site",
-    "previous": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
-    "note": "Site sem 3D; atalhos para a G-CODE."
+    "release": "/var/www/mdv-site/releases/20261119-212909-v1-2-871-saida-3d-site-b",
+    "previous": "/var/www/mdv-site/releases/20261119-212553-v1-2-871-saida-3d-site",
+    "note": "Site sem 3D; atalhos para a G-CODE. Release -b: tirado também o botão \"Produto 3D\" da lista e a marcação 3D da família."
   },
   "api_release": {
     "status": "sem mudança",

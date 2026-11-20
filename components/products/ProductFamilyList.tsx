@@ -217,8 +217,6 @@ export function ProductFamilyList({
                       {group.isFamily
                         ? <span className="rounded-full bg-violet-100 px-2 py-0.5 font-medium text-violet-800">{group.totalVariationCount > 0 ? `${group.totalVariationCount} ${group.totalVariationCount === 1 ? 'variação' : 'variações'}` : 'Família sem variações'}</span>
                         : <span>Produto simples</span>}
-                      {canAddVariation && <Print3dFamilyToggle checked={allPrint3d} indeterminate={somePrint3d} disabled={updatingPrint3d}
-                        onChange={enabled => onTogglePrint3dFamily(group.parent!, print3dProducts, enabled)} />}
                       {group.orphaned && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">Pai não encontrado</span>}
                       {searchActive && group.matchedProducts.length < group.selectionProducts.length && <span>{group.matchedProducts.length} correspondência</span>}
                     </div>
