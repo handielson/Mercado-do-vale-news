@@ -4,11 +4,12 @@ const crypto = require('node:crypto');
 const WINDOW = 15 * 60 * 1000;
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 
-function createStorefrontAuthSecurity({ pool, secret, turnstileSecret, publicUrl, fetchImpl = fetch, now = Date.now, scope = 'loja_3d' }) {
-  if (!['loja_3d', 'mercado_do_vale'].includes(scope)) throw new Error('Invalid auth security scope');
-  const table = scope === 'loja_3d' ? 'print3d_login_limits' : 'customer_login_limits';
-  const action = scope === 'loja_3d' ? 'print3d_auth' : 'mdv_auth';
-  const keyPrefix = scope === 'loja_3d' ? 'print3d_login' : 'mdv_login';
+// Saída do 3D (v1.2.875): só o Mercado do Vale.
+function createStorefrontAuthSecurity({ pool, secret, turnstileSecret, publicUrl, fetchImpl = fetch, now = Date.now, scope = 'mercado_do_vale' }) {
+  if (scope !== 'mercado_do_vale') throw new Error('Invalid auth security scope');
+  const table = 'customer_login_limits';
+  const action = 'mdv_auth';
+  const keyPrefix = 'mdv_login';
   let hostname;
   try { hostname = new URL(publicUrl).hostname; } catch { /* Disabled until configured. */ }
   const configured = Boolean(hostname && typeof secret === 'string' && secret.length >= 32

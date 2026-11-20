@@ -38,9 +38,10 @@ function pendingPhoneVerification(customer) {
 // A prova é opaca, ligada ao telefone e ao propósito, consumida na transação do cadastro.
 function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Date.now,
   scope = 'mercado_do_vale', createTables = true }) {
-  if (!['mercado_do_vale', 'loja_3d'].includes(scope)) throw new Error('Escopo de verificação inválido');
-  const verificationTable = scope === 'loja_3d' ? 'print3d_phone_verifications' : 'customer_phone_verifications';
-  const limitsTable = scope === 'loja_3d' ? 'print3d_phone_verification_limits' : 'customer_phone_verification_limits';
+  // Saída do 3D (v1.2.875): só o Mercado do Vale usa a confirmação por WhatsApp.
+  if (scope !== 'mercado_do_vale') throw new Error('Escopo de verificação inválido');
+  const verificationTable = 'customer_phone_verifications';
+  const limitsTable = 'customer_phone_verification_limits';
   const hash = (value) => crypto.createHmac('sha256', secret).update(value).digest('hex');
   let ready;
   async function ensure() {
@@ -81,11 +82,6 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
   }
   async function owner(request) {
     if (request.body?.purpose === 'registration') return 'registration';
-    if (request.body?.purpose === 'password_reset' && scope === 'loja_3d') {
-      const phone = normalizeVerificationPhone(request.body?.phone);
-      if (!phone) throw verificationError('Informe um WhatsApp válido');
-      return 'reset:' + phone;
-    }
     if (request.body?.purpose !== 'profile') throw verificationError('Finalidade de confirmação inválida');
     const auth = await getAuth(request);
     if (!auth.customerId) throw verificationError('Entre na sua conta para confirmar o telefone', 401);
@@ -130,12 +126,9 @@ function createCustomerPhoneVerification({ pool, secret, send, getAuth, now = Da
     let result;
     try {
       result = await send(phone, [
-        scope === 'loja_3d' ? '3DMV 🔐' : 'Mercado do Vale 🔐',
-        scope === 'loja_3d' && request.body?.purpose === 'password_reset'
-          ? 'Seu código para redefinir a senha é: ' + code
-          : 'Seu código para confirmar este WhatsApp é: ' + code,
-        scope === 'loja_3d' ? 'Válido por 10 minutos. Digite o código somente no site 3DMV.'
-          : 'Válido por 10 minutos. Digite o código somente no site do Mercado do Vale.',
+        'Mercado do Vale 🔐',
+        'Seu código para confirmar este WhatsApp é: ' + code,
+        'Válido por 10 minutos. Digite o código somente no site do Mercado do Vale.',
         'Não compartilhe este código. Se não foi você, ignore esta mensagem.',
       ].join('\n'));
     } catch { result = null; }

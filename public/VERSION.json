@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.874-saida-3d-limpeza",
+  "version": "v1.2.875-sem-3dmv",
   "date": "2026-11-19",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.874-saida-3d-limpeza",
+  "tag": "v1.2.875-sem-3dmv",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Saída do 3D, etapa 4 (limpeza): 37 módulos/scripts 3D sem uso e 52 testes/cenários do 3D apagados; deploy da API sem os módulos e modos do 3D; na VPS, módulos 3D e /var/www/print3d-site arquivados e removidos.",
+  "summary": "Domínio antigo 3dmv removido do sistema (nginx, código, testes) e últimos restos do 3D: confirmação por WhatsApp e limite de login só do Mercado do Vale; pasta apps/print3d, PENDENCIAS-LOJA-3D.md e migração 039 apagadas. Certificado de servidor.mercadodovale.com.br renovado.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,25 +30,29 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-19-v1.2.874-saida-3d-limpeza.md"
+    "ver docs/versoes/2026-11-19-v1.2.875-sem-3dmv.md"
   ],
   "validations": [
-    "tmp-tests/saida-3d-mdv.test.cjs 8/8",
-    "npm run test:tmp: só as falhas de base (deploy seletivo sem histórico completo)",
-    "API, catálogo e site 200 depois da remoção na VPS; nginx -t ok"
+    "tmp-tests/saida-3d-mdv.test.cjs 9/9",
+    "npm run test:tmp: só as falhas de base",
+    "vps-api-nginx-cors-static passa (antes falhava pelo 3dmv)",
+    "customer-auth-protection 4/4; customer-phone-verification com as mesmas falhas de base"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261119-213759-v1-2-872-saida-3d-api",
-    "previous": "/var/www/mdv-site/releases/20261119-212909-v1-2-871-saida-3d-site-b",
-    "note": "Sem mudança nesta versão."
+    "release": "/var/www/mdv-site/releases/20261119-220540-v1-2-875-sem-3dmv",
+    "previous": "/var/www/mdv-site/releases/20261119-213759-v1-2-872-saida-3d-api",
+    "note": "Textos do cadastro sem 3DMV."
   },
   "api_release": {
-    "status": "sem mudança de código carregado",
-    "note": "VPS: services/print3d*.cjs (menos print3dProductOffer.cjs) e /var/www/print3d-site arquivados em /var/www/mdv-api/backups/saida-3d-arquivos-20261120-005* e removidos."
+    "status": "publicada",
+    "service": "mdv-api",
+    "mode": "upload manual",
+    "note": "services/customerPhoneVerificationServer.cjs e services/storefrontAuthSecurity.cjs"
   },
   "nginx_release": {
-    "status": "sem mudança"
+    "status": "publicada",
+    "note": "print3d-site-production.conf (3dmv + gcode3d antigo) removido do nginx; backup em /root/backups-nginx/saida-3dmv-*.tgz"
   },
   "evolution_release": {
     "status": "publicada",
@@ -99,7 +103,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.873-saida-3d-dados publicada (banco).",
+  "pending_previous": "v1.2.874-saida-3d-limpeza publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

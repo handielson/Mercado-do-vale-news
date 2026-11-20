@@ -38,7 +38,7 @@ assert.match(menu, /label: 'Lista de Impressão', keywords: 'lista de impressao 
 for (const [group, block] of groupBlocks) {
   const icons = [...block.matchAll(/icon: <(\w+)/g)].map((match) => match[1]);
   const repeated = icons.filter((icon, index) => icons.indexOf(icon) !== index);
-  if (group !== '3DMV') assert.deepEqual(repeated, [], `${group}: ícones repetidos ${repeated.join(', ')}`);
+  assert.deepEqual(repeated, [], `${group}: ícones repetidos ${repeated.join(', ')}`);
 }
 
 assert.doesNotMatch(source, /Memoria IA/, 'legacy WhatsApp AI memory menu must be removed for n8n bot');

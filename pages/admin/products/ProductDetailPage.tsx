@@ -426,7 +426,6 @@ export const ProductDetailPage: React.FC = () => {
                 {/* Tab Content */}
                 <div className="w-full min-w-0 space-y-6">
                     <div className={activeTab === 'product' ? '' : 'hidden'}>
-                        {print3dEntry && <p className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">Incluir na 3DMV: a opção de impressão 3D está marcada para conferência. Salve para continuar usando o SKU {product.sku}.</p>}
                         <ProductForm key={`${product.id}-${print3dEntry}`} initialData={formProduct} onSubmit={handleProductSubmit} onCancel={handleCancel} isLoading={isSaving} />
                     </div>
                     {Number(product.is_parent) === 1 && <div className={activeTab === 'family' ? '' : 'hidden'}><ProductFamilyInheritance parent={product} /></div>}

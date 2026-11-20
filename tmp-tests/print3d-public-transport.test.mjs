@@ -21,4 +21,4 @@ for (const [method, path] of [
 assert.equal(transport.isPublicVpsPath('/products/batch', 'POST'), false);
 assert.equal(transport.isPublicVpsPath('/admin/print3d/production', 'GET'), false);
 
-console.log('3DMV public transport checks passed');
+console.log('public transport checks passed');

@@ -95,3 +95,11 @@ test('limpeza (etapa 4): deploy da API não envia módulos da loja 3D e os módu
   }
   assert.equal(fs.existsSync(path.join(raiz, 'services/print3dProductOffer.cjs')), true, 'normalização de encomenda do produto continua');
 });
+
+test('domínio antigo 3dmv: nenhuma menção no código, nginx e scripts (v1.2.875)', () => {
+  const { execFileSync } = require('node:child_process');
+  let out = '';
+  try { out = execFileSync('git', ['grep', '-l', '-i', '3dmv', '--', '.', ':!docs', ':!*.md', ':!tmp-tests'], { cwd: raiz, encoding: 'utf8' }).trim(); }
+  catch (error) { if (error.status !== 1) throw error; } // 1 = nada encontrado
+  assert.equal(out, '');
+});

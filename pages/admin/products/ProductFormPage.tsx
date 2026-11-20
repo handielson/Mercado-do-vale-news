@@ -141,7 +141,7 @@ export const ProductFormPage: React.FC = () => {
         } else if (isEditMode) {
             document.title = 'Editar Produto | Mercado do Vale';
         } else {
-            document.title = print3dEntry ? 'Novo Produto 3D | Mercado do Vale' : 'Novo Produto | Mercado do Vale';
+            document.title = 'Novo Produto | Mercado do Vale';
         }
 
         return () => {
@@ -289,7 +289,7 @@ export const ProductFormPage: React.FC = () => {
                 </button>
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">
-                        {print3dEntry ? (isEditMode ? 'Incluir produto na 3DMV' : 'Novo Produto 3D') : (isEditMode ? 'Editar Produto' : 'Novo Produto')}
+                        {isEditMode ? 'Editar Produto' : 'Novo Produto'}
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">
                         {isEditMode
@@ -298,8 +298,6 @@ export const ProductFormPage: React.FC = () => {
                     </p>
                 </div>
             </div>
-
-            {print3dEntry && <p className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">A opção de impressão 3D já está marcada. Confira o cadastro e salve para continuar. Produtos vendáveis seguem para a ficha e os arquivos; produtos pai organizam as variações.</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><p>{savedDraft ? `Rascunho salvo em ${new Date(savedDraft.updated_at).toLocaleString('pt-BR')}. As próximas alterações são salvas automaticamente.` : 'O cadastro será salvo automaticamente como rascunho ao começar a preencher, sem disponibilizar o anúncio para venda.'}</p><Link to="/admin/products/drafts" className="font-semibold text-blue-700 underline">Rascunhos de anúncios</Link></div>
 
             {legacySerialCount > 0 && (

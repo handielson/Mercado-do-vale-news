@@ -1,3 +1,10 @@
+# v1.2.875-sem-3dmv
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (site + API + nginx, 20/11 ~01h). Robô sem mudança.
+Domínio antigo 3dmv fora do sistema; últimos restos do 3D; certificado do painel do servidor renovado. Registro: `docs/versoes/2026-11-19-v1.2.875-sem-3dmv.md`.
+
+---
+
 # v1.2.874-saida-3d-limpeza
 
 Data: 19/11/2026. Branch: `main`. Status: **publicada** (repositório + limpeza na VPS, 20/11 ~01h). Site, API e robô sem mudança de comportamento.
