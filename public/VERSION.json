@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.872-saida-3d-api",
+  "version": "v1.2.873-saida-3d-dados",
   "date": "2026-11-19",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.872-saida-3d-api",
+  "tag": "v1.2.873-saida-3d-dados",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Saída do 3D, etapa 2 (API): contas, checkout, pagamentos, produção, worker de expiração, receitas, materiais, SEO /api/seo-produto-3d e cotação/frete da loja 3D saíram do mdv-api; sitemap sem /loja-3d; ofertas por site só Mercado do Vale. Atalho \"Admin G-CODE\" sem quebrar linha.",
+  "summary": "Saída do 3D, etapa 3 (dados): backup testado e remoção das 29 tabelas print3d_*, das 3 ofertas loja_3d e das 2 preferências print3d; FK de orders.print3d_customer_id removida (a coluna ficou, os gatilhos usam).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,25 +30,23 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-19-v1.2.872-saida-3d-api.md"
+    "public/VERSION.json",
+    "VERSAO_ATUAL.md",
+    "docs/versoes/2026-11-19-v1.2.873-saida-3d-dados.md"
   ],
   "validations": [
-    "tmp-tests/saida-3d-mdv.test.cjs 7/7",
-    "npm run test:tmp sem falha nova",
-    "product-storefront-routes 13/13, product-storefront-offer 3/3",
-    "node --check dos dois servidores"
+    "restauração do dump testada num banco temporário (29 tabelas, 7 filamentos + 7 movimentos)",
+    "depois do DROP: /status, catálogo, sitemap e site 200; log da API sem erro de tabela"
   ],
   "site_release": {
     "status": "publicada",
     "release": "/var/www/mdv-site/releases/20261119-213759-v1-2-872-saida-3d-api",
     "previous": "/var/www/mdv-site/releases/20261119-212909-v1-2-871-saida-3d-site-b",
-    "note": "Só o ajuste visual do atalho."
+    "note": "Sem mudança nesta versão."
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "mode": "upload manual",
-    "note": "server.js + vps_server.cjs + productStorefrontOffersServer.cjs + productStorefrontOffer.cjs"
+    "status": "sem mudança de código",
+    "note": "só banco: backup em /var/www/mdv-api/backups/saida-3d-dados-20261120-003950 (LEIA-ME.txt)"
   },
   "nginx_release": {
     "status": "sem mudança"
@@ -102,7 +100,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.871-saida-3d-site publicada (site + nginx).",
+  "pending_previous": "v1.2.872-saida-3d-api publicada (API + site).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

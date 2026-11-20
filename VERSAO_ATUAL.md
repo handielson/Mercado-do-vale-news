@@ -1,3 +1,10 @@
+# v1.2.873-saida-3d-dados
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (só banco, 20/11 00h40). Site, API e robô sem mudança de código.
+Saída do 3D, etapa 3: tabelas `print3d_*` removidas com backup testado. Registro: `docs/versoes/2026-11-19-v1.2.873-saida-3d-dados.md`.
+
+---
+
 # v1.2.872-saida-3d-api
 
 Data: 19/11/2026. Branch: `main`. Status: **publicada** (API + site, 19/11). Robô sem mudança.
