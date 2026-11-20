@@ -7,7 +7,6 @@ import { AccountantProtectedRoute } from '../components/AccountantProtectedRoute
 import { CartProvider } from '../contexts/CartContext';
 import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
-import Print3dMaintenanceGuard from '../components/Print3dMaintenanceGuard.tsx';
 
 // Wrapper de React.lazy que recarrega a página quando o chunk falha por causa
 // de deploy novo ou cache antigo do navegador/CDN. Flag em
@@ -86,17 +85,6 @@ const PixReceiptSharePage = lazy(() => import('../pages/store/PixReceiptSharePag
 const TotemPixUpdatePage = lazy(() => import('../pages/store/TotemPixUpdatePage').then(module => ({ default: module.TotemPixUpdatePage })));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
-const Print3dStorePage = lazy(() => import('../pages/store/Print3dStorePage'));
-const Print3dProductPage = lazy(() => import('../pages/store/Print3dProductPage'));
-const Print3dAccountPage = lazy(() => import('../pages/store/Print3dAccountPage'));
-const Print3dProductionPage = lazy(() => import('../pages/store/Print3dProductionPage'));
-const Print3dCheckoutPage = lazy(() => import('../pages/store/Print3dCheckoutPage'));
-const Print3dOrdersPage = lazy(() => import('../pages/store/Print3dOrdersPage'));
-const AdminPrint3dProductionPage = lazy(() => import('../pages/admin/products/Print3dProductionPage'));
-const Print3dRecordsPage = lazy(() => import('../pages/admin/print3d/Print3dRecordsPage'));
-const Print3dSettingsPage = lazy(() => import('../pages/admin/print3d/Print3dSettingsPage'));
-const Print3dGoogleCallbackPage = lazy(() => import('../pages/store/Print3dGoogleCallbackPage'));
-const Print3dAccountActionPage = lazy(() => import('../pages/store/Print3dAccountActionPage'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
 const ExtendedWarrantyPage = lazy(() => import('../pages/customer/ExtendedWarrantyPage'));
 const CustomerPromotionsPage = lazy(() => import('../pages/customer/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
@@ -138,8 +126,6 @@ const ProductDetailPage = lazy(() => import('../pages/admin/products/ProductDeta
 const ModelProductAggregatorPage = lazy(() => import('../pages/admin/products/ModelProductAggregatorPage').then(module => ({ default: module.ModelProductAggregatorPage })));
 const ProductCombosPage = lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
 const ProductImageBankPage = lazy(() => import('../pages/admin/products/ProductImageBankPage').then(module => ({ default: module.ProductImageBankPage })));
-const Print3dCostPage = lazy(() => import('../pages/admin/products/Print3dCostPage').then(module => ({ default: module.Print3dCostPage })));
-const Print3dFilamentsPage = lazy(() => import('../pages/admin/products/Print3dFilamentsPage').then(module => ({ default: module.Print3dFilamentsPage })));
 const ProductDeadlineRequestsPage = lazy(() => import('../pages/admin/products/ProductDeadlineRequestsPage'));
 const ProductStorefrontOffersPage = lazy(() => import('../pages/admin/products/ProductStorefrontOffersPage'));
 const InventoryPage = lazy(() => import('../pages/admin/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
@@ -339,58 +325,6 @@ export const router = createBrowserRouter([
   {
     path: "/admin/solicitacoes-prazo",
     element: <ProtectedRoute requireAdmin={true}><AdminLayout><ProductDeadlineRequestsPage storefront="mercado_do_vale" /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/solicitacoes",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><ProductDeadlineRequestsPage storefront="loja_3d" /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/clientes",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dRecordsPage key="3d-customers" kind="customers" /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/pedidos",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dRecordsPage key="3d-orders" kind="orders" /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/producao",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><AdminPrint3dProductionPage /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/calculadora",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dCostPage /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/filamentos",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dFilamentsPage /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/catalogo",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><ProductStorefrontOffersPage key="3d-offers" storefront="loja_3d" /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/banners",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><BannerManagementPage key="3d-banners" fixedStorefront="loja_3d" /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/loja-3d/configuracoes",
-    element: <ProtectedRoute requireAdmin={true}><AdminLayout><Print3dSettingsPage /></AdminLayout></ProtectedRoute>
-  },
-  {
-    path: "/admin/products/print3d-production",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><AdminPrint3dProductionPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/products/print3d-cost",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><Print3dCostPage /></AdminLayout>
-      </ProtectedRoute>
-    )
   },
   {
     path: "/admin/products/storefronts",
@@ -1134,54 +1068,6 @@ export const router = createBrowserRouter([
       </MaintenanceGuard>
     )
   },
-  {
-    path: "/loja-3d",
-    element: (
-      <Print3dMaintenanceGuard>
-        <Print3dStorePage />
-      </Print3dMaintenanceGuard>
-    )
-  },
-  {
-    path: "/loja-3d/produto/:slug",
-    element: (
-      <Print3dMaintenanceGuard>
-        <Print3dProductPage />
-      </Print3dMaintenanceGuard>
-    )
-  },
-  {
-    path: "/loja-3d/conta/google/callback",
-    element: <React.Suspense fallback={<div>Carregando...</div>}><Print3dGoogleCallbackPage /></React.Suspense>,
-  },
-  {
-    path: "/loja-3d/conta/producao",
-    element: <Print3dMaintenanceGuard><Print3dProductionPage /></Print3dMaintenanceGuard>,
-  },
-  {
-    path: "/loja-3d/checkout",
-    element: <Print3dMaintenanceGuard><Print3dCheckoutPage /></Print3dMaintenanceGuard>,
-  },
-  {
-    path: "/loja-3d/pedidos",
-    element: <Print3dMaintenanceGuard><Print3dOrdersPage /></Print3dMaintenanceGuard>,
-  },
-  {
-    path: "/loja-3d/conta",
-    element: (
-      <Print3dMaintenanceGuard>
-        <Print3dAccountPage />
-      </Print3dMaintenanceGuard>
-    )
-  },
-  ...["/conta/confirmar-email", "/conta/redefinir-senha", "/loja-3d/conta/confirmar-email", "/loja-3d/conta/redefinir-senha"].map(path => ({
-    path,
-    element: (
-      <Print3dMaintenanceGuard>
-        <Print3dAccountActionPage />
-      </Print3dMaintenanceGuard>
-    )
-  })),
   {
     path: "/produtos",
     element: (

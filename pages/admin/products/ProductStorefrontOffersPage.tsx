@@ -7,11 +7,10 @@ import { productStorefrontOffersService, type StorefrontCode, type StorefrontOff
 import { categoryService } from '@/services/categories';
 import type { Category } from '@/types/category';
 import { fillStorefrontOfferFromProduct } from '@/utils/storefrontOfferDefaults.mjs';
-import { print3dRecipesService } from '@/services/print3dRecipes';
 
 const ALL_SITES: { code: StorefrontCode; label: string }[] = [
   { code: 'mercado_do_vale', label: 'Mercado do Vale' },
-  { code: 'loja_3d', label: 'Loja 3D' },
+  // Saída do 3D (v1.2.871): a Loja 3D saiu do MdV; só o site do Mercado do Vale é publicado aqui.
 ];
 const emptyOffer = (storefront: StorefrontCode): StorefrontOffer => ({
   storefront, publication_status: 'draft', title: null, description: null, category_label: null, slug: null,
@@ -61,9 +60,10 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
       const [{ offers: saved }, fullProduct, activeRecipeResult] = await Promise.all([
         productStorefrontOffersService.list(found.id),
         vpsApiService.getProductById(found.id, true),
-        print3dRecipesService.active(found.id).catch(() => ({ activeRecipe: null })),
+        Promise.resolve({ activeRecipe: null }),
       ]);
-      const central = { ...found, ...(fullProduct || {}) } as CentralProduct;
+      // Saída do 3D (v1.2.871): nenhum produto é 3D no MdV (a regra de arquivo de impressão é da G-CODE).
+      const central = { ...found, ...(fullProduct || {}), is_print3d: false } as CentralProduct;
       const familyId = central.is_parent ? central.id : central.parent_id;
       if (familyId) {
         const [children, parent] = await Promise.all([
@@ -165,14 +165,12 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
           productStorefrontOffersService.list(candidate.id),
           vpsApiService.getProductById(candidate.id, true),
         ]);
-        const central = { ...candidate, ...(fullProduct || {}) } as CentralProduct;
+        const central = { ...candidate, ...(fullProduct || {}), is_print3d: false } as CentralProduct;
         const categoryName = central.category_name || categories.find(category => category.id === central.category_id)?.name || null;
         const current = central.id === product.id
           ? offers[site]
           : fillStorefrontOfferFromProduct(site, saved.find(row => row.storefront === site), central, categoryName);
-        const activeRecipe = Number(central.is_print3d)
-          ? await print3dRecipesService.active(central.id).catch(() => ({ activeRecipe: null }))
-          : { activeRecipe: null };
+        const activeRecipe = { activeRecipe: null };
         return { product: central, hasPrintableFile: !Number(central.is_print3d) || Boolean(activeRecipe.activeRecipe), offer: { ...current, publication_status: 'published' as const,
           category_label: offers[site].category_label } };
       }));
@@ -198,13 +196,13 @@ export default function ProductStorefrontOffersPage({ storefront }: { storefront
     <form onSubmit={event => { event.preventDefault(); void load(sku); }} className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-5"><label className="min-w-64 flex-1 text-sm font-medium">SKU do produto<input value={sku} onChange={event => setSku(event.target.value)} className={fieldClass} placeholder="Informe o SKU cadastrado" /></label><button type="submit" disabled={loading} className="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Buscando...' : 'Abrir produto'}</button></form>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
     {notice && <p role="status" className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">{notice}</p>}
-    {product && <><ProductWorkspaceNav productId={product.id} sku={product.sku} active="storefronts" /><div className="rounded-xl border bg-white p-5"><strong>{product.name}</strong><p className="mt-1 text-sm text-slate-600">SKU {product.sku} · Estoque central: {product.stock_quantity} · {product.images?.length || 0} fotos · Produto 3D: {product.is_print3d ? 'sim' : 'não'}</p>{storefront === 'loja_3d' && !product.is_print3d && <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Este SKU ainda não está marcado como produto 3D. <Link className="font-semibold underline" to={`/admin/products/${product.id}`}>Abra o cadastro do produto</Link>, marque a opção de impressão 3D e salve antes de publicá-lo na Loja 3D.</p>}{product.is_print3d && printFileReady === false && <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Falta o arquivo obrigatório de impressão. <Link className="font-semibold underline" to={`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(product.id)}#ficha-producao-3d`}>Abrir Produção 3D para enviar e selecionar o arquivo principal</Link>.</p>}{product.is_print3d && printFileReady === true && <p className="mt-3 text-sm font-medium text-emerald-700">Arquivo de impressão principal configurado.</p>}</div>
+    {product && <><ProductWorkspaceNav productId={product.id} sku={product.sku} active="storefronts" /><div className="rounded-xl border bg-white p-5"><strong>{product.name}</strong><p className="mt-1 text-sm text-slate-600">SKU {product.sku} · Estoque central: {product.stock_quantity} · {product.images?.length || 0} fotos</p></div>
     {familyProducts.length > 1 && <section className="rounded-xl border border-violet-200 bg-violet-50 p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div><h2 className="font-bold text-violet-950">Família: {familyName}</h2><p className="mt-1 text-sm text-violet-800">{familyProducts.length} variações vinculadas. A categoria desta tela será compartilhada; cada filho mantém descrição, nome, preço, estoque e SKU próprios no cadastro central.</p></div>
         {SITES.map(site => <button key={site.code} type="button" onClick={() => void publishFamily(site.code)} disabled={savingFamily !== null || saving !== null || categoriesLoading} className="shrink-0 rounded-md bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50">{savingFamily === site.code ? 'Conferindo e publicando...' : `Publicar todas no ${site.label}`}</button>)}
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{familyProducts.map(item => <button key={item.id} type="button" onClick={() => { setSku(item.sku); void load(item.sku); }} className={`rounded-lg border p-3 text-left text-sm ${item.id === product.id ? 'border-violet-500 bg-white ring-1 ring-violet-500' : 'border-violet-200 bg-white/70 hover:bg-white'}`}><span className="block font-semibold text-slate-900">{item.sku}</span><span className="mt-1 block truncate text-xs text-slate-600">{item.name}</span><span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${Number(item.is_print3d) ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{Number(item.is_print3d) ? 'Pronto para Loja 3D' : 'Marcar como produto 3D'}</span></button>)}</div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{familyProducts.map(item => <button key={item.id} type="button" onClick={() => { setSku(item.sku); void load(item.sku); }} className={`rounded-lg border p-3 text-left text-sm ${item.id === product.id ? 'border-violet-500 bg-white ring-1 ring-violet-500' : 'border-violet-200 bg-white/70 hover:bg-white'}`}><span className="block font-semibold text-slate-900">{item.sku}</span><span className="mt-1 block truncate text-xs text-slate-600">{item.name}</span></button>)}</div>
     </section>}
     <div className="grid gap-5 lg:grid-cols-2">{SITES.map(site => {
       const offer = offers[site.code];

@@ -76,9 +76,6 @@ test('sugestões não criam registros automaticamente nem substituem listas can�
   assert.match(modal, />Translúcidas<\/button>/);
   assert.match(modal, /selecione e cadastre para disponibilizar no sistema/);
   assert.match(modal, /colorSampleStyle\(c.name, c.hex\)/);
-  const ui = readFileSync('components/print3d/FilamentCatalog.tsx','utf8');
-  assert.match(ui, /catalog.references.colors/);
-  assert.doesNotMatch(ui, /TRANSLUCENT_COLOR_PALETTE/);
   const selector = readFileSync('components/products/selectors/ColorSelect.tsx','utf8');
   assert.match(selector, /colors.find\(color => color.name === colorName\)\?\.hex_code/);
 });

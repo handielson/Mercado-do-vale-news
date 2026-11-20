@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.870-agente-custo-com-estoque",
+  "version": "v1.2.871-saida-3d-site",
   "date": "2026-11-19",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.870-agente-custo-com-estoque",
+  "tag": "v1.2.871-saida-3d-site",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Agente de custo: filtro com_estoque=1 na lista (só produtos com estoque no MdV; os zerados ficam para depois).",
+  "summary": "Saída do 3D, etapa 1 (site e admin): a loja 3D saiu do MdV. No admin ficam só os atalhos Site G-CODE e Admin G-CODE; /loja-3d vai com 301 para gcode3d.com.br; cadastro de produto sem marcação 3D, sem abas de produção e sem canal Loja 3D. API e dados ficam para as próximas etapas.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,33 +30,27 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "services/agentCostApi.cjs",
-    "tmp-tests/agent-cost-api.test.cjs",
-    "public/VERSION.json",
-    "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-19-v1.2.870-agente-custo-com-estoque.md"
+    "ver docs/versoes/2026-11-19-v1.2.871-saida-3d-site.md"
   ],
   "validations": [
-    "tmp-tests/agent-cost-api.test.cjs 9/9"
+    "tmp-tests/saida-3d-mdv.test.cjs 5/5",
+    "npm run test:tmp sem falha nova (15 falhas de base: deploy seletivo sem histórico completo)",
+    "testes .mjs afetados atualizados e verdes",
+    "npm run build ok; bundle sem /admin/loja-3d e sem Supabase"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
-    "previous": "/var/www/mdv-site/releases/20261118-131117-v1-2-864-devolucao-de-itens",
-    "source_commit": "a0bc9b4",
-    "note": "Site sem mudança nesta versão (segue a release da v1.2.865)."
+    "release": "/var/www/mdv-site/releases/20261119-212553-v1-2-871-saida-3d-site",
+    "previous": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
+    "note": "Site sem 3D; atalhos para a G-CODE."
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "mode": "upload manual",
-    "deployed_at": "2026-11-19T23:40Z",
-    "backup": "/var/www/mdv-api/backups/agente-custo-870-1795131231",
-    "note": "services/agentCostApi.cjs; PM2 online; /status 200; com_estoque=1 testado."
+    "status": "sem mudança",
+    "note": "API do 3D sai na etapa 2."
   },
   "nginx_release": {
-    "status": "sem mudança",
-    "note": "rotas novas /agent/cost/* na API"
+    "status": "publicada",
+    "note": "mdv-site-production.conf: /loja-3d(/...) → 301 https://www.gcode3d.com.br/; sem proxy seo-produto-3d; rotas SPA regeneradas."
   },
   "evolution_release": {
     "status": "publicada",
@@ -107,7 +101,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.869-agente-custo-cascata publicada (API).",
+  "pending_previous": "v1.2.870-agente-custo-com-estoque publicada (API).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

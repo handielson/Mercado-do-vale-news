@@ -8,7 +8,7 @@ const menu = source.slice(source.indexOf('const menuGroups = useMemo'), source.i
 const groupTitles = [...menu.matchAll(/^\s+title: '([^']+)',/gm)].map((match) => match[1]);
 
 assert.deepEqual(groupTitles, [
-  'Vendas & Atendimento', '3DMV', 'Produtos & Estoque', 'Financeiro', 'Loja Online & Marketing',
+  'Vendas & Atendimento', 'Produtos & Estoque', 'Financeiro', 'Loja Online & Marketing',
   'Catálogo Técnico', 'Integrações', 'Empresa', 'Sistema (técnico)',
 ], 'admin sidebar should be grouped by daily workflows');
 

@@ -165,7 +165,7 @@ function runBatchComplete({ isEditMode = false, savedProduct, snapshot, preview 
   return ctx.exports.complete(savedProduct, snapshot).then(() => ({ toasts, navigations }));
 }
 
-test('depois do cadastro aparece "Dar entrada no estoque"; o 3D segue para a calculadora', async () => {
+test('depois do cadastro aparece "Dar entrada no estoque"; o antigo 3D segue o fluxo normal', async () => {
   const simple = await runBatchComplete({ savedProduct: { id: 'p1' } });
   assert.deepEqual(simple.navigations, ['/admin/products']);
   assert.equal(simple.toasts.length, 1);
@@ -174,10 +174,9 @@ test('depois do cadastro aparece "Dar entrada no estoque"; o 3D segue para a cal
   simple.toasts[0].options.action.onClick();
   assert.deepEqual(simple.navigations, ['/admin/products', '/admin/entrada?variacao=p1']);
 
+  // Saída do 3D (v1.2.871): produto marcado como 3D segue o fluxo normal (não há mais calculadora 3D no MdV).
   const print3d = await runBatchComplete({ savedProduct: { id: 'p3', is_print3d: true } });
-  assert.deepEqual(print3d.navigations, ['/admin/loja-3d/calculadora?product_id=p3#ficha-producao-3d']);
-  print3d.toasts[0].options.action.onClick();
-  assert.equal(print3d.navigations[1], '/admin/entrada?variacao=p3');
+  assert.deepEqual(print3d.navigations, ['/admin/products']);
 
   const family = await runBatchComplete({ savedProduct: { id: 'pai', is_parent: true }, snapshot: { familyCheckpoint: { children: { a: { id: 'c1' }, b: { id: 'c2' } } } } });
   assert.deepEqual(family.navigations, ['/admin/products/pai']);

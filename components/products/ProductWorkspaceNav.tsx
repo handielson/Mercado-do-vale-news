@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-type ProductWorkspaceSection = 'product' | 'production' | 'storefronts';
+type ProductWorkspaceSection = 'product' | 'storefronts';
 
 type ProductWorkspaceNavProps = {
   productId: string;
@@ -10,14 +10,12 @@ type ProductWorkspaceNavProps = {
 
 const sections: Array<{ id: ProductWorkspaceSection; label: string }> = [
   { id: 'product', label: '1. Cadastro' },
-  { id: 'production', label: '2. Produção 3D' },
-  { id: 'storefronts', label: '3. Sites e preços' },
+  { id: 'storefronts', label: '2. Sites e preços' },
 ];
 
 export function ProductWorkspaceNav({ productId, sku, active }: ProductWorkspaceNavProps) {
   const targets: Record<ProductWorkspaceSection, string> = {
     product: `/admin/products/${encodeURIComponent(productId)}`,
-    production: `/admin/loja-3d/calculadora?product_id=${encodeURIComponent(productId)}#ficha-producao-3d`,
     storefronts: `/admin/products/storefronts?sku=${encodeURIComponent(sku)}`,
   };
 

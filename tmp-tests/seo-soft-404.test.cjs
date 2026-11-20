@@ -51,13 +51,13 @@ test('SPA whitelist follows every active route and rejects paths from the covera
     assert.ok(matcher.test(example), example);
   }
   for (const uri of ['/', '/admin/pdv', '/admin/products/uuid/slug', '/produtos', '/produto/redmi-15c',
-    '/loja-3d/conta/google/callback', '/pedido/uuid/confirmacao', '/delivery/token', '/auth/callback']) {
+    '/pedido/uuid/confirmacao', '/delivery/token', '/auth/callback']) {
     assert.ok(matcher.test(uri), uri);
   }
   for (const uri of ['/madeireira-total-materiais-de-construcao-em-novo-hamburgo/',
     '/otica-korndorfer-oculos-armacao-novo-hamburgo-canudos',
     '/wp-includes/js/wp-emoji-release.min.js', '/produtos/not-a-collection', '/produto/slug/3715',
-    '/produto/slug/feed/', '/contato/', '/unknown']) assert.equal(matcher.test(uri), false, uri);
+    '/produto/slug/feed/', '/contato/', '/unknown', '/loja-3d/conta/google/callback']) assert.equal(matcher.test(uri), false, uri);
   assert.equal(routePatterns('// path: "/commented"\n const route = { path: "*" };').length, 0);
   for (const name of ['production', 'staging']) {
     const config = fs.readFileSync('infra/nginx/mdv-site-' + name + '.conf', 'utf8');

@@ -224,7 +224,8 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
         defaultValues: buildProductFormDefaults(initialData, defaultIsPrint3d)
     });
 
-    const isPrint3d = Boolean(watch('is_print3d'));
+    // Saída do 3D (v1.2.871): a linha 3D é da G-CODE 3D; aqui nenhum produto é tratado como 3D.
+    const isPrint3d = false;
     const isParentProduct = Boolean(watch('is_parent'));
     // product-family-model-guard-v1: produto novo de um modelo que ja tem familia nao pode virar cadastro solto.
     // O formulario mostra a familia e leva para "+ peças" numa variacao existente ou para criar a variacao dentro dela.
@@ -1310,7 +1311,7 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             mergedData.production_days = currentProductionDays != null && currentProductionDays !== '' as any
                 ? parseInt(String(currentProductionDays))
                 : null;
-            mergedData.is_print3d = Boolean(watch('is_print3d'));
+            mergedData.is_print3d = false;
             const isParent = Boolean(mergedData.is_parent);
             mergedData.print3d_preorder_enabled = mergedData.is_print3d ? !isParent : Boolean(watch('print3d_preorder_enabled'));
             const currentPreorderLimit = watch('print3d_preorder_limit');
@@ -2247,39 +2248,12 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 </div>
             </div>}
 
-            {/* Política por SKU para a futura loja de impressão 3D. */}
+            {/* Publicação por SKU nos sites. */}
             <div id="product-channel-panel-sites" role="tabpanel" aria-labelledby="product-channel-tab-sites" className={activeSection === 'channels' && activeSalesChannel === 'sites' ? 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm' : 'hidden'}>
                 <h3 className="font-semibold text-slate-800">Sites e preços</h3>
-                <p className="mt-1 text-sm text-slate-600">Após salvar o SKU, configure separadamente preço, nome, descrição e visibilidade do Mercado do Vale e da Loja 3D. Fotos, características e estoque são compartilhados.</p>
+                <p className="mt-1 text-sm text-slate-600">Após salvar o SKU, configure preço, nome, descrição e visibilidade no Mercado do Vale. Fotos, características e estoque são compartilhados.</p>
                 {initialData?.sku ? <Link to={`/admin/products/storefronts?sku=${encodeURIComponent(initialData.sku)}`} className="mt-3 inline-flex rounded-md border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Configurar publicação nos sites</Link> : <p className="mt-2 text-xs text-slate-500">Salve o produto primeiro para configurar as ofertas.</p>}
             </div>
-            <div className={activeSection === 'commercial' ? 'bg-violet-50 p-5 rounded-xl border border-violet-200 shadow-sm space-y-4' : 'hidden'}>
-                <h3 className="font-semibold text-violet-900">Impressão 3D</h3>
-                <label className="flex items-start gap-3 text-sm text-slate-700">
-                    <input type="checkbox" className="mt-0.5 h-4 w-4" checked={Boolean(watch('is_print3d'))}
-                        onChange={(event) => {
-                            setValue('is_print3d', event.target.checked, { shouldValidate: true });
-                            setValue('print3d_preorder_enabled', event.target.checked && !isParentProduct, { shouldValidate: true });
-                            setValue('print3d_preorder_limit', null, { shouldValidate: true });
-                            if (event.target.checked) setValue('production_days', null, { shouldValidate: true });
-                        }} />
-                    <span>Este SKU pertence à linha de impressão 3D</span>
-                </label>
-                {watch('is_print3d') && <div className="space-y-3 rounded-lg border border-violet-200 bg-white p-4">
-                    <p className="text-xs text-slate-600">A quantidade pronta fica no estoque central acima. Encomenda é uma demanda de fabricação, não saldo negativo.</p>
-                    <button type="button" onClick={() => selectSection(isParentProduct ? 'variations' : 'production')} className="text-sm font-semibold text-violet-800 underline">Ver arquivos e produção 3D</button>
-                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                        <strong>Política padrão da linha 3D</strong>
-                        <p className="mt-1">{isParentProduct
-                            ? 'Este cadastro organiza a família e fornece a descrição compartilhada. Arquivos e encomendas são vinculados às variantes vendáveis.'
-                            : 'Esta variante sempre aceita encomendas, sem limite de quantidade cadastrado e com prazo a combinar conforme o pedido.'}</p>
-                    </div>
-                    {errors.print3d_preorder_enabled && <p className="text-xs text-red-700">{errors.print3d_preorder_enabled.message}</p>}
-                    {errors.production_days && <p className="text-xs text-red-700">{errors.production_days.message}</p>}
-                    <p className="text-xs text-amber-800">Peças prontas continuam disponíveis para compra. Quantidades sob encomenda seguem primeiro para consulta, sem cobrança ou reserva automática.</p>
-                </div>}
-            </div>
-
             {!variationDraftMode && isParentProduct && <div id="product-variations-section" className={activeSection === 'variations' ? 'space-y-4 scroll-mt-20' : 'hidden'}>
                 <p className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">Última etapa: adicione abaixo a foto do produto pai, que será a capa da família no site. Cada cor conserva suas próprias fotos nas variações. Confira os demais dados e salve o pai e os filhos juntos em Salvar família e variações.</p>
                 <section aria-label="Foto do produto pai" className="rounded-xl border border-blue-200 bg-white p-4 space-y-2">
@@ -2296,32 +2270,6 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
                 <ProductFamilyEditor initialDraft={initialDraft?.familyEditor} captureDraftRef={familyEditorDraftRef} onDraftChange={markDraftEdited} productionSetups={productionSetups} onProductionChange={(key,setup) => setProductionSetups(current => ({ ...current, [key]:setup }))} parent={{ ...getValues(), images: imagePreviews }} smartphone={isSmartphoneModel({ category_name: categoryConfig?.__category_name })} rows={familyRows} onChange={rows => { markDraftEdited(); setFamilyRows(rows); }} onBusyChange={setFamilyMediaBusy} disabled={Boolean(isSavingOperation || familyLoading || familyPhotoLoading || familyLoadError)} />
             </div>}
 
-            {isPrint3d && <section className={['files','production'].includes(activeSection) ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
-                <h3 className="font-semibold text-violet-900">{activeSection === 'files' ? 'Arquivos e URL' : 'Parâmetros e placas'}</h3>
-                <p className="text-sm text-violet-800">{isParentProduct ? 'Prepare uma base no pai. Na última etapa, cada variação pode copiar esta base ou receber arquivos e parâmetros próprios.' : 'Anexe os arquivos por placa e preencha o consumo, o tempo e a quantidade de produtos completos para calcular o custo.'}</p>
-                {parentTemplateLoading && <p className="text-sm">Carregando base do pai...</p>}
-                {parentTemplateError && <p role="alert" className="text-red-700">{parentTemplateError}</p>}
-                {(initialData?.parent_id || parentProductionSetup) && <button type="button" disabled={Boolean(isSavingOperation)} onClick={() => void copyParentProduction('single')} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700">Copiar arquivos e parâmetros do pai</button>}
-                <Print3dRegistrationEditor key={`${isParentProduct ? 'parent' : 'single'}:${productionSavedVersion}`} template={isParentProduct} view={activeSection === 'files' ? 'files' : 'parameters'} productId={isParentProduct ? undefined : initialData?.id} value={currentPrintSetup} onChange={setup => setProductionSetups(current => ({ ...current, [isParentProduct ? 'parent' : 'single']:setup }))} disabled={Boolean(isSavingOperation || parentTemplateError)} />
-                {initialData?.id && !isParentProduct && <Link to={`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(initialData.id)}#ficha-producao-3d`} className="inline-flex text-sm font-semibold text-violet-800 underline">Revisões salvas e seleção para produção</Link>}
-            </section>}
-            {isPrint3d && isParentProduct && <section className={activeSection === 'variations' ? 'rounded-xl border border-violet-200 bg-violet-50 p-5 space-y-3' : 'hidden'}>
-                <h3 className="font-semibold text-violet-900">Arquivos e produção 3D</h3>
-                <p className="text-sm text-violet-800">STL, 3MF, G-code, JSON e instruções ficam privados na ficha de produção. O link do MakerWorld ou de outro site é opcional.</p>
-                <>
-                    <p className="text-sm text-violet-900">O pai organiza a família e a descrição compartilhada. Os arquivos de impressão são anexados às revisões dos filhos vendáveis, pois material, tamanho e configuração de impressão podem variar.</p>
-                    {!familyRows.length ? <p className="text-sm">Adicione as variações acima. Depois selecione aqui cada filho para preencher suas placas e arquivos, antes de salvar a família.</p> : <>
-                        <label className="block text-sm font-medium">Produção de qual variação?<select className="mt-1 w-full rounded-lg border bg-white p-2" value={familyRows.some(r => r.key === productionRowKey) ? productionRowKey : familyRows[0].key} onChange={e => setProductionRowKey(e.target.value)}>{familyRows.map(row => <option key={row.key} value={row.key}>{row.data.name} — {row.data.sku || 'SKU confirmado ao salvar'}{productionSetups[row.key] ? ' (nova ficha preenchida)' : ''}</option>)}</select></label>
-                        {(() => { const row = familyRows.find(r => r.key === productionRowKey) || familyRows[0]; return <>
-                            <button type="button" disabled={Boolean(isSavingOperation || !productionSetups.parent)} onClick={() => void copyParentProduction(row.key)} className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700">Copiar arquivos e parâmetros do pai</button>
-                            {productionSetups[row.key] && <p className="text-sm">Custo próprio: {(() => { try { return new Intl.NumberFormat('pt-BR', {style:'currency',currency:'BRL'}).format(print3dSetupParameters(productionSetups[row.key]!).cost.unitCents / 100); } catch { return 'Complete os parâmetros'; } })()}. Confira o preço de venda em Editar detalhes da variação.</p>}
-                            {row.data.id && <Link to={`/admin/products/${row.data.id}#production`} target="_blank" className="inline-block text-sm font-semibold text-violet-800 underline">Abrir cadastro, revisões e aprovação desta variação</Link>}
-                            {row.data.id && isLocalCatalogPreviewRuntime() && <p className="text-xs text-violet-800">Aprove primeiro o pai e depois cada variação em seu cadastro. Aprovar o pai não envia os arquivos dos filhos.</p>}
-                            <Print3dRegistrationEditor key={`${row.key}:${productionSavedVersion}`} productId={row.data.id} value={productionSetups[row.key]} onChange={setup => setProductionSetups(current => ({ ...current, [row.key]:setup }))} disabled={Boolean(isSavingOperation)} />
-                        </>; })()}
-                    </>}
-                </>
-            </section>}
             <div className="sticky bottom-0 z-20 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
                 {isSavingOperation && !savingDraft && (
                     <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">

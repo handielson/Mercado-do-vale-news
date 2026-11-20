@@ -1,3 +1,10 @@
+# v1.2.871-saida-3d-site
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (site + nginx, 19/11). API e robô sem mudança.
+Saída do 3D, etapa 1: no admin só os atalhos da G-CODE 3D; `/loja-3d` → 301 para gcode3d.com.br; cadastro sem 3D. Plano: `docs/planos/2026-11-19-saida-do-3d.md`. Registro: `docs/versoes/2026-11-19-v1.2.871-saida-3d-site.md`.
+
+---
+
 # v1.2.870-agente-custo-com-estoque
 
 Data: 19/11/2026. Branch: `main`. Status: **publicada** (API, 19/11). Site e robô sem mudança.

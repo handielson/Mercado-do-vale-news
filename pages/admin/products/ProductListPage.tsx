@@ -542,7 +542,7 @@ export const ProductListPage: React.FC = () => {
                     onAddVariation={handleAddVariation}
                     onExportFamily={(parent) => navigate(`/admin/products/storefronts?sku=${encodeURIComponent(parent.sku || '')}`)}
                     onTogglePrint3dFamily={(parent, products, enabled) => void handleTogglePrint3dFamily(parent, products, enabled)}
-                    onManagePublication={(product) => navigate(`/admin/loja-3d/catalogo?sku=${encodeURIComponent(product.sku || '')}`)}
+                    onManagePublication={(product) => navigate(`/admin/products/storefronts?sku=${encodeURIComponent(product.sku || '')}`)}
                     onToggleProduct={handleToggleSelect}
                     onToggleFamily={handleToggleFamily}
                 />

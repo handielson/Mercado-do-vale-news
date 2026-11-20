@@ -30,11 +30,14 @@ type BotHealth = {
   lastError: string | null;
 };
 
+// Saída do 3D (v1.2.871): a G-CODE 3D tem sistema próprio; no MdV ficam só os dois atalhos.
+const GCODE_SITE_URL = 'https://www.gcode3d.com.br/';
+const GCODE_ADMIN_URL = 'https://www.gcode3d.com.br/admin';
+
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, customer, signOut } = useVpsAuth();
   const { settings } = useTheme();
   const location = useLocation();
-  const isPrint3dArea = location.pathname.startsWith('/admin/loja-3d/') || /^\/admin\/products\/print3d-(cost|production)$/.test(location.pathname);
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
   const [search, setSearch] = useState('');
@@ -110,7 +113,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     let active = true;
-    if (isPrint3dArea) { setBotHealth(null); return; }
     const refresh = async () => {
       try {
         const status = await vpsClient.get<BotHealth>('/admin/bot-health');
@@ -122,7 +124,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     void refresh();
     const timer = window.setInterval(refresh, 30_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [isPrint3dArea]);
+  }, []);
 
   function handleMenuSearchChange(event: React.ChangeEvent<HTMLInputElement>) {
     const nextSearch = event.target.value;
@@ -147,20 +149,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/pedidos-online', icon: <Globe size={18} />, label: 'Pedidos Online', keywords: 'site web' },
         { to: '/admin/solicitacoes-prazo', icon: <MessageCircle size={18} />, label: 'Solicitações de prazo', keywords: 'encomenda quantidade prazo consulta whatsapp' },
         { to: '/admin/customers', icon: <Users size={18} />, label: 'Clientes', keywords: 'usuarios compradores' },
-      ]
-    },
-    {
-      title: '3DMV',
-      items: [
-        { to: '/admin/loja-3d/clientes', icon: <Users size={18} />, label: 'Clientes 3D', keywords: 'contas cadastro email whatsapp' },
-        { to: '/admin/loja-3d/pedidos', icon: <ShoppingBag size={18} />, label: 'Pedidos 3D', keywords: 'encomendas entrada saldo pagamento' },
-        { to: '/admin/loja-3d/solicitacoes', icon: <MessageCircle size={18} />, label: 'Solicitações 3D', keywords: 'encomenda quantidade prazo consulta whatsapp' },
-        { to: '/admin/loja-3d/producao', icon: <Printer size={18} />, label: 'Produção 3D', keywords: 'ordens fila progresso lotes aprovadas rejeitadas' },
-        { to: '/admin/loja-3d/calculadora', icon: <Printer size={18} />, label: 'Produtos e arquivos 3D', keywords: 'filamento impressao custo energia insumos arquivos ficha makerworld stl 3mf gcode' },
-        { to: '/admin/loja-3d/filamentos', icon: <Boxes size={18} />, label: 'Filamentos e estoque', keywords: 'marca material cor rolo custo kg gramas entrada ajuste saldo historico' },
-        { to: '/admin/loja-3d/catalogo', icon: <Store size={18} />, label: 'Catálogo e preços 3D', keywords: 'produtos publicar visibilidade oferta' },
-        { to: '/admin/loja-3d/banners', icon: <Image size={18} />, label: 'Banners 3D', keywords: 'imagens carrossel' },
-        { to: '/admin/loja-3d/configuracoes', icon: <Wrench size={18} />, label: 'Configurações 3DMV', keywords: 'manutencao abrir fechar site mensagem' },
       ]
     },
     {
@@ -360,8 +348,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const mobileTitle = activeShortcut && shortcutPath(activeShortcut).length > (activeItemPath || '').length ? (activeShortcut.title || activeShortcut.label) : (activeItemLabel || 'Painel');
 
   return (
-    <div className={cn("min-h-screen flex flex-col md:flex-row bg-slate-50", isPrint3dArea && "print3d-admin")} data-storefront={isPrint3dArea ? 'loja_3d' : 'mercado_do_vale'} data-admin-layout-build="2026-06-14-assets-refresh">
-      {!isPrint3dArea && <SaleAlerts />}
+    <div className={cn("min-h-screen flex flex-col md:flex-row bg-slate-50")} data-storefront="mercado_do_vale" data-admin-layout-build="2026-06-14-assets-refresh">
+      <SaleAlerts />
       {certificatePopupOpen && certificateAlerts.length > 0 && <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/60 p-4" role="presentation"><div role="alertdialog" aria-modal="true" aria-labelledby="certificate-alert-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><h2 id="certificate-alert-title" className="text-xl font-bold text-amber-900">Certificado digital próximo do vencimento</h2><p className="mt-2 text-sm text-slate-700">Revise a renovação dos certificados destas empresas:</p><ul className="mt-3 space-y-2">{certificateAlerts.map(item => <li key={item.companyId} className="rounded-lg bg-amber-50 p-3 text-sm"><strong>{item.companyName}</strong> · {item.daysRemaining! < 0 ? 'vencido' : `faltam ${item.daysRemaining} dia(s)`} · validade {new Date(item.validUntil + 'T12:00:00').toLocaleDateString('pt-BR')}</li>)}</ul><div className="mt-5 flex flex-wrap gap-3"><Link to="/admin/settings/company#fiscal" onClick={() => setCertificatePopupOpen(false)} className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white">Ver certificados</Link><button type="button" className="rounded-lg border px-4 py-2 text-sm" onClick={() => { const today = new Date().toISOString().slice(0, 10); const fingerprint = certificateAlerts.map(item => `${item.companyId}:${item.validUntil}`).join('|'); sessionStorage.setItem('mdv-certificate-alert-dismissed', `${today}:${fingerprint}`); setCertificatePopupOpen(false); }}>Lembrar na próxima sessão</button></div></div></div>}
       {DEV_MODE && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black px-4 py-2 text-center text-sm font-bold z-[100] shadow-lg">
@@ -394,21 +382,21 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                 </h1>
               )}
             </Link>
-            <Link
-              to="/loja-3d"
-              target="_blank"
-              title="Abrir site 3DMV"
-              aria-label="Abrir site 3DMV"
-              data-storefront-brand="loja_3d"
-              className="flex h-11 min-w-[92px] items-center justify-center gap-1.5 rounded-md border border-violet-300/70 bg-violet-500/10 px-2 text-violet-100 transition-colors hover:border-violet-200 hover:bg-violet-500/20"
-            >
-              <Printer size={17} className="text-violet-300" />
-              <span className="text-sm font-extrabold tracking-tight">3DMV</span>
-            </Link>
+            <div className="flex flex-col gap-1" data-gcode-shortcuts="expanded">
+              <a href={GCODE_SITE_URL} target="_blank" rel="noopener" title="Abrir site G-CODE 3D" aria-label="Abrir site G-CODE 3D"
+                className="flex h-5 min-w-[92px] items-center justify-center gap-1 rounded border border-violet-300/70 bg-violet-500/10 px-2 text-[11px] font-bold text-violet-100 hover:bg-violet-500/20">
+                <Printer size={12} className="text-violet-300" /> Site G-CODE
+              </a>
+              <a href={GCODE_ADMIN_URL} target="_blank" rel="noopener" title="Abrir admin G-CODE 3D" aria-label="Abrir admin G-CODE 3D"
+                className="flex h-5 min-w-[92px] items-center justify-center gap-1 rounded border border-violet-300/70 bg-violet-500/10 px-2 text-[11px] font-bold text-violet-100 hover:bg-violet-500/20">
+                <Wrench size={12} className="text-violet-300" /> Admin G-CODE
+              </a>
+            </div>
           </div>
           <div className={cn("hidden flex-col items-center gap-2", sidebarCollapsed && "md:flex")}>
             <Link to="/" target="_blank" title="Abrir site Mercado do Vale" aria-label="Abrir site Mercado do Vale" className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 font-bold text-white">M</Link>
-            <Link to="/loja-3d" target="_blank" title="Abrir site 3DMV" aria-label="Abrir site 3DMV" className="flex h-10 w-10 items-center justify-center rounded-lg border border-violet-300/70 text-violet-200"><Printer size={18} /></Link>
+            <a href={GCODE_SITE_URL} target="_blank" rel="noopener" title="Abrir site G-CODE 3D" aria-label="Abrir site G-CODE 3D" data-gcode-shortcuts="collapsed" className="flex h-10 w-10 items-center justify-center rounded-lg border border-violet-300/70 text-violet-200"><Printer size={18} /></a>
+            <a href={GCODE_ADMIN_URL} target="_blank" rel="noopener" title="Abrir admin G-CODE 3D" aria-label="Abrir admin G-CODE 3D" className="flex h-10 w-10 items-center justify-center rounded-lg border border-violet-300/70 text-violet-200"><Wrench size={18} /></a>
           </div>
           <div className={cn("hidden md:flex items-center gap-1.5 mt-2 mb-4", sidebarCollapsed && "md:hidden")}>
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -492,7 +480,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold uppercase tracking-widest text-slate-500">Versao</span>
-              <span className={cn("font-mono", isPrint3dArea ? "text-violet-300" : "text-blue-300")}>{appVersion.version}</span>
+              <span className={cn("font-mono", "text-blue-300")}>{appVersion.version}</span>
             </div>
             {appVersion.release_vps && (
               <p className="mt-1 truncate font-mono text-[9px] text-slate-600">
@@ -506,11 +494,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <div className="pt-3 md:pt-4 border-t border-slate-800" data-menu-footer>
             <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-2 text-xs md:hidden">
               <Link to="/" target="_blank" className="font-semibold text-blue-300">Abrir site</Link>
-              <Link to="/loja-3d" target="_blank" className="font-semibold text-violet-300">Abrir 3DMV</Link>
+              <a href={GCODE_SITE_URL} target="_blank" rel="noopener" className="font-semibold text-violet-300">Site G-CODE</a>
+              <a href={GCODE_ADMIN_URL} target="_blank" rel="noopener" className="font-semibold text-violet-300">Admin G-CODE</a>
               {appVersion?.version && <span className="ml-auto font-mono text-[10px] text-slate-500" title={appVersionTooltip}>{appVersion.version.replace(/^(v\d+\.\d+\.\d+).*/, '$1')}</span>}
             </div>
             <div className={cn("flex items-center gap-3 mb-1 md:mb-4 px-2", sidebarCollapsed && "md:justify-center md:px-0")}>
-              <div className={cn("w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-xs font-bold shadow-lg", isPrint3dArea ? "from-violet-500 to-violet-700" : "from-blue-500 to-blue-700")}>
+              <div className={cn("w-9 h-9 rounded-xl bg-gradient-to-br flex items-center justify-center text-xs font-bold shadow-lg", "from-blue-500 to-blue-700")}>
                 {customer?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </div>
               <div className={cn("flex-1 overflow-hidden", sidebarCollapsed && "md:hidden")}>
@@ -530,8 +519,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         )}
       </aside>
       <main className={cn("flex-1 min-w-0 p-4 pb-24 overflow-y-auto w-full md:w-auto overflow-x-hidden", location.pathname.startsWith('/admin/settings/models') ? "md:p-6" : "md:p-10")}>
-        {isPrint3dArea && <div className="mb-5 flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 text-violet-900"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Printer size={20} /></span><div><p className="text-sm font-bold">3DMV</p><p className="text-xs text-violet-700">Área de gestão da 3DMV · estoque central compartilhado</p></div></div>}
-        {!isPrint3dArea && botHealth?.status === 'offline' && (
+        {botHealth?.status === 'offline' && (
           <div role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 flex-none text-red-600" />
@@ -590,11 +578,11 @@ const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; acti
       "flex min-h-[44px] md:min-h-0 items-center gap-3 px-3 py-3 md:py-2.5 rounded-xl cursor-pointer transition-all duration-200 group",
       collapsed && "md:justify-center md:px-2",
       active
-        ? to.startsWith('/admin/loja-3d/') ? "bg-violet-700 text-white shadow-lg shadow-violet-700/20" : "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-        : to.startsWith('/admin/loja-3d/') ? "hover:bg-violet-500/15 text-violet-200 hover:text-white" : "hover:bg-slate-800 text-slate-400 hover:text-white"
+        ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+        : "hover:bg-slate-800 text-slate-400 hover:text-white"
     )}
   >
-    <span className={cn("transition-transform group-hover:scale-110", active ? "text-white" : to.startsWith('/admin/loja-3d/') ? "text-violet-300 group-hover:text-violet-100" : "text-slate-500 group-hover:text-blue-400")}>
+    <span className={cn("transition-transform group-hover:scale-110", active ? "text-white" : "text-slate-500 group-hover:text-blue-400")}>
       {icon}
     </span>
     <span className={cn("font-semibold text-sm tracking-tight", collapsed && "md:hidden")}>{label}</span>

@@ -36,7 +36,6 @@ export const systemStatusDefinitions: SystemStatusDefinition[] = [
   { id: 'bling', name: 'Bling · sincronização fiscal', group: 'Integrações', href: '/admin/settings/bling', source: 'bling' },
   { id: 'payments', name: 'Pagamentos do site', group: 'Integrações', href: '/admin/settings/integrations', source: 'payments' },
   { id: 'fiscal', name: 'Alertas de certificados fiscais', group: 'Integrações', href: '/admin/settings/company', source: 'fiscal' },
-  { id: 'print3d', name: 'Loja 3D', group: 'Integrações', href: '/admin/loja-3d/configuracoes', source: 'print3d' },
   { id: 'telegram', name: 'Telegram', group: 'Comunicação', href: '/admin/settings/telegram', source: null },
   { id: 'email', name: 'E-mail', group: 'Comunicação', href: '/admin/settings/email', source: null },
   { id: 'contacts', name: 'Agenda Google', group: 'Comunicação', href: '/admin/settings/whatsapp', source: null },
@@ -168,7 +167,6 @@ export function interpretSystemStatus(id: string, data: any, now = new Date()): 
       return result(active.length ? 'configured' : 'unconfigured', active.length ? 'Configurado' : 'Sem gateway ativo', `${active.length} gateways ativos. Configuração do checkout; não testa cobrança real.`);
     }
     case 'fiscal': return Array.isArray(data.alerts) ? result(data.alerts.length ? 'warning' : 'configured', data.alerts.length ? 'Certificados com alerta' : 'Sem alertas registrados', `${data.alerts.length} alertas de certificado. Não testa emissão ou disponibilidade da SEFAZ.`) : unknown();
-    case 'print3d': return typeof data.enabled === 'boolean' ? result(data.enabled ? 'configured' : 'unconfigured', data.enabled ? 'Habilitada' : 'Desativada', 'Estado do módulo 3D registrado na API; não testa produção ou pagamento.') : unknown();
     default: return unknown();
   }
 }

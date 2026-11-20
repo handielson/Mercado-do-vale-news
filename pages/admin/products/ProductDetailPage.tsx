@@ -106,7 +106,7 @@ export const ProductDetailPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const location = useLocation();
-    const print3dEntry = new URLSearchParams(location.search).get('print3d') === '1';
+    const print3dEntry = false /* Saída do 3D (v1.2.871): sem entrada de produto 3D no MdV */;
 
     const requestedTab = new URLSearchParams(location.search).get('tab') === 'inventory' ? 'inventory' : 'product';
     // entrada-atalhos-v1: o link antigo ?tab=inventory&addUnit=1 (favoritos) agora abre a Entrada com a variação fixa.
@@ -209,10 +209,6 @@ export const ProductDetailPage: React.FC = () => {
                 return savedProduct;
             }
             toast.success('Produto atualizado com sucesso!');
-            if (print3dEntry && savedProduct.is_print3d && !Number(savedProduct.is_parent)) {
-                navigate(`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(savedProduct.id)}#ficha-producao-3d`);
-                return savedProduct;
-            }
             if (Number(product?.is_parent) === 1) await fetchProduct();
             else navigate('/admin/products');
             return savedProduct;

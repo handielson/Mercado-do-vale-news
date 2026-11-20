@@ -49,11 +49,10 @@ function LocalPreviewApproval({ productId, revision, onApproved }: { productId: 
             <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <p className="flex items-center gap-2 font-bold"><CheckCircle2 size={18} /> Rascunho local pendente</p>
-                    <p className="mt-1 text-sm">A prévia 3DMV usa estas alterações somente no localhost. Produção permanece intacta até a aprovação.</p>
+                    <p className="mt-1 text-sm">A prévia local usa estas alterações somente no localhost. Produção permanece intacta até a aprovação.</p>
                     <p className="mt-2 text-xs">Campos alterados: {draft.fields.join(', ') || 'oferta da vitrine'}.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <a href="/loja-3d" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-semibold hover:bg-amber-100"><ExternalLink size={15} /> Ver prévia</a>
                     <button type="button" onClick={() => void approve()} disabled={approving} className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60">{approving ? 'Aprovando...' : 'Aprovar para produção'}</button>
                 </div>
             </div>
@@ -85,7 +84,7 @@ export const ProductFormPage: React.FC = () => {
 
     const editingProductId = (id && id !== 'new' ? id : undefined) || loadedDraft?.snapshot.data.id;
     const isEditMode = Boolean(editingProductId);
-    const print3dEntry = new URLSearchParams(location.search).get('print3d') === '1';
+    const print3dEntry = false /* Saída do 3D (v1.2.871): sem entrada de produto 3D no MdV */;
 
     // Get EAN from navigation state if provided
     const eanFromState = (location.state as any)?.ean;
@@ -254,10 +253,6 @@ export const ProductFormPage: React.FC = () => {
         offerStockEntry(savedProduct, snapshot);
         if (savedProduct?.is_parent && savedProduct.id) {
             navigate(`/admin/products/${savedProduct.id}`);
-            return;
-        }
-        if (savedProduct?.is_print3d && savedProduct.id) {
-            navigate(`/admin/loja-3d/calculadora?product_id=${encodeURIComponent(savedProduct.id)}#ficha-producao-3d`);
             return;
         }
         navigate('/admin/products');
