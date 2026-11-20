@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
 const MARKERS=['Adicionar variação','Defina a variação','Salvar família e variações','SKU da variação','EAN da variação',
-  'Herdar descrição do pai','Enviar vídeo','Arquivos e produção 3D','Produtos completos por lote','+ Adicionar placa'];
+  'Herdar descrição do pai','Enviar vídeo']; // Saída do 3D (v1.2.871): marcadores do cadastro 3D saíram
 function assertFamilyRegistrationRelease(read) {
   const seen=new Set(),queue=['index.html'];let bundle='';
   while(queue.length){
