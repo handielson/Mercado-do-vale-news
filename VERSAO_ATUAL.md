@@ -1,3 +1,10 @@
+# v1.2.874-saida-3d-limpeza
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (repositório + limpeza na VPS, 20/11 ~01h). Site, API e robô sem mudança de comportamento.
+Saída do 3D concluída (etapa 4 de 4). Registro: `docs/versoes/2026-11-19-v1.2.874-saida-3d-limpeza.md`.
+
+---
+
 # v1.2.873-saida-3d-dados
 
 Data: 19/11/2026. Branch: `main`. Status: **publicada** (só banco, 20/11 00h40). Site, API e robô sem mudança de código.

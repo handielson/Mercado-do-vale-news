@@ -74,12 +74,6 @@ const groups = [
     enabled: hasFfmpeg,
     files: ['tiktok-shop-video-ratio.test.cjs'],
   },
-  {
-    name: 'loja3d', why: 'Loja 3D (3DMV / G-CODE) vai sair deste sistema',
-    enabled: () => false,
-    files: ['print3d-admin-mdv-isolation.test.cjs', 'print3d-deploy.test.cjs', 'print3d-google-client.test.cjs',
-      'print3d-migrations-mysql.test.cjs', 'print3d-product-service-roundtrip.test.cjs', 'print3d-turnstile-browser.test.cjs'],
-  },
 ];
 
 const all = fs.readdirSync(dir).filter(f => f.endsWith('.test.cjs')).sort();

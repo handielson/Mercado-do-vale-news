@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.873-saida-3d-dados",
+  "version": "v1.2.874-saida-3d-limpeza",
   "date": "2026-11-19",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.873-saida-3d-dados",
+  "tag": "v1.2.874-saida-3d-limpeza",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Saída do 3D, etapa 3 (dados): backup testado e remoção das 29 tabelas print3d_*, das 3 ofertas loja_3d e das 2 preferências print3d; FK de orders.print3d_customer_id removida (a coluna ficou, os gatilhos usam).",
+  "summary": "Saída do 3D, etapa 4 (limpeza): 37 módulos/scripts 3D sem uso e 52 testes/cenários do 3D apagados; deploy da API sem os módulos e modos do 3D; na VPS, módulos 3D e /var/www/print3d-site arquivados e removidos.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,13 +30,12 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "public/VERSION.json",
-    "VERSAO_ATUAL.md",
-    "docs/versoes/2026-11-19-v1.2.873-saida-3d-dados.md"
+    "ver docs/versoes/2026-11-19-v1.2.874-saida-3d-limpeza.md"
   ],
   "validations": [
-    "restauração do dump testada num banco temporário (29 tabelas, 7 filamentos + 7 movimentos)",
-    "depois do DROP: /status, catálogo, sitemap e site 200; log da API sem erro de tabela"
+    "tmp-tests/saida-3d-mdv.test.cjs 8/8",
+    "npm run test:tmp: só as falhas de base (deploy seletivo sem histórico completo)",
+    "API, catálogo e site 200 depois da remoção na VPS; nginx -t ok"
   ],
   "site_release": {
     "status": "publicada",
@@ -45,8 +44,8 @@
     "note": "Sem mudança nesta versão."
   },
   "api_release": {
-    "status": "sem mudança de código",
-    "note": "só banco: backup em /var/www/mdv-api/backups/saida-3d-dados-20261120-003950 (LEIA-ME.txt)"
+    "status": "sem mudança de código carregado",
+    "note": "VPS: services/print3d*.cjs (menos print3dProductOffer.cjs) e /var/www/print3d-site arquivados em /var/www/mdv-api/backups/saida-3d-arquivos-20261120-005* e removidos."
   },
   "nginx_release": {
     "status": "sem mudança"
@@ -100,7 +99,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.872-saida-3d-api publicada (API + site).",
+  "pending_previous": "v1.2.873-saida-3d-dados publicada (banco).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

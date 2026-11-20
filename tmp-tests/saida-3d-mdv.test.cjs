@@ -83,3 +83,15 @@ test('API (etapa 2): os dois servidores não registram mais nada da loja 3D', ()
   const ofertas = ler('services/productStorefrontOffersServer.cjs');
   assert.doesNotMatch(ofertas, /loadPrint3dQuote|print3dShippingServer|print3d_active_recipes|\/storefronts\/loja_3d\/quote/);
 });
+
+test('limpeza (etapa 4): deploy da API não envia módulos da loja 3D e os módulos saíram do repositório', () => {
+  const deploy = ler('deploy-vps-server-only.cjs');
+  const restos = (deploy.match(/services\/print3d\w+\.cjs/g) || []).filter((f) => f !== 'services/print3dProductOffer.cjs');
+  assert.deepEqual(restos, []);
+  assert.doesNotMatch(deploy, /--print3d-(only|domain-only|filaments-only|materials-only)/);
+  for (const f of ['services/print3dCheckoutServer.cjs', 'services/print3dPayments.cjs', 'services/print3dProductionServer.cjs',
+    'services/print3dCustomerAccountsServer.cjs', 'services/print3dExpiryWorker.cjs', 'scripts/deploy-print3d.cjs', 'scripts/deploy-print3d-domain.cjs']) {
+    assert.equal(fs.existsSync(path.join(raiz, f)), false, f);
+  }
+  assert.equal(fs.existsSync(path.join(raiz, 'services/print3dProductOffer.cjs')), true, 'normalização de encomenda do produto continua');
+});

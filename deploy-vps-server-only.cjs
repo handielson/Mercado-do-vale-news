@@ -73,7 +73,8 @@ const tiktokShopAutomationPaths = [
   'services/tiktokOrderStockProtection.cjs',
   'services/tiktokStockSyncQueue.cjs',
 ];
-const print3dRecipeRuntimePaths = [
+// Saída do 3D (v1.2.874): os módulos da loja 3D saíram; esta lista é só do runtime de produto/estoque.
+const productRuntimePaths = [
   'services/unitJournalServer.cjs',
   'services/unitJournalSchema.cjs',
   'services/unitTimeline.cjs',
@@ -84,44 +85,17 @@ const print3dRecipeRuntimePaths = [
   'services/saleReturnServer.cjs',
   'services/customerSaleVisibility.cjs',
   'services/productFormDraftsServer.cjs',
-  'services/print3dMaterialsServer.cjs',
   'services/print3dProductOffer.cjs',
   'services/productDeadlineRequest.cjs',
   'services/productDeadlineRequestsServer.cjs',
   'services/productStorefrontOffer.cjs',
   'services/productStorefrontOffersServer.cjs',
-  'services/print3dStorefrontQuote.cjs',
-  'services/print3dShippingServer.cjs',
-  'services/print3dShippingQuoteToken.cjs',
-  'services/print3dCheckout.cjs',
-  'services/print3dCheckoutServer.cjs',
-  'services/print3dAdminServer.cjs',
-  'services/print3dStorefrontSettingsServer.cjs',
-  'services/print3dPayments.cjs',
-  'services/print3dPaymentsServer.cjs',
-  'services/print3dPaymentTerms.cjs',
-  'services/print3dOrderPlan.cjs',
-  'services/print3dProduction.cjs',
-  'services/print3dProductionServer.cjs',
-  'services/print3dMaterialStock.cjs',
-  'services/print3dSupplyStock.cjs',
-  'services/print3dDispatch.cjs',
-  'services/print3dCancellation.cjs',
-  'services/print3dCancellationServer.cjs',
-  'services/print3dExpiryWorker.cjs',
   'services/orderStorefront.cjs',
   'services/orderCoinRedemption.cjs',
   'services/orderCouponRedemption.cjs',
   'services/orderTotalGuard.cjs',
-  'services/print3dCustomerSession.cjs',
-  'services/print3dCustomerAccountsServer.cjs',
-  'services/print3dAuthSecurity.cjs',
-  'services/print3dGoogleAuthServer.cjs',
   'services/storefrontAuthSecurity.cjs',
   'services/customerAuthProtection.cjs',
-  'services/print3dWhatsAppSender.cjs',
-  'services/print3dRecipesServer.cjs',
-  'services/print3dActiveRecipeServer.cjs',
   'services/priorityStockReservation.cjs',
   'services/productFamilyInheritance.cjs',
   'services/priorityStockDecrement.cjs',
@@ -130,10 +104,6 @@ const print3dRecipeRuntimePaths = [
   'services/manualStockMovement.cjs',
   'services/stockMovementRestoration.cjs',
   'services/externalStockReconciliation.cjs',
-  'services/print3dRecipeFilesServer.cjs',
-  'utils/print3dRecipeDraft.mjs',
-  'utils/print3dCost.mjs',
-  'utils/print3dImport.mjs',
 ];
 const companyFiscalServicePaths = [
   'services/companyFiscalCore.cjs',
@@ -634,24 +604,6 @@ async function main() {
     conn.end(); return;
   }
   // Saída do 3D (v1.2.872): os modos --product-drafts-only e --product-registration-only (ligados ao cadastro 3D) saíram.
-  if (process.argv.includes('--print3d-filaments-only') || process.argv.includes('--print3d-filaments-check')) {
-    await require('./scripts/deploy-print3d-filaments.cjs').deployPrint3dFilaments({ appDir, apiProc, exec, root: __dirname,
-      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
-      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
-      checkOnly: process.argv.includes('--print3d-filaments-check'),
-      migrate: process.argv.includes('--apply-filament-migration-054'),
-      enableStock: process.argv.includes('--enable-filament-stock'),
-    });
-    conn.end(); return;
-  }
-  if (process.argv.includes('--print3d-materials-only') || process.argv.includes('--print3d-materials-check')) {
-    await require('./scripts/deploy-print3d-materials.cjs').deployPrint3dMaterials({ appDir, apiProc, exec, root: __dirname,
-      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
-      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
-      checkOnly: process.argv.includes('--print3d-materials-check'),
-    });
-    conn.end(); return;
-  }
   if (process.argv.includes('--catalog-title-upload-only') || process.argv.includes('--catalog-title-upload-check')) {
     await require('./scripts/deploy-catalog-title-upload.cjs').deployCatalogTitleUpload({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
@@ -840,23 +792,6 @@ async function main() {
   }
   if (process.argv.includes('--bling-acquisition-cost-only')) {
     await require('./scripts/deploy-bling-acquisition-cost.cjs')({ appDir, apiProc, exec, root: __dirname,
-      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
-      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
-    });
-    conn.end(); return;
-  }
-  if (process.argv.includes('--print3d-only') || process.argv.includes('--print3d-check')) {
-    const result = await require('./scripts/deploy-print3d.cjs').deployPrint3d({
-      appDir, apiProc, exec, upload, root: __dirname,
-      checkOnly: process.argv.includes('--print3d-check'), runtimeFiles: print3dRecipeRuntimePaths,
-    });
-    console.log(JSON.stringify(result));
-    conn.end();
-    return;
-  }
-  if (process.argv.includes('--print3d-domain-only') || process.argv.includes('--print3d-domain-check')) {
-    await require('./scripts/deploy-print3d-domain.cjs').deploy({appDir,apiProc,exec,root:__dirname,
-      checkOnly:process.argv.includes('--print3d-domain-check'),
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
       write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
     });
@@ -1248,7 +1183,7 @@ async function main() {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
-  for (const relativePath of print3dRecipeRuntimePaths) {
+  for (const relativePath of productRuntimePaths) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }
