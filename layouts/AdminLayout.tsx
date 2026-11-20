@@ -384,11 +384,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             </Link>
             <div className="flex flex-col gap-1" data-gcode-shortcuts="expanded">
               <a href={GCODE_SITE_URL} target="_blank" rel="noopener" title="Abrir site G-CODE 3D" aria-label="Abrir site G-CODE 3D"
-                className="flex h-5 min-w-[92px] items-center justify-center gap-1 rounded border border-violet-300/70 bg-violet-500/10 px-2 text-[11px] font-bold text-violet-100 hover:bg-violet-500/20">
+                className="flex h-5 min-w-[104px] items-center justify-center gap-1 whitespace-nowrap rounded border border-violet-300/70 bg-violet-500/10 px-2 text-[11px] font-bold text-violet-100 hover:bg-violet-500/20">
                 <Printer size={12} className="text-violet-300" /> Site G-CODE
               </a>
               <a href={GCODE_ADMIN_URL} target="_blank" rel="noopener" title="Abrir admin G-CODE 3D" aria-label="Abrir admin G-CODE 3D"
-                className="flex h-5 min-w-[92px] items-center justify-center gap-1 rounded border border-violet-300/70 bg-violet-500/10 px-2 text-[11px] font-bold text-violet-100 hover:bg-violet-500/20">
+                className="flex h-5 min-w-[104px] items-center justify-center gap-1 whitespace-nowrap rounded border border-violet-300/70 bg-violet-500/10 px-2 text-[11px] font-bold text-violet-100 hover:bg-violet-500/20">
                 <Wrench size={12} className="text-violet-300" /> Admin G-CODE
               </a>
             </div>

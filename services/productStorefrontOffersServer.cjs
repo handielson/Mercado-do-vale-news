@@ -1,7 +1,6 @@
 'use strict';
 
 const { STOREFRONTS, validateStorefrontOffer, projectStorefrontProduct } = require('./productStorefrontOffer.cjs');
-const { validateQuoteItems, quoteProduct, quotePaymentSchedule } = require('./print3dStorefrontQuote.cjs');
 
 const compactImageColumns = `CASE WHEN p.images IS NOT NULL AND JSON_LENGTH(p.images) > 0
   AND JSON_UNQUOTE(JSON_EXTRACT(p.images, '$[0]')) LIKE 'http%'
@@ -38,11 +37,6 @@ function parseJson(value, fallback) {
 }
 
 function eligibilitySql(storefront) {
-  if (storefront === 'loja_3d') return `o.publication_status = 'published' AND p.is_print3d = 1 AND o.price_retail > 0
-    AND EXISTS (SELECT 1 FROM print3d_active_recipes active_recipe
-      JOIN print3d_recipe_files recipe_file ON BINARY recipe_file.id = BINARY active_recipe.primary_file_id
-       AND BINARY recipe_file.recipe_id = BINARY active_recipe.recipe_id
-      WHERE BINARY active_recipe.product_id = BINARY p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`;
   return `((o.publication_status = 'published' AND o.price_retail > 0)
     OR (o.product_id IS NULL AND COALESCE(p.is_print3d, 0) = 0
       AND COALESCE(p.hide_from_catalog, 0) = 0 AND p.price_retail > 0))`;
@@ -81,59 +75,9 @@ function respondError(reply, error) {
   throw error;
 }
 
-async function loadPrint3dQuote(pool, requested) {
-      const ids = requested.map((item) => item.product_id);
-      const [rows] = await pool.query(`SELECT p.id, p.company_id, p.sku, p.name, p.specs, p.stock_quantity, p.weight_kg, p.dimensions,
-          p.print3d_preorder_enabled, p.print3d_preorder_limit, p.production_days,
-          o.title, o.price_retail, o.price_promo,
-          (SELECT COUNT(*) FROM product_stock_locations psl WHERE psl.product_id = p.id) AS location_count,
-          (SELECT COALESCE(SUM(GREATEST(0, psl.quantity - psl.reserved_quantity)), 0)
-             FROM product_stock_locations psl WHERE psl.product_id = p.id) AS location_available
-        FROM products p INNER JOIN product_storefront_offers o
-          ON o.product_id = p.id AND o.storefront = 'loja_3d'
-        WHERE p.id IN (${ids.map(() => '?').join(',')})
-          AND p.status = 'active' AND COALESCE(p.is_parent, 0) = 0 AND p.is_print3d = 1
-          AND o.publication_status = 'published' AND o.price_retail > 0
-          AND EXISTS (SELECT 1 FROM print3d_active_recipes active_recipe
-            JOIN print3d_recipe_files recipe_file ON BINARY recipe_file.id = BINARY active_recipe.primary_file_id
-             AND BINARY recipe_file.recipe_id = BINARY active_recipe.recipe_id
-            WHERE BINARY active_recipe.product_id = BINARY p.id AND recipe_file.kind IN ('model', 'project', 'gcode'))`, ids);
-      const byId = new Map(rows.map((row) => [String(row.id), row]));
-      const items = requested.map(({ product_id, quantity }) => {
-        const row = byId.get(product_id);
-        if (!row) return { product_id, quantity, status: 'unavailable' };
-        const availableStock = Number(row.location_count) > 0
-          ? Math.min(Math.max(0, Number(row.stock_quantity) || 0), Math.max(0, Number(row.location_available) || 0))
-          : row.stock_quantity;
-        return quoteProduct({ ...row, available_stock: availableStock }, quantity);
-      });
-      const paymentSchedule = quotePaymentSchedule(items);
-      return { rows, items, paymentSchedule };
-}
-
 function registerProductStorefrontOfferRoutes(fastify, {
   pool, requireSyncKeyOrAdmin, enrichProducts, calculateShipping, shippingEnv = process.env, mdvReady = process.env.MDV_STOREFRONT_MDV_READY === '1',
 }) {
-  require('./print3dShippingServer.cjs').registerPrint3dShipping(fastify, {
-    pool, loadQuote: loadPrint3dQuote, calculateShipping, env: shippingEnv,
-  });
-  fastify.post('/storefronts/loja_3d/quote', async (req, reply) => {
-    let requested;
-    try { requested = validateQuoteItems(req.body?.items); }
-    catch (error) { return reply.code(400).send({ error: error.message }); }
-    try {
-      const { items, paymentSchedule } = await loadPrint3dQuote(pool, requested);
-      reply.header('Cache-Control', 'no-store');
-      return { storefront: 'loja_3d', items,
-        subtotal: paymentSchedule?.subtotal ?? null,
-        payment_schedule: paymentSchedule,
-        can_checkout: false,
-        notice: paymentSchedule
-          ? 'Cotação informativa das peças prontas, sem frete. Escolha entrada entre 50% e 100% no checkout. Nenhum item foi reservado.'
-          : 'A quantidade solicitada supera o estoque pronto. Envie uma solicitação para a equipe analisar a produção e negociar o prazo; nenhum pedido, cobrança ou reserva foi criado.' };
-    } catch (error) { return respondError(reply, error); }
-  });
-
   fastify.get('/storefronts/:storefront/products', async (req, reply) => {
     const { storefront } = req.params;
     if (!STOREFRONTS.includes(storefront)) return reply.code(404).send({ error: 'Site não encontrado.' });
@@ -208,23 +152,10 @@ function registerProductStorefrontOfferRoutes(fastify, {
       return reply.code(409).send({ error: 'A publicação de preços próprios do Mercado do Vale aguarda a migração do site, checkout e bot.' });
     }
     try {
-      const [products] = await pool.query(`SELECT id, is_print3d, status, is_parent,
-        EXISTS(
-          SELECT 1
-            FROM print3d_active_recipes active_recipe
-            JOIN print3d_recipe_files recipe_file
-              ON BINARY recipe_file.id = BINARY active_recipe.primary_file_id
-             AND BINARY recipe_file.recipe_id = BINARY active_recipe.recipe_id
-           WHERE BINARY active_recipe.product_id = BINARY products.id
-             AND recipe_file.kind IN ('model', 'project', 'gcode')
-        ) AS has_printable_file
+      const [products] = await pool.query(`SELECT id, is_print3d, status, is_parent
         FROM products WHERE id = ? LIMIT 1`, [productId]);
       if (!products.length) return reply.code(404).send({ error: 'Produto não encontrado.' });
       if (offer.publication_status === 'published' && (products[0].status !== 'active' || Number(products[0].is_parent) === 1)) return reply.code(400).send({ error: 'Ative uma variante vendável antes de publicar.' });
-      if (storefront === 'loja_3d' && offer.publication_status === 'published' && Number(products[0].is_print3d) !== 1) return reply.code(400).send({ error: 'Marque o SKU como produto 3D antes de publicá-lo nesta loja.' });
-      if (offer.publication_status === 'published' && Number(products[0].is_print3d) === 1 && Number(products[0].has_printable_file) !== 1) {
-        return reply.code(409).send({ error: 'Envie o arquivo de impressão e selecione a ficha principal antes de publicar este produto 3D.' });
-      }
       await pool.query(`INSERT INTO product_storefront_offers
         (product_id, storefront, publication_status, title, description, category_label, slug, price_retail,
          price_reseller, price_wholesale, price_promo, meta_title, meta_description)
@@ -245,4 +176,4 @@ function registerProductStorefrontOfferRoutes(fastify, {
   });
 }
 
-module.exports = { registerProductStorefrontOfferRoutes, loadPrint3dQuote };
+module.exports = { registerProductStorefrontOfferRoutes };

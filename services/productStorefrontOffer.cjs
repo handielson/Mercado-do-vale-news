@@ -1,6 +1,7 @@
 'use strict';
 
-const STOREFRONTS = Object.freeze(['mercado_do_vale', 'loja_3d']);
+// Saída do 3D (v1.2.872): a loja_3d saiu do MdV.
+const STOREFRONTS = Object.freeze(['mercado_do_vale']);
 const STATUSES = Object.freeze(['draft', 'published', 'hidden']);
 
 function cents(value, field) {

@@ -14,15 +14,6 @@ const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePh
 const { registerSmartphonePriceGroupRoutes, withSmartphonePriceWrite, patchProductWithGroupPrices, insertProductRecordsWithGroupPrices } = require('./services/smartphonePriceGroupsServer.cjs');
 const { normalizePrint3dProductOffer } = require('./services/print3dProductOffer.cjs');
 const { registerProductStorefrontOfferRoutes } = require('./services/productStorefrontOffersServer.cjs');
-const { registerPrint3dCustomerAccountRoutes } = require('./services/print3dCustomerAccountsServer.cjs');
-const { registerPrint3dProductionRoutes } = require('./services/print3dProductionServer.cjs');
-const { registerPrint3dCheckoutRoutes } = require('./services/print3dCheckoutServer.cjs');
-const { registerPrint3dPaymentRoutes } = require('./services/print3dPaymentsServer.cjs');
-const { registerPrint3dCancellationRoutes } = require('./services/print3dCancellationServer.cjs');
-const { createPrint3dExpiryWorker } = require('./services/print3dExpiryWorker.cjs');
-const { paymentsConfigured, createMpAdapter, cancelPrint3dProviderCharges } = require('./services/print3dPayments.cjs');
-const { verifyShippingQuote } = require('./services/print3dShippingQuoteToken.cjs');
-const { createPrint3dWhatsAppSender } = require('./services/print3dWhatsAppSender.cjs');
 const { ensureProductDeadlineRequestsTable, registerProductDeadlineRequestRoutes } = require('./services/productDeadlineRequestsServer.cjs');
 const {
   ensureMercadoLivreTables,
@@ -2019,11 +2010,7 @@ fastify.get('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, asyn
 });
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-require('./services/print3dMaterialsServer.cjs').registerPrint3dMaterialRoutes(fastify, { pool, requireAdminBearerToken });
 require('./services/productFormDraftsServer.cjs').registerProductFormDraftRoutes(fastify, { pool, requireAdminBearerToken });
-const filamentCatalogRoutes = require('./services/print3dFilamentsServer.cjs').registerPrint3dFilamentRoutes(fastify, {
-  pool, getBearerAuthContext:getVpsBearerAuthContext, stockEnabled:process.env.MDV_PRINT3D_FILAMENT_STOCK_ENABLED === '1',
-});
 
 fastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const key = normalizeAdminPreferenceKey(req.params?.key);
@@ -2045,13 +2032,6 @@ fastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, as
 fastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const key = normalizeAdminPreferenceKey(req.params?.key);
   if (!key) return reply.code(400).send({ error: 'Invalid preference key' });
-
-  if (key === 'print3d.cost.v1') {
-    await filamentCatalogRoutes.admin(req, reply);
-    if (reply.sent) return;
-    try { return await filamentCatalogRoutes.saveCosts(req.body); }
-    catch (error) { return reply.code(error.statusCode || 500).send({ error:error.statusCode ? error.message : 'Não foi possível salvar os custos.' }); }
-  }
 
   const valueJson = normalizeAdminPreferenceValue(req.body?.value);
   if (!valueJson) return reply.code(400).send({ error: 'Invalid preference value' });
@@ -2150,15 +2130,6 @@ const VPS_PROXY_PUBLIC_TABLE_DATA_READ_TABLES = new Set([
   'product_reviews',
   'promotions',
 ]);
-const VPS_PROXY_PUBLIC_PRINT3D_AUTH_POST_PATHS = new Set([
-  '/print3d/auth/register', '/print3d/auth/verification/request', '/print3d/auth/verify-email',
-  '/print3d/auth/login', '/print3d/auth/password/request', '/print3d/auth/password/reset',
-  '/print3d/auth/phone/register/request', '/print3d/auth/phone/register/verify',
-  '/print3d/auth/phone/request', '/print3d/auth/phone/verify', '/print3d/auth/phone/confirm',
-  '/print3d/auth/password/phone/request', '/print3d/auth/password/phone/verify',
-  '/print3d/auth/password/phone/confirm',
-  '/print3d/auth/google/prepare', '/print3d/auth/google/exchange',
-]);
 
 function isVpsProxyPublicTableDataReadPath(pathname) {
   const match = pathname.match(/^\/table-data\/([a-zA-Z0-9_]+)$/u);
@@ -2168,16 +2139,6 @@ function isVpsProxyPublicTableDataReadPath(pathname) {
 function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const pathname = proxyPath.split('?')[0] || '/';
-  if (normalizedMethod === 'GET' && pathname === '/print3d/production') return true;
-  if (['GET', 'POST'].includes(normalizedMethod) && pathname === '/print3d/checkout') return true;
-  if (normalizedMethod === 'GET' && /^\/print3d\/orders(?:\/[0-9a-f-]{36}(?:\/payment)?)?$/i.test(pathname)) return true;
-  if (normalizedMethod === 'POST' && /^\/print3d\/orders\/[0-9a-f-]{36}\/payment(?:\/refresh)?$/i.test(pathname)) return true;
-  if (normalizedMethod === 'POST' && /^\/print3d\/orders\/[0-9a-f-]{36}\/cancel$/i.test(pathname)) return true;
-  if (normalizedMethod === 'POST' && pathname === '/print3d/payments/webhook') return true;
-  if (normalizedMethod === 'POST' && VPS_PROXY_PUBLIC_PRINT3D_AUTH_POST_PATHS.has(pathname)) return true;
-  if (normalizedMethod === 'GET' && pathname === '/print3d/auth/me') return true;
-  if (normalizedMethod === 'GET' && pathname === '/print3d/auth/google/config') return true;
-  if (normalizedMethod === 'GET' && pathname === '/print3d/auth/phone/status') return true;
   if (normalizedMethod === 'PATCH' && pathname === '/auth/profile') return true;
   if (normalizedMethod === 'GET' && pathname === '/auth/me') return true;
 
@@ -14512,74 +14473,6 @@ async function loadSeoProductBySlug(slug) {
   return rows[0] || null;
 }
 
-function print3dSeoSlug(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 170);
-}
-
-function print3dSeoBaseProductName(value) {
-  const name = String(value || '').trim();
-  return name
-    .replace(/(?:\s*[-–—|]\s*|\s+)(?:cor|color)\s*:?\s*[^|,/]+$/iu, '')
-    .trim() || name;
-}
-
-function getPrint3dSeoRouteTarget(product) {
-  const base = print3dSeoSlug(product.parent_name || print3dSeoBaseProductName(product.offer_title || product.name)) || 'produto';
-  const unique = print3dSeoSlug(product.parent_sku || product.sku || product.id) || print3dSeoSlug(product.id);
-  return `${base}-${unique}`;
-}
-
-function getPrint3dLegacySeoRouteTarget(product) {
-  const base = print3dSeoSlug(product.offer_slug || product.product_slug || product.offer_title || product.name) || 'produto';
-  const unique = print3dSeoSlug(product.sku || product.id) || print3dSeoSlug(product.id);
-  return `${base}-${unique}`;
-}
-
-async function loadPrint3dSeoProductByRouteTarget(routeTarget) {
-  const [rows] = await pool.query(
-    `SELECT p.id, p.company_id, p.model_id, p.name, p.description, p.images, p.image_url, p.specs,
-        p.price_retail AS product_price_retail, p.stock_quantity,
-        LEAST(GREATEST(COALESCE(p.stock_quantity, 0), 0),
-          COALESCE((SELECT SUM(GREATEST(0, psl.quantity - psl.reserved_quantity))
-            FROM product_stock_locations psl WHERE psl.product_id = p.id), GREATEST(COALESCE(p.stock_quantity, 0), 0))) AS available_stock,
-        p.sku, p.slug AS product_slug, pp.sku AS parent_sku, pp.name AS parent_name, pp.slug AS parent_slug,
-        p.production_days, p.print3d_preorder_enabled,
-        o.title AS offer_title, o.description AS offer_description, o.category_label,
-        o.slug AS offer_slug, o.price_retail AS offer_price_retail,
-        o.meta_title, o.meta_description, o.updated_at
-       FROM products p
-       INNER JOIN product_storefront_offers o
-         ON o.product_id = p.id AND o.storefront = 'loja_3d'
-       LEFT JOIN products pp ON pp.id = p.parent_id
-       WHERE o.publication_status = 'published'
-         AND o.price_retail > 0
-         AND p.is_print3d = 1
-         AND p.status = 'active'
-         AND (p.is_parent = 0 OR p.is_parent IS NULL)
-         AND (p.exclude_from_seo = 0 OR p.exclude_from_seo IS NULL)
-       ORDER BY o.updated_at DESC
-       LIMIT 5000`
-  );
-  const normalizedTarget = String(routeTarget || '').toLowerCase();
-  const match = rows.find((row) => getPrint3dSeoRouteTarget(row).toLowerCase() === normalizedTarget
-    || getPrint3dLegacySeoRouteTarget(row).toLowerCase() === normalizedTarget);
-  if (!match) return null;
-  return {
-    ...match,
-    name: print3dSeoBaseProductName(match.offer_title || match.name),
-    description: match.offer_description ?? match.description,
-    slug: match.offer_slug || match.product_slug,
-    price_retail: match.offer_price_retail,
-    seo_route_target: getPrint3dSeoRouteTarget(match),
-  };
-}
-
 async function loadSeoProductImages(product, baseUrl, { socialPreview = false } = {}) {
   let parent;
   if (socialPreview) {
@@ -14672,26 +14565,6 @@ function readSeoIndexHtml() {
     <div id="root">Carregando...</div>
   </body>
 </html>`;
-}
-
-function readPrint3dSeoIndexHtml() {
-  const candidates = [
-    process.env.VPS_PRINT3D_SITE_INDEX_HTML,
-    process.env.VPS_PRINT3D_SITE_ROOT ? path.join(process.env.VPS_PRINT3D_SITE_ROOT, 'current', 'index.html') : '',
-    '/var/www/print3d-site/current/index.html',
-    path.join(__dirname, 'dist-print3d', 'index.html'),
-    path.join(__dirname, 'apps', 'print3d', 'index.html'),
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
-    } catch {
-      // Try the next isolated 3DMV candidate.
-    }
-  }
-
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>3DMV</title></head><body><div id="root">Carregando 3DMV...</div></body></html>`;
 }
 
 function normalizeSeoKeywords(value) {
@@ -14839,114 +14712,6 @@ fastify.get('/api/seo-produto', async (request, reply) => {
   }
 });
 
-fastify.get('/api/seo-produto-3d', async (request, reply) => {
-  const routeTarget = String(request.query?.slug || '').trim();
-  if (!routeTarget) return reply.redirect('/loja-3d');
-
-  try {
-    const baseHtml = readPrint3dSeoIndexHtml();
-    const product = await loadPrint3dSeoProductByRouteTarget(routeTarget);
-    if (!product) {
-      return reply
-        .header('Content-Type', 'text/html; charset=utf-8')
-        .header('Cache-Control', 'no-store')
-        .code(410)
-        .send('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="robots" content="noindex, follow"><title>Produto indisponivel | 3DMV</title></head><body><h1>Produto indisponivel</h1><p>Este produto nao esta publicado na Loja 3D.</p><a href="/loja-3d">Ver produtos 3D</a></body></html>');
-    }
-
-    const baseUrl = buildSeoBaseUrl(request);
-    const publicImages = await loadSeoProductImages(product, baseUrl);
-    const seoTitle = print3dSeoBaseProductName(product.meta_title || product.name);
-    const title = `${seoTitle} | 3DMV`;
-    const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');
-    const description = cleanDescription.slice(0, 155) || `Conheca ${product.name}, produzido pela 3DMV.`;
-    const canonicalTarget = product.seo_route_target || routeTarget;
-    const url = `${baseUrl}/loja-3d/produto/${encodeURIComponent(canonicalTarget)}`;
-    const image = await require('./services/socialPreviewImage.cjs').resolveSocialPreviewImage(publicImages[0] || `${baseUrl}/og-cover.jpg`, { uploadsDir: UPLOADS_DIR });
-    const imageMetadata = await loadSeoImageMetadata(image);
-    const stockQuantity = Number(product.available_stock ?? product.stock_quantity) || 0;
-    const availability = stockQuantity > 0
-      ? 'https://schema.org/InStock'
-      : Number(product.print3d_preorder_enabled) === 1
-        ? 'https://schema.org/PreOrder'
-        : 'https://schema.org/OutOfStock';
-    const schemaProduct = {
-      '@context': 'https://schema.org/',
-      '@type': 'Product',
-      name: product.name || '',
-      image: publicImages.length ? publicImages.slice(0, 5) : [image],
-      description,
-      sku: product.sku || '',
-      category: product.category_label || 'Impressao 3D',
-      offers: {
-        '@type': 'Offer',
-        url,
-        priceCurrency: 'BRL',
-        price: formatSeoPrice(product.price_retail),
-        availability,
-        itemCondition: 'https://schema.org/NewCondition',
-      },
-    };
-    const schemaBreadcrumb = {
-      '@context': 'https://schema.org/',
-      '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: '3DMV', item: `${baseUrl}/loja-3d` },
-        { '@type': 'ListItem', position: 2, name: product.category_label || 'Produtos 3D', item: `${baseUrl}/loja-3d` },
-        { '@type': 'ListItem', position: 3, name: product.name || title, item: url },
-      ],
-    };
-
-    const safeTitle = escapeSeoHtml(title);
-    const safeDescription = escapeSeoHtml(description);
-    const safeImage = escapeSeoHtml(image);
-    const metaTags = `
-    <!-- SEO Injetado via VPS Fastify (seo-produto-3d) -->
-    <title>${safeTitle}</title>
-    <meta name="description" content="${safeDescription}" />
-    <meta name="robots" content="index, follow, max-image-preview:large" />
-    <link rel="canonical" href="${url}" />
-    <meta property="og:type" content="product" />
-    <meta property="og:url" content="${url}" />
-    <meta property="og:title" content="${safeTitle}" />
-    <meta property="og:description" content="${safeDescription}" />
-    <meta property="og:image" content="${safeImage}" />
-    <meta property="og:image:secure_url" content="${safeImage}" />
-    ${imageMetadata.type ? `<meta property="og:image:type" content="${escapeSeoHtml(imageMetadata.type)}" />` : ''}
-    ${imageMetadata.width ? `<meta property="og:image:width" content="${imageMetadata.width}" />` : ''}
-    ${imageMetadata.height ? `<meta property="og:image:height" content="${imageMetadata.height}" />` : ''}
-    <meta property="og:site_name" content="3DMV" />
-    <meta property="og:locale" content="pt_BR" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:url" content="${url}" />
-    <meta name="twitter:title" content="${safeTitle}" />
-    <meta name="twitter:description" content="${safeDescription}" />
-    <meta name="twitter:image" content="${safeImage}" />
-    <script type="application/ld+json">${JSON.stringify(schemaProduct)}</script>
-    <script type="application/ld+json">${JSON.stringify(schemaBreadcrumb)}</script>
-    <!-- Fim SEO seo-produto-3d -->
-`;
-
-    const finalHtml = removeExistingSeoHeadTags(baseHtml)
-      .replace(/<meta[^>]*name=["']robots["'][^>]*>/gi, '')
-      .replace('<head>', `<head>\n${metaTags}`);
-    return reply
-      .header('Content-Type', 'text/html; charset=utf-8')
-      .header('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
-      .code(200)
-      .send(finalHtml);
-  } catch (err) {
-    return reply.code(500).send({
-      error: 'Failed to generate 3D product SEO HTML',
-      debug: buildCopyableDebug('seo-produto-3d', {
-        step: 'render 3D product seo',
-        slug: routeTarget,
-        rawMessage: err.message,
-      }),
-    });
-  }
-});
-
 fastify.get('/api/sitemap', async (request, reply) => {
   try {
     const [products] = await pool.query(
@@ -14964,25 +14729,6 @@ fastify.get('/api/sitemap', async (request, reply) => {
        LIMIT 5000`
     );
 
-    const [print3dProducts] = await pool.query(
-      `SELECT p.id, p.sku, p.name, p.slug AS product_slug,
-          pp.sku AS parent_sku, pp.name AS parent_name, pp.slug AS parent_slug,
-          o.title AS offer_title, o.slug AS offer_slug, MAX(o.updated_at) AS updated_at
-       FROM products p
-       INNER JOIN product_storefront_offers o
-         ON o.product_id = p.id AND o.storefront = 'loja_3d'
-       LEFT JOIN products pp ON pp.id = p.parent_id
-       WHERE o.publication_status = 'published'
-         AND o.price_retail > 0
-         AND p.is_print3d = 1
-         AND p.status = 'active'
-         AND (p.is_parent = 0 OR p.is_parent IS NULL)
-         AND (p.exclude_from_seo = 0 OR p.exclude_from_seo IS NULL)
-       GROUP BY p.id, p.sku, p.name, p.slug, pp.sku, pp.name, pp.slug, o.title, o.slug
-       ORDER BY updated_at DESC
-       LIMIT 5000`
-    );
-
     const baseUrl = buildSitemapBaseUrl(request);
     const productUrls = products.map((product) => `    <url>
         <loc>${escapeSitemapXml(`${baseUrl}/produto/${product.slug}`)}</loc>
@@ -14990,32 +14736,6 @@ fastify.get('/api/sitemap', async (request, reply) => {
         <changefreq>daily</changefreq>
         <priority>0.9</priority>
     </url>`).join('\n');
-    const print3dFamilies = [...new Map(print3dProducts.map((product) => [getPrint3dSeoRouteTarget(product), product])).entries()];
-    const print3dProductUrls = print3dFamilies.map(([routeTarget, product]) => `    <url>
-        <loc>${escapeSitemapXml(`${baseUrl}/loja-3d/produto/${routeTarget}`)}</loc>
-        <lastmod>${formatSitemapDate(product.updated_at)}</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>0.9</priority>
-    </url>`).join('\n');
-
-    const print3dDomain = /(^|\.)gcode3d\.com\.br$/i.test(new URL(baseUrl).hostname);
-    if (print3dDomain) {
-      const print3dXml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-    <url>
-        <loc>${escapeSitemapXml(`${baseUrl}/loja-3d`)}</loc>
-        <changefreq>daily</changefreq>
-        <priority>1.0</priority>
-    </url>
-${print3dProductUrls}
-</urlset>`;
-      return reply
-        .header('Content-Type', 'application/xml; charset=utf-8')
-        .header('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
-        .code(200)
-        .send(print3dXml.trim());
-    }
-
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
@@ -15033,13 +14753,7 @@ ${print3dProductUrls}
         <changefreq>monthly</changefreq>
         <priority>0.5</priority>
     </url>
-    <url>
-        <loc>${escapeSitemapXml(`${baseUrl}/loja-3d`)}</loc>
-        <changefreq>daily</changefreq>
-        <priority>0.9</priority>
-    </url>
 ${productUrls}
-${print3dProductUrls}
 </urlset>`;
 
     return reply
@@ -21554,29 +21268,17 @@ registerProductStorefrontOfferRoutes(fastify, {
   enrichProducts: (products, req) => attachCatalogModelColorImages(products, buildSeoBaseUrl(req)),
 });
 
-const print3dWhatsAppSender = createPrint3dWhatsAppSender({
-  webhookUrl: process.env.MDV_PRINT3D_N8N_VERIFY_URL,
-  webhookToken: process.env.MDV_PRINT3D_N8N_VERIFY_TOKEN,
-  evolutionInstance: process.env.MDV_PRINT3D_EVOLUTION_INSTANCE,
-  senderPhone: process.env.MDV_PRINT3D_WHATSAPP_NUMBER,
-  mercadoDoValePhone: process.env.MDV_MARKET_WHATSAPP_NUMBER,
-});
 registerProductDeadlineRequestRoutes(fastify, {
   pool,
   getBearerAuthContext: getVpsBearerAuthContext,
   notifyAdmins: async request => {
     const [admins] = await pool.query('SELECT phone FROM n8n_bot_admin_numbers WHERE active=1 ORDER BY updated_at DESC');
     if (!admins.length) return { status: 'unconfigured', error: 'Nenhum destinatário administrativo configurado.' };
-    if (request.storefront === 'loja_3d' && !print3dWhatsAppSender.configured) {
-      return { status: 'unconfigured', error: 'WhatsApp próprio da Loja 3D ainda não configurado.' };
-    }
     let sent = 0;
     let lastError = '';
     for (const admin of admins) {
       try {
-        const result = request.storefront === 'loja_3d'
-          ? await print3dWhatsAppSender(String(admin.phone || '').replace(/\D/g, ''), request.message, 'print3d_deadline_request')
-          : await sendDeliveryWhatsappText(admin.phone, request.message);
+        const result = await sendDeliveryWhatsappText(admin.phone, request.message);
         if (result?.ok) sent += 1;
         else lastError = result?.reason || `HTTP ${result?.status || 'desconhecido'}`;
       } catch (error) { lastError = error.message; }
@@ -21584,71 +21286,7 @@ registerProductDeadlineRequestRoutes(fastify, {
     return sent > 0 ? { status: 'sent', sent } : { status: 'failed', error: lastError || 'Falha ao notificar administradores.' };
   },
 });
-const print3dAccounts = registerPrint3dCustomerAccountRoutes(fastify, {
-  pool,
-  enabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
-  authSecret: VPS_AUTH_SECRET,
-  publicUrl: process.env.MDV_PRINT3D_PUBLIC_URL || 'https://www.gcode3d.com.br',
-  fromEmail: process.env.MDV_PRINT3D_SMTP_FROM,
-  brandName: process.env.MDV_PRINT3D_BRAND_NAME,
-  phoneEnabled: process.env.MDV_PRINT3D_PHONE_ENABLED === '1' && print3dWhatsAppSender.configured,
-  turnstileSecret: process.env.MDV_PRINT3D_TURNSTILE_SECRET_KEY,
-  google: {
-    enabled: process.env.MDV_PRINT3D_GOOGLE_ENABLED === '1',
-    clientId: process.env.MDV_PRINT3D_GOOGLE_CLIENT_ID,
-    clientSecret: process.env.MDV_PRINT3D_GOOGLE_CLIENT_SECRET,
-    redirectUri: process.env.MDV_PRINT3D_GOOGLE_REDIRECT_URI,
-    mdvClientId: process.env.GOOGLE_LOGIN_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID,
-  },
-  sendWhatsApp: print3dWhatsAppSender,
-  sendEmail: async message => {
-    const config = getSmtpConfig();
-    if (!config) return { sent: false, reason: 'smtp_not_configured' };
-    return sendSmtpMail({ ...config, from: message.from }, message);
-  },
-});
-const print3dCheckoutEnabled = process.env.MDV_PRINT3D_CHECKOUT_ENABLED === '1'
-    && process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig())
-    && process.env.MDV_PRINT3D_PRODUCTION_ENABLED === '1'
-    && process.env.MDV_PRINT3D_SHIPPING_ENABLED === '1'
-    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(process.env.MDV_PRINT3D_COMPANY_ID || '')
-    && paymentsConfigured(process.env);
-require('./services/print3dAdminServer.cjs').registerPrint3dAdminRoutes(fastify, {
-  pool, getBearerAuthContext: getVpsBearerAuthContext,
-  customersEnabled: process.env.MDV_PRINT3D_CUSTOMERS_ENABLED === '1' && Boolean(getSmtpConfig()),
-  ordersEnabled: print3dCheckoutEnabled,
-  dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',
-});
-require('./services/print3dStorefrontSettingsServer.cjs').registerPrint3dStorefrontSettingsRoutes(fastify, {
-  pool,
-  getBearerAuthContext: getVpsBearerAuthContext,
-  authSecret: VPS_AUTH_SECRET,
-  publicOrigin: process.env.PRINT3D_PUBLIC_ORIGIN || 'https://www.gcode3d.com.br',
-});
-registerPrint3dCheckoutRoutes(fastify, {
-  pool, getCustomer: print3dAccounts.getCustomer,
-  loadQuote: require('./services/productStorefrontOffersServer.cjs').loadPrint3dQuote,
-  verifyShipping: input => verifyShippingQuote(input, VPS_AUTH_SECRET),
-  companyId: process.env.MDV_PRINT3D_COMPANY_ID,
-  enabled: print3dCheckoutEnabled,
-  dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',
-});
-const print3dMpAdapter = createMpAdapter(process.env);
-const cancelPrint3dProviderChargesForOrder = orderId => cancelPrint3dProviderCharges(pool, {
-  orderId, adapter:print3dMpAdapter, collectorId:process.env.MDV_PRINT3D_MP_COLLECTOR_ID,
-});
-registerPrint3dPaymentRoutes(fastify, { pool, getCustomer: print3dAccounts.getCustomer, adapter:print3dMpAdapter });
-registerPrint3dCancellationRoutes(fastify, {
-  pool, getCustomer: print3dAccounts.getCustomer, getBearerAuthContext: getVpsBearerAuthContext,
-  enabled: print3dCheckoutEnabled, cancelProviderCharges:cancelPrint3dProviderChargesForOrder,
-});
-createPrint3dExpiryWorker({ pool, checkoutEnabled:print3dCheckoutEnabled, cancelProviderCharges:cancelPrint3dProviderChargesForOrder }).start();
-registerPrint3dProductionRoutes(fastify, {
-  pool, getBearerAuthContext: getVpsBearerAuthContext,
-  getCustomer: print3dAccounts.getCustomer,
-  enabled: process.env.MDV_PRINT3D_PRODUCTION_ENABLED === '1',
-  dispatchEnabled: print3dCheckoutEnabled && process.env.MDV_PRINT3D_DISPATCH_ENABLED === '1',
-});
+// Saída do 3D (v1.2.872): contas, checkout, pagamentos, produção e worker da loja 3D saíram (agora na G-CODE 3D).
 
 const PAYJOY_DEFAULT_ANALYSIS_URL = 'https://app.payjoy.com/br/d2c?utm_source=payjoysite&utm_medium=website&utm_campaign=payjoywebsitetraffic&utm_term=traffic&utm_content=payjoywebsitetraffic&click_source=payjoysite';
 const PAYJOY_FOLLOWUP_MESSAGES = Object.freeze({
@@ -43949,13 +43587,6 @@ const tiktokFulfillment = createTikTokFulfillmentAutomation({
   callApi: callTikTokShopOpenApiVps, loadSettings: loadTikTokShopOAuthSettingsVps,
 });
 require('./services/centralPrintingServer.cjs').registerCentralPrintingRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
-require('./services/print3dRecipesServer.cjs').registerPrint3dRecipeRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
-require('./services/print3dActiveRecipeServer.cjs').registerPrint3dActiveRecipeRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
-require('./services/print3dRecipeFilesServer.cjs').registerPrint3dRecipeFileRoutes(fastify, {
-  pool, getBearerAuthContext: getVpsBearerAuthContext,
-  uploadPrivate: ({ folderPath, fileName, fileBuffer, allowedRoot }) => uploadBufferToSynologyPrivateFolder(folderPath, fileName, fileBuffer, { overwrite: false, allowedRoot }),
-  downloadPrivate: ({ filePath, allowedRoot, maxBytes }) => downloadBufferFromSynologyPrivateFolder(filePath, { allowedRoot, maxBytes }),
-});
 require('./services/companyFiscalServer.cjs').registerCompanyFiscalRoutes(fastify, { pool, getBearerAuthContext: getVpsBearerAuthContext });
 const getLiveFiscalMarketplaceOrder = async (channel, orderId) => {
     if (channel === 'shopee') {

@@ -633,23 +633,7 @@ async function main() {
     });
     conn.end(); return;
   }
-  if (process.argv.includes('--product-drafts-only') || process.argv.includes('--product-drafts-check')) {
-    await require('./scripts/deploy-product-registration.cjs').deployProductDrafts({ appDir, apiProc, exec, root: __dirname,
-      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
-      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
-      checkOnly: process.argv.includes('--product-drafts-check'),
-    });
-    conn.end(); return;
-  }
-  if (process.argv.includes('--product-registration-only') || process.argv.includes('--product-registration-check')) {
-    await require('./scripts/deploy-product-registration.cjs').deployProductRegistration({ appDir, apiProc, exec, root: __dirname,
-      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
-      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
-      checkOnly: process.argv.includes('--product-registration-check'),
-      enableRecipes: process.argv.includes('--enable-print3d-recipes'),
-    });
-    conn.end(); return;
-  }
+  // Saída do 3D (v1.2.872): os modos --product-drafts-only e --product-registration-only (ligados ao cadastro 3D) saíram.
   if (process.argv.includes('--print3d-filaments-only') || process.argv.includes('--print3d-filaments-check')) {
     await require('./scripts/deploy-print3d-filaments.cjs').deployPrint3dFilaments({ appDir, apiProc, exec, root: __dirname,
       read: remote => withSftp(sftp => readRemoteText(sftp, remote)),

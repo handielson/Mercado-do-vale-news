@@ -3,83 +3,30 @@ const assert = require('node:assert/strict');
 const Fastify = require('fastify');
 const { registerProductStorefrontOfferRoutes } = require('../services/productStorefrontOffersServer.cjs');
 
-test('cotação 3D usa preço do servidor e exige consulta para quantidade acima do estoque', async () => {
-  const app = Fastify();
-  const calls = [];
-  registerProductStorefrontOfferRoutes(app, {
-    pool: { query: async (sql, params) => {
-      calls.push({ sql, params });
-      return [[{ id: 'p1', sku: 'SKU-1', name: 'Peça', title: 'Peça 3D',
-        price_retail: 6500, price_promo: 5900, stock_quantity: 10,
-        location_count: 1, location_available: 2,
-        print3d_preorder_enabled: 1, print3d_preorder_limit: 5, production_days: 3 }]];
-    } }, requireSyncKeyOrAdmin: async () => undefined,
-  });
-  const response = await app.inject({ method: 'POST', url: '/storefronts/loja_3d/quote',
-    payload: { items: [{ product_id: 'p1', quantity: 4, unit_price: 1 }] } });
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.json().subtotal, null);
-  assert.equal(response.json().payment_schedule, null);
-  assert.deepEqual([response.json().items[0].ready_quantity, response.json().items[0].preorder_quantity], [2, 2]);
-  assert.equal(response.json().items[0].production_days, 3);
-  assert.equal(response.json().items[0].status, 'requires_consultation');
-  assert.equal(response.json().can_checkout, false);
-  assert.match(calls[0].sql, /o\.storefront = 'loja_3d'/);
-  assert.match(calls[0].sql, /psl\.quantity - psl\.reserved_quantity/);
-  assert.match(calls[0].sql, /print3d_active_recipes/);
-  assert.match(calls[0].sql, /BINARY recipe_file\.id = BINARY active_recipe\.primary_file_id/);
-  assert.deepEqual(calls[0].params, ['p1']);
-  await app.close();
-});
-
-test('cotação rejeita item duplicado e não expõe preço de oferta oculta', async () => {
-  const app = Fastify();
-  let calls = 0;
-  registerProductStorefrontOfferRoutes(app, {
-    pool: { query: async () => { calls++; return [[]]; } },
-    requireSyncKeyOrAdmin: async () => undefined,
-  });
-  const duplicate = await app.inject({ method: 'POST', url: '/storefronts/loja_3d/quote',
-    payload: { items: [{ product_id: 'p1', quantity: 1 }, { product_id: 'p1', quantity: 2 }] } });
-  assert.equal(duplicate.statusCode, 400);
-  assert.equal(calls, 0);
-  const unavailable = await app.inject({ method: 'POST', url: '/storefronts/loja_3d/quote',
-    payload: { items: [{ product_id: 'p1', quantity: 1 }] } });
-  assert.equal(unavailable.json().subtotal, null);
-  assert.equal(unavailable.json().payment_schedule, null);
-  assert.equal(unavailable.json().items[0].status, 'unavailable');
-  assert.equal(Object.hasOwn(unavailable.json().items[0], 'unit_price'), false);
-  await app.close();
-});
-
 test('API pública entrega somente a projeção comercial do site, sem custo', async () => {
   const calls = [];
   const app = Fastify();
   registerProductStorefrontOfferRoutes(app, {
     pool: { query: async (sql, params) => {
       calls.push({ sql, params });
-      return [[{ id: 'p1', sku: 'SKU-1', name: 'Nome central', title: 'Nome 3D', status: 'active',
-        is_parent: 0, is_print3d: 1, publication_status: 'published', storefront: 'loja_3d',
+      return [[{ id: 'p1', product_id: 'p1', sku: 'SKU-1', name: 'Nome central', title: 'Nome do site', status: 'active',
+        is_parent: 0, is_print3d: 0, publication_status: 'published', storefront: 'mercado_do_vale',
         price_retail: 6500, price_cost: 1200, stock_quantity: 2, available_stock: 1, images: '["foto.webp"]',
         specs: '{"material":"PLA"}', custom_fields: '{}' }]];
     } },
     requireSyncKeyOrAdmin: async () => undefined,
   });
-  const response = await app.inject({ method: 'GET', url: '/storefronts/loja_3d/products' });
+  const response = await app.inject({ method: 'GET', url: '/storefronts/mercado_do_vale/products' });
   assert.equal(response.statusCode, 200);
   const [product] = response.json();
-  assert.equal(product.name, 'Nome 3D');
+  assert.equal(product.name, 'Nome do site');
   assert.equal(product.price_retail, 6500);
   assert.equal(product.stock_quantity, 2);
-  assert.equal(product.available_stock, 1);
-  assert.equal(product.storefront, 'loja_3d');
+  assert.equal(product.storefront, 'mercado_do_vale');
   assert.deepEqual(product.images, ['foto.webp']);
   assert.equal(Object.hasOwn(product, 'price_cost'), false);
   assert.match(calls[0].sql, /o\.publication_status = 'published'/);
-  assert.match(calls[0].sql, /p\.is_print3d = 1/);
-  assert.match(calls[0].sql, /print3d_active_recipes/);
-  assert.match(calls[0].sql, /BINARY active_recipe\.product_id = BINARY p\.id/);
-  assert.match(calls[0].sql, /psl\.quantity - psl\.reserved_quantity/);
+  assert.doesNotMatch(calls[0].sql, /print3d_active_recipes/);
   await app.close();
 });
 
@@ -149,7 +96,7 @@ test('oferta MDV pode ser publicada após liberar a migração completa', async 
   await app.close();
 });
 
-test('consulta do Mercado do Vale usa somente sua oferta, mesmo SKU com preço diferente na loja 3D', async () => {
+test('consulta do Mercado do Vale usa somente sua oferta; loja_3d não existe mais (saída do 3D)', async () => {
   const calls = [];
   const app = Fastify();
   registerProductStorefrontOfferRoutes(app, {
@@ -167,10 +114,9 @@ test('consulta do Mercado do Vale usa somente sua oferta, mesmo SKU com preço d
   const mdv = await app.inject({ method: 'GET', url: '/storefronts/mercado_do_vale/products' });
   const store3d = await app.inject({ method: 'GET', url: '/storefronts/loja_3d/products' });
   assert.equal(mdv.json()[0].price_retail, 5000);
-  assert.equal(store3d.json()[0].price_retail, 6500);
-  assert.equal(mdv.json()[0].sku, store3d.json()[0].sku);
+  assert.equal(store3d.statusCode, 404);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0].params[0], 'mercado_do_vale');
-  assert.equal(calls[1].params[0], 'loja_3d');
   assert.equal(mdv.headers['cache-control'], 'no-store');
   assert.match(calls[0].sql, /o\.publication_status = 'published' AND o\.price_retail > 0/);
   assert.match(calls[0].sql, /o\.storefront = \?/);
@@ -237,7 +183,7 @@ test('busca textual do bot mantém pesquisa em EAN, marca e características', a
   await app.close();
 });
 
-test('Mercado do Vale preserva produto legado sem oferta; loja 3D exige publicação própria', async () => {
+test('Mercado do Vale preserva produto legado sem oferta; loja 3D responde 404', async () => {
   const app = Fastify();
   registerProductStorefrontOfferRoutes(app, {
     pool: { query: async (sql) => {
@@ -250,7 +196,7 @@ test('Mercado do Vale preserva produto legado sem oferta; loja 3D exige publica�
   const mdv = await app.inject({ method: 'GET', url: '/storefronts/mercado_do_vale/products' });
   const store3d = await app.inject({ method: 'GET', url: '/storefronts/loja_3d/products' });
   assert.equal(mdv.json()[0].price_retail, 3990);
-  assert.equal(store3d.json().length, 0);
+  assert.equal(store3d.statusCode, 404);
   await app.close();
 });
 
@@ -266,62 +212,8 @@ test('sem a migration, a consulta por site falha explicitamente sem cair no pre�
   await app.close();
 });
 
-test('produto 3D não pode ser publicado sem arquivo de impressão ativo', async () => {
-  const app = Fastify();
-  registerProductStorefrontOfferRoutes(app, {
-    pool: { query: async (sql) => sql.startsWith('SELECT id, is_print3d')
-      ? [[{ id: 'p3d', is_print3d: 1, status: 'active', is_parent: 0, has_printable_file: 0 }]]
-      : [[]] },
-    requireSyncKeyOrAdmin: async () => undefined,
-  });
-  const response = await app.inject({ method: 'PUT', url: '/admin/products/p3d/storefront-offers/loja_3d',
-    payload: { publication_status: 'published', category_label: 'Suportes', price_retail: 5000 } });
-  assert.equal(response.statusCode, 409);
-  assert.match(response.json().error, /arquivo de impressão/);
-  await app.close();
-});
-
-test('produto 3D com arquivo de impressão ativo pode ser publicado', async () => {
-  const calls = [];
-  const app = Fastify();
-  registerProductStorefrontOfferRoutes(app, {
-    pool: { query: async (sql, params) => {
-      calls.push({ sql, params });
-      return sql.startsWith('SELECT id, is_print3d')
-        ? [[{ id: 'p3d', is_print3d: 1, status: 'active', is_parent: 0, has_printable_file: 1 }]]
-        : [[]];
-    } },
-    requireSyncKeyOrAdmin: async () => undefined,
-  });
-  const response = await app.inject({ method: 'PUT', url: '/admin/products/p3d/storefront-offers/loja_3d',
-    payload: { publication_status: 'published', category_label: 'Suportes', price_retail: 5000 } });
-  assert.equal(response.statusCode, 200);
-  assert.match(calls[0].sql, /print3d_active_recipes/);
-  assert.match(calls[1].sql, /INSERT INTO product_storefront_offers/);
-  await app.close();
-});
-
-test('cotação real da loja 3D lê specs do catálogo e expõe apenas a variante comercial', async () => {
-  const app = Fastify();
-  let sql;
-  registerProductStorefrontOfferRoutes(app, {
-    pool: {query: async statement => {
-      sql=statement;
-      return [[{id:'p1',name:'Peça',sku:'SKU-PETG',specs:JSON.stringify({material:'PETG',cor:'Azul',tamanho:'G',acabamento:'Fosco',imei1:'private',internal_note:'private'}),
-        price_retail:2500,stock_quantity:2,location_count:0,print3d_preorder_enabled:1,production_days:4}]];
-    }},
-    requireSyncKeyOrAdmin: async () => undefined,
-  });
-  const response=await app.inject({method:'POST',url:'/storefronts/loja_3d/quote',payload:{items:[{product_id:'p1',quantity:1}]}});
-  assert.equal(response.statusCode,200,response.body);
-  assert.match(sql,/p\.specs/);
-  assert.deepEqual(response.json().items[0].variant_snapshot,{material:'PETG',color:'Azul',size:'G',finish:'Fosco'});
-  assert.doesNotMatch(response.body,/private|imei1|internal_note/);
-  await app.close();
-});
-
 test('API não publica em nenhum site sem categoria escolhida', async () => {
-  for (const storefront of ['mercado_do_vale', 'loja_3d']) {
+  for (const storefront of ['mercado_do_vale']) {
     let touched = false;
     const app = Fastify();
     registerProductStorefrontOfferRoutes(app, {
@@ -336,4 +228,13 @@ test('API não publica em nenhum site sem categoria escolhida', async () => {
     assert.equal(touched, false);
     await app.close();
   }
+});
+
+test('loja_3d não aceita mais ofertas (saída do 3D)', async () => {
+  const app = Fastify();
+  registerProductStorefrontOfferRoutes(app, { pool: { query: async () => [[]] }, requireSyncKeyOrAdmin: async () => undefined, mdvReady: true });
+  const response = await app.inject({ method: 'PUT', url: '/admin/products/p1/storefront-offers/loja_3d', payload: { publication_status: 'draft' } });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.json().error, /Site desconhecido/);
+  await app.close();
 });

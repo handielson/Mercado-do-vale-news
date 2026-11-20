@@ -1,3 +1,10 @@
+# v1.2.872-saida-3d-api
+
+Data: 19/11/2026. Branch: `main`. Status: **publicada** (API + site, 19/11). Robô sem mudança.
+Saída do 3D, etapa 2: a API do MdV não registra mais nada da loja 3D. Registro: `docs/versoes/2026-11-19-v1.2.872-saida-3d-api.md`.
+
+---
+
 # v1.2.871-saida-3d-site
 
 Data: 19/11/2026. Branch: `main`. Status: **publicada** (site + nginx, 19/11). API e robô sem mudança.

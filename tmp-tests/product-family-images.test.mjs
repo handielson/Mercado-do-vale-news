@@ -180,7 +180,7 @@ test('rotas reais de catálogo completo/compacto e detalhe retornam a mídia fam
     pool: { query: async sql => { queries.push(sql); return [[row]]; } }, requireSyncKeyOrAdmin() {}
   });
   const reply = { header() {}, code() { return this; }, send(value) { return value; } };
-  for (const storefront of ['mercado_do_vale', 'loja_3d']) {
+  for (const storefront of ['mercado_do_vale']) { // saída do 3D: loja_3d não existe mais
     for (const compact of ['true', 'false']) {
       const result = await handlers.get('/storefronts/:storefront/products')({ params: { storefront }, query: { compact } }, reply);
       assert.deepEqual(result[0].images, ['child.jpg']); assert.deepEqual(result[0].parent_images, ['parent.jpg']);

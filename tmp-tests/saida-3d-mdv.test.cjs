@@ -68,3 +68,18 @@ test('lista de produtos: sem botão "Produto 3D" e sem marcar família como 3D',
   assert.doesNotMatch(ler('components/products/ProductFamilyList.tsx'), /<Print3dFamilyToggle/);
   assert.equal(fs.existsSync(path.join(raiz, 'components/products/Print3dProductEntry.tsx')), false);
 });
+
+test('API (etapa 2): os dois servidores não registram mais nada da loja 3D', () => {
+  for (const f of ['vps_server.js', 'vps_server.cjs']) {
+    const api = ler(f);
+    assert.doesNotMatch(api, /registerPrint3d\w+Routes|createPrint3dExpiryWorker|createPrint3dWhatsAppSender/, f);
+    assert.doesNotMatch(api, /\/api\/seo-produto-3d/, f);
+    assert.doesNotMatch(api, /'\/print3d\//, `${f}: proxy público sem rotas /print3d`);
+    assert.doesNotMatch(api, /\/loja-3d/, `${f}: sitemap sem /loja-3d`);
+    assert.doesNotMatch(api, /print3dRecipesServer|print3dRecipeFilesServer|print3dActiveRecipeServer|print3dMaterialsServer|print3dFilamentsServer/, f);
+  }
+  const { STOREFRONTS } = require(path.join(raiz, 'services/productStorefrontOffer.cjs'));
+  assert.deepEqual([...STOREFRONTS], ['mercado_do_vale']);
+  const ofertas = ler('services/productStorefrontOffersServer.cjs');
+  assert.doesNotMatch(ofertas, /loadPrint3dQuote|print3dShippingServer|print3d_active_recipes|\/storefronts\/loja_3d\/quote/);
+});

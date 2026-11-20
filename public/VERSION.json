@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.871-saida-3d-site",
+  "version": "v1.2.872-saida-3d-api",
   "date": "2026-11-19",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.871-saida-3d-site",
+  "tag": "v1.2.872-saida-3d-api",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Saída do 3D, etapa 1 (site e admin): a loja 3D saiu do MdV. No admin ficam só os atalhos Site G-CODE e Admin G-CODE; /loja-3d vai com 301 para gcode3d.com.br; cadastro de produto sem marcação 3D, sem abas de produção e sem canal Loja 3D. API e dados ficam para as próximas etapas.",
+  "summary": "Saída do 3D, etapa 2 (API): contas, checkout, pagamentos, produção, worker de expiração, receitas, materiais, SEO /api/seo-produto-3d e cotação/frete da loja 3D saíram do mdv-api; sitemap sem /loja-3d; ofertas por site só Mercado do Vale. Atalho \"Admin G-CODE\" sem quebrar linha.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -30,27 +30,28 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-19-v1.2.871-saida-3d-site.md"
+    "ver docs/versoes/2026-11-19-v1.2.872-saida-3d-api.md"
   ],
   "validations": [
-    "tmp-tests/saida-3d-mdv.test.cjs 5/5",
-    "npm run test:tmp sem falha nova (15 falhas de base: deploy seletivo sem histórico completo)",
-    "testes .mjs afetados atualizados e verdes",
-    "npm run build ok; bundle sem /admin/loja-3d e sem Supabase"
+    "tmp-tests/saida-3d-mdv.test.cjs 7/7",
+    "npm run test:tmp sem falha nova",
+    "product-storefront-routes 13/13, product-storefront-offer 3/3",
+    "node --check dos dois servidores"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261119-212909-v1-2-871-saida-3d-site-b",
-    "previous": "/var/www/mdv-site/releases/20261119-212553-v1-2-871-saida-3d-site",
-    "note": "Site sem 3D; atalhos para a G-CODE. Release -b: tirado também o botão \"Produto 3D\" da lista e a marcação 3D da família."
+    "release": "/var/www/mdv-site/releases/20261119-213759-v1-2-872-saida-3d-api",
+    "previous": "/var/www/mdv-site/releases/20261119-212909-v1-2-871-saida-3d-site-b",
+    "note": "Só o ajuste visual do atalho."
   },
   "api_release": {
-    "status": "sem mudança",
-    "note": "API do 3D sai na etapa 2."
+    "status": "publicada",
+    "service": "mdv-api",
+    "mode": "upload manual",
+    "note": "server.js + vps_server.cjs + productStorefrontOffersServer.cjs + productStorefrontOffer.cjs"
   },
   "nginx_release": {
-    "status": "publicada",
-    "note": "mdv-site-production.conf: /loja-3d(/...) → 301 https://www.gcode3d.com.br/; sem proxy seo-produto-3d; rotas SPA regeneradas."
+    "status": "sem mudança"
   },
   "evolution_release": {
     "status": "publicada",
@@ -101,7 +102,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.870-agente-custo-com-estoque publicada (API).",
+  "pending_previous": "v1.2.871-saida-3d-site publicada (site + nginx).",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
