@@ -1,7 +1,7 @@
 {
   "version": "v1.2.876-bot-garantia-handoff",
   "date": "2026-11-21",
-  "status": "em publicação",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.876-bot-garantia-handoff",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
@@ -46,10 +46,10 @@
     "note": "Textos do cadastro sem 3DMV."
   },
   "api_release": {
-    "status": "pendente",
+    "status": "publicada",
     "service": "mdv-api",
     "mode": "deploy-vps-server-only",
-    "note": "vps_server.js: garantia do Realme pelo prazo da marca"
+    "note": "vps_server.js: garantia do Realme pelo prazo da marca; 365 dias = 1 ano. server.js igual ao repositório antes do deploy (sha 4571f0ab)."
   },
   "nginx_release": {
     "status": "publicada",

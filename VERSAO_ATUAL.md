@@ -1,6 +1,6 @@
 # v1.2.876-bot-garantia-handoff
 
-Data: 21/11/2026. Branch: `main`. Status: **em publicação** (robô n8n publicado; API a publicar).
+Data: 21/11/2026. Branch: `main`. Status: **publicada** (robô n8n + API + dados, 21/11 ~11h10).
 Robô: garantia/horário voltam a consultar a API, não fala por cima da equipe, lista não some com "bom dia". Marcas ligadas aos produtos. Registro: `docs/versoes/2026-11-21-v1.2.876-bot-garantia-handoff.md`.
 
 ---
