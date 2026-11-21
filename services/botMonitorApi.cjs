@@ -6,7 +6,20 @@
 // - GET /agent/monitor/snapshot?horas=N (1 a 48, padrão 24): conversas recentes do robô (n8n_bot_messages),
 //   controles por cliente (pausa humana/bloqueio), atendimentos humanos abertos, respostas repetidas,
 //   tempo de resposta do robô e estado da instância da Evolution.
+// - GET /agent/monitor/conversation?jid=...&limite=N : mensagens de uma conversa (48 h), para os agentes de IA;
+// - GET /agent/monitor/products?q=termo|termo : produtos ativos que batem com os termos (preço, promoção, estoque);
+// - GET /agent/monitor/commands : comandos "agentes ..." que o admin mandou no WhatsApp (entrega uma vez só);
+// - POST /agent/monitor/send {remote_jid, text} : mensagem ao cliente, só depois de aprovação no painel (o painel garante);
+// - POST /agent/monitor/handoffs/close {older_than_hours} : fecha atendimentos humanos abertos antigos (aprovado no painel).
 // Telefone e texto saem truncados; nada de payload bruto.
+
+// Comando do admin no WhatsApp para os agentes: "agentes", "agentes pausar alertas", "agentes aprovar 1"...
+const AGENT_COMMAND = /^agentes?(?:\s+(status|pausar|reativar|rodar|aprovar|recusar|ajuda)(?:\s+([\s\S]{1,80}))?)?\s*$/i;
+function parseAgentCommand(value) {
+  const m = String(value || '').trim().match(AGENT_COMMAND);
+  if (!m) return null;
+  return { action: (m[1] || 'status').toLowerCase(), target: clean(m[2] || '', 80).toLowerCase() };
+}
 
 const crypto = require('node:crypto');
 
@@ -236,7 +249,91 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
     return { ok: sent > 0, sent, admins: numbers.length };
   }
 
-  return { authorize, snapshot, evolutionState, alert };
+  let commandsReady = null;
+  function ensureCommandsTable() {
+    if (!commandsReady) commandsReady = pool.query(`CREATE TABLE IF NOT EXISTS agent_monitor_commands (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY, action VARCHAR(20) NOT NULL, target VARCHAR(80) NOT NULL DEFAULT '',
+      admin_phone VARCHAR(32) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, consumed_at TIMESTAMP NULL,
+      KEY idx_pending (consumed_at, id)) DEFAULT CHARSET=utf8mb4`).catch((e) => { commandsReady = null; throw e; });
+    return commandsReady;
+  }
+  async function enqueueCommand({ command, admin = {} }) {
+    await ensureCommandsTable();
+    await pool.query('INSERT INTO agent_monitor_commands (action, target, admin_phone) VALUES (?, ?, ?)', [command.action, command.target, digits(admin.phone).slice(0, 32) || null]);
+    const what = command.action === 'ajuda' ? 'Pedido de ajuda' : `${command.action}${command.target ? ` ${command.target}` : ''}`;
+    return { handled: true, reply: `🤖 Agentes: recebi "${what}". O servidor aplica em até 1 minuto e te responde aqui.` };
+  }
+  async function commands() {
+    await ensureCommandsTable();
+    const [rows] = await pool.query('SELECT id, action, target, admin_phone, UNIX_TIMESTAMP(created_at) AS at FROM agent_monitor_commands WHERE consumed_at IS NULL ORDER BY id LIMIT 20');
+    const list = rows || [];
+    if (list.length) await pool.query('UPDATE agent_monitor_commands SET consumed_at = CURRENT_TIMESTAMP WHERE id IN (?) AND consumed_at IS NULL', [list.map((r) => r.id)]);
+    return { commands: list.map((r) => ({ id: Number(r.id), action: r.action, target: r.target, at: num(r.at) })) };
+  }
+
+  async function conversation(query = {}) {
+    const jid = clean(query.jid, 120);
+    if (!jid) throw Object.assign(new Error('Conversa não informada.'), { statusCode: 400 });
+    const n = Number.parseInt(query.limite, 10);
+    const limit = Number.isFinite(n) && n > 0 ? Math.min(n, 80) : 40;
+    const [rows] = await pool.query(
+      `SELECT direction, message_text, message_type, source_node, UNIX_TIMESTAMP(created_at) AS ts FROM n8n_bot_messages
+        WHERE remote_jid = ? AND created_at >= NOW() - INTERVAL 48 HOUR ORDER BY created_at DESC, id DESC LIMIT ?`, [jid, limit]);
+    return { remote_jid: jid, messages: (rows || []).reverse().map((r) => ({
+      from: r.direction === 'inbound' ? 'cliente' : (String(r.source_node || '').includes('handoff') || String(r.source_node || '').includes('admin') ? 'equipe' : 'robo'),
+      text: clean(r.message_text, 1200) || `[${clean(r.message_type, 40) || 'mídia'}]`, at: num(r.ts),
+    })) };
+  }
+
+  async function products(query = {}) {
+    const terms = String(query.q || '').split('|').map((t) => clean(t, 40)).filter((t) => t.length >= 2).slice(0, 8);
+    if (!terms.length) return { products: [] };
+    const seen = new Map();
+    for (const term of terms) {
+      const [rows] = await pool.query(
+        `SELECT id, name, sku, price_retail, price_promo, promo_start, promo_end, stock_quantity FROM products
+          WHERE status = 'active' AND (is_parent = 0 OR is_parent IS NULL) AND name LIKE ? ORDER BY stock_quantity > 0 DESC, sales_count DESC LIMIT 8`,
+        [`%${term.replace(/[%_\\]/g, (c) => `\\${c}`)}%`]);
+      for (const r of rows || []) {
+        if (seen.has(r.id)) continue;
+        const t = now();
+        const promoOn = r.price_promo && Number(r.price_promo) > 0 && (!r.promo_start || Date.parse(r.promo_start) <= t) && (!r.promo_end || Date.parse(r.promo_end) >= t);
+        // preços ficam em centavos no banco; aqui saem em reais
+        seen.set(r.id, { name: clean(r.name, 160), sku: clean(r.sku, 60), price: r.price_retail == null ? null : Number(r.price_retail) / 100,
+          promo_price: promoOn ? Number(r.price_promo) / 100 : null, stock: Number(r.stock_quantity || 0), term });
+      }
+    }
+    return { products: [...seen.values()].slice(0, 40) };
+  }
+
+  async function sendToCustomer(body = {}) {
+    const jid = clean(body.remote_jid, 120);
+    const text = String(body.text ?? '').trim().slice(0, 2000);
+    if (!jid || !text || jid.endsWith('@g.us')) throw Object.assign(new Error('Conversa ou texto inválido.'), { statusCode: 400 });
+    if (!evo.url || !evo.key || !evo.instance || typeof fetchImpl !== 'function') throw Object.assign(new Error('Evolution não configurada.'), { statusCode: 503 });
+    const [rows] = await pool.query('SELECT phone FROM n8n_bot_messages WHERE remote_jid = ? AND created_at >= NOW() - INTERVAL 7 DAY ORDER BY id DESC LIMIT 1', [jid]);
+    if (!rows?.length) throw Object.assign(new Error('Conversa sem mensagens nos últimos 7 dias.'), { statusCode: 404 });
+    const number = jid.endsWith('@s.whatsapp.net') ? jid.replace('@s.whatsapp.net', '') : jid;
+    const res = await fetchImpl(`${evo.url}/message/sendText/${encodeURIComponent(evo.instance)}`, {
+      method: 'POST', headers: { apikey: evo.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ number, text }), signal: AbortSignal.timeout(15000),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(`Evolution respondeu ${res.status}.`), { statusCode: 502 });
+    await pool.query(`INSERT INTO n8n_bot_messages (remote_jid, phone, direction, message_text, message_type, source_node, wa_message_id, created_at)
+      VALUES (?, ?, 'outbound', ?, 'text', 'agente-servidor-aprovado', ?, CURRENT_TIMESTAMP)`,
+      [jid, digits(rows[0].phone) || '', text, clean(out?.key?.id, 160) || null]).catch(() => {});
+    return { ok: true };
+  }
+
+  async function closeHandoffs(body = {}) {
+    const h = Number.parseInt(body.older_than_hours, 10);
+    const hours = Number.isFinite(h) && h >= 2 ? Math.min(h, 24 * 90) : 2;
+    const [r] = await pool.query(`UPDATE n8n_bot_handoffs SET status = 'closed', last_admin_phone = 'agente-pausa-esquecida'
+      WHERE status = 'open' AND requested_at < UTC_TIMESTAMP() - INTERVAL ? HOUR`, [hours]);
+    return { ok: true, closed: Number(r?.affectedRows || 0), older_than_hours: hours };
+  }
+
+  return { authorize, snapshot, evolutionState, alert, enqueueCommand, commands, conversation, products, sendToCustomer, closeHandoffs };
 }
 
 function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
@@ -251,6 +348,22 @@ function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
       return reply.code(500).send({ error: 'Falha ao montar o retrato do robô.' });
     }
   });
+  const route = (method, url, fn) => fastify[method](url, async (request, reply) => {
+    if (!api.authorize(request.headers)) return reply.code(401).send({ error: 'Chave do monitor inválida.' });
+    try {
+      reply.header('Cache-Control', 'no-store');
+      return await fn(method === 'get' ? request.query || {} : request.body || {});
+    } catch (error) {
+      if (error?.statusCode) return reply.code(error.statusCode).send({ error: error.message });
+      console.error(`[bot-monitor] ${url} failed:`, error?.message || error);
+      return reply.code(500).send({ error: 'Falha no monitor do robô.' });
+    }
+  });
+  route('get', '/agent/monitor/conversation', api.conversation);
+  route('get', '/agent/monitor/products', api.products);
+  route('get', '/agent/monitor/commands', api.commands);
+  route('post', '/agent/monitor/send', api.sendToCustomer);
+  route('post', '/agent/monitor/handoffs/close', api.closeHandoffs);
   fastify.post('/agent/monitor/alert', async (request, reply) => {
     if (!api.authorize(request.headers)) return reply.code(401).send({ error: 'Chave do monitor inválida.' });
     try {
@@ -264,4 +377,4 @@ function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
   return api;
 }
 
-module.exports = { createBotMonitorApi, registerBotMonitorRoutes, summarizeConversations, findDuplicates, responseTimes, clampHours };
+module.exports = { parseAgentCommand, createBotMonitorApi, registerBotMonitorRoutes, summarizeConversations, findDuplicates, responseTimes, clampHours };

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { createBotMonitorApi, summarizeConversations, findDuplicates, responseTimes, clampHours } = require('../services/botMonitorApi.cjs');
+const { createBotMonitorApi, summarizeConversations, findDuplicates, responseTimes, clampHours, parseAgentCommand } = require('../services/botMonitorApi.cjs');
 const { patch } = require('../scripts/deploy-bot-monitor.cjs');
 
 const KEY = 'm'.repeat(40);
@@ -103,20 +103,95 @@ test('snapshot junta controles, nome do cadastro e atendimentos abertos sem expo
   assert.ok(!calls.some((c) => /payload_json/.test(c)), 'não lê o payload bruto');
 });
 
-test('deploy: gancho entra uma vez, logo depois do agente de custo', () => {
+test('deploy: ganchos entram uma vez (rotas + comandos do admin), inclusive sobre a v1 já publicada', () => {
   const anchor = "require('./services/agentCostApi.cjs').registerAgentCostRoutes(fastify, { pool, manualCost: productManualCostVps });";
-  const src = `a\n${anchor}\nb\n`;
+  const admin = "  const relayCommand = normalizeRelayCommand(req.body?.message || req.body?.command || '');\n  if (!identity || (!command.valid && !relayCommand)) return { handled: false, reply: '' };";
+  const src = `a\n${anchor}\nb\n${admin}\nc\n`;
   const once = patch(src);
   assert.equal(patch(once), once, 'idempotente');
-  assert.ok(once.includes(`${anchor}\n// bot-monitor-v1`));
+  assert.ok(once.includes("const botMonitorApiVps = require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"));
+  assert.ok(once.indexOf('bot-monitor-commands-v1') > once.indexOf('const relayCommand'), 'comando antes do teste de comando válido');
+  const v1 = `a\n${anchor}\n// bot-monitor-v1: x\nrequire('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });\nb\n${admin}\n`;
+  const up = patch(v1);
+  assert.equal(up.split('registerBotMonitorRoutes').length - 1, 1, 'v1 vira constante, sem registrar duas vezes');
   assert.throws(() => patch('sem gancho'), /anchor/);
 });
 
-test('o código do servidor no repositório registra a rota do monitor', () => {
+test('o código do servidor no repositório registra a rota e os comandos do monitor', () => {
   for (const f of ['vps_server.js', 'vps_server.cjs']) {
     const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-    assert.ok(src.includes("require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"), f);
+    assert.ok(src.includes("const botMonitorApiVps = require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"), f);
+    assert.ok(src.includes('bot-monitor-commands-v1'), f);
   }
+});
+
+test('comando "agentes ..." do admin: reconhece ações e ignora o resto', () => {
+  assert.deepEqual(parseAgentCommand('agentes'), { action: 'status', target: '' });
+  assert.deepEqual(parseAgentCommand('Agentes pausar Alertas'), { action: 'pausar', target: 'alertas' });
+  assert.deepEqual(parseAgentCommand('agente aprovar 2'), { action: 'aprovar', target: '2' });
+  assert.equal(parseAgentCommand('agentes vendem muito?'), null);
+  assert.equal(parseAgentCommand('pausar'), null);
+});
+
+test('fila de comandos: grava, entrega uma vez e marca como lido', async () => {
+  const sqls = [];
+  const pool = { async query(sql, params) {
+    sqls.push([sql.replace(/\s+/g, ' '), params]);
+    if (sql.startsWith('SELECT id, action')) return [[{ id: 7, action: 'pausar', target: 'alertas', at: 10 }]];
+    return [{ affectedRows: 1 }];
+  } };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl: null });
+  const r = await api.enqueueCommand({ command: { action: 'pausar', target: 'alertas' }, admin: { phone: '+55 87 99624-0000' } });
+  assert.equal(r.handled, true);
+  assert.match(r.reply, /pausar alertas/);
+  const c = await api.commands();
+  assert.deepEqual(c.commands, [{ id: 7, action: 'pausar', target: 'alertas', at: 10 }]);
+  assert.ok(sqls.some(([q, p]) => q.startsWith('UPDATE agent_monitor_commands SET consumed_at') && p[0][0] === 7));
+  assert.ok(sqls.some(([q]) => q.includes('CREATE TABLE IF NOT EXISTS agent_monitor_commands')));
+});
+
+test('produtos: busca por termo, centavos viram reais, promoção só dentro do prazo, e o estoque', async () => {
+  const pool = { async query(sql, params) {
+    assert.match(sql, /status = 'active'/);
+    assert.equal(params[0], '%redmi 15%');
+    return [[{ id: 'p1', name: 'Redmi 15C 128GB', sku: 'R15', price_retail: '99900.00', price_promo: '89900', promo_start: '2026-01-01', promo_end: '2026-12-31', stock_quantity: 3 },
+      { id: 'p2', name: 'Redmi 15 256GB', sku: 'R15B', price_retail: '129900.00', price_promo: '100', promo_start: '2025-01-01', promo_end: '2025-02-01', stock_quantity: 0 }]];
+  } };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl: null, now: () => Date.parse('2026-11-21') });
+  const r = await api.products({ q: 'redmi 15' });
+  assert.deepEqual(r.products.map((p) => [p.sku, p.price, p.promo_price, p.stock]), [['R15', 999, 899, 3], ['R15B', 1299, null, 0]]);
+});
+
+test('conversa: separa cliente, robô e equipe, em ordem', async () => {
+  const pool = { async query() { return [[
+    { direction: 'outbound', message_text: 'Oi! Vou chamar alguém', source_node: 'whatsapp-manual-handoff', ts: 3 },
+    { direction: 'outbound', message_text: 'Temos sim', source_node: 'Controle Bot - Registrar Saida', ts: 2 },
+    { direction: 'inbound', message_text: 'tem capa?', ts: 1 }]]; } };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl: null });
+  const r = await api.conversation({ jid: 'x@s.whatsapp.net' });
+  assert.deepEqual(r.messages.map((m) => m.from), ['cliente', 'robo', 'equipe']);
+  await assert.rejects(api.conversation({}), /não informada/);
+});
+
+test('fechar atendimentos antigos: no mínimo 2 h e conta os fechados', async () => {
+  let got;
+  const pool = { async query(sql, params) { got = [sql, params]; return [{ affectedRows: 5 }]; } };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl: null });
+  assert.deepEqual(await api.closeHandoffs({ older_than_hours: 1 }), { ok: true, closed: 5, older_than_hours: 2 });
+  assert.match(got[0], /status = 'open' AND requested_at < UTC_TIMESTAMP\(\) - INTERVAL \? HOUR/);
+});
+
+test('mensagem ao cliente: só para conversa recente e registra como do agente', async () => {
+  const sqls = [];
+  const pool = { async query(sql, params) { sqls.push(sql); if (sql.startsWith('SELECT phone')) return [params[0] === 'ok@s.whatsapp.net' ? [{ phone: '5587' }] : []]; return [{}]; } };
+  const envios = [];
+  const fetchImpl = async (url, opt) => { envios.push(JSON.parse(opt.body)); return { ok: true, json: async () => ({ key: { id: 'W1' } }) }; };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl, evolution: { url: 'https://e', key: 'k', instance: 'bot' } });
+  await assert.rejects(api.sendToCustomer({ remote_jid: 'velho@s.whatsapp.net', text: 'oi' }), /7 dias/);
+  await assert.rejects(api.sendToCustomer({ remote_jid: 'g@g.us', text: 'oi' }), /inválido/);
+  assert.deepEqual(await api.sendToCustomer({ remote_jid: 'ok@s.whatsapp.net', text: 'Oi!' }), { ok: true });
+  assert.deepEqual(envios, [{ number: 'ok', text: 'Oi!' }]);
+  assert.ok(sqls.some((q) => q.includes("'agente-servidor-aprovado'")));
 });
 
 test('alerta: manda para os admins ativos, segura repetição e respeita limite por hora', async () => {

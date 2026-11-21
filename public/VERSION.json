@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.880-bot-monitor-alertas",
+  "version": "v1.2.881-agentes-comandos-ia",
   "date": "2026-11-21",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.880-bot-monitor-alertas",
+  "tag": "v1.2.881-agentes-comandos-ia",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "API do monitor do robô: POST /agent/monitor/alert manda os alertas dos agentes do servidor de casa no WhatsApp (número do robô para os admins ativos), com freio de 30 por hora e sem repetir o mesmo texto em 20 min.",
+  "summary": "Agentes do servidor de casa: comandos \"agentes ...\" do admin no WhatsApp (n8n Comando Admin + fila na API), rotas de leitura de conversa e catálogo para os agentes de IA, envio de follow-up aprovado e fechamento de atendimentos antigos aprovado.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,11 +31,12 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-21-v1.2.880-bot-monitor-alertas.md"
+    "ver docs/versoes/2026-11-21-v1.2.881-agentes-comandos-ia.md"
   ],
   "validations": [
-    "tmp-tests/bot-monitor-api.test.cjs ok (10)",
-    "API /status 200; /agent/monitor/alert 401 sem chave; alerta de teste entregue (1 admin)"
+    "tmp-tests/bot-monitor-api.test.cjs ok (16)",
+    "tmp-tests/n8n-agent-commands.test.cjs ok + gate comercial do n8n ok",
+    "API /status 200; n8n healthz 200"
   ],
   "site_release": {
     "status": "publicada",
@@ -47,7 +48,7 @@
     "status": "publicada",
     "service": "mdv-api",
     "mode": "deploy-vps-server-only --bot-monitor-only",
-    "note": "só services/botMonitorApi.cjs mudou; backup /var/www/mdv-api/backups/bot-monitor-1795289288973. Site sem mudança."
+    "note": "botMonitorApi.cjs + ganchos (constante botMonitorApiVps e bot-monitor-commands-v1 em /n8n-bot/admin-command); backup /var/www/mdv-api/backups/bot-monitor-1795290096257. Site sem mudança."
   },
   "nginx_release": {
     "status": "publicada",
@@ -102,7 +103,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.879-bot-monitor-nomes publicada.",
+  "pending_previous": "v1.2.880-bot-monitor-alertas publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -114,9 +115,10 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "dd45b3982e9da3dd9b87ffa9a5f15858450df6746694dc443d7edddb3960235b",
-    "candidate": "da4d803c0d4a36be8f50100f14ad86940c833752cfd8e2de80edcec7d1805290",
-    "applied_at": "2026-11-21T14:07Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-21T14-07-06-109Z-94a20c7d.aes256gcm.json"
+    "before": "da4d803c0d4a36be8f50100f14ad86940c833752cfd8e2de80edcec7d1805290",
+    "after": "f71f6e719d87aaeeab42adf9398a5ca5e60cd2cd0cbaf6eca430ff83de956508",
+    "applied_at": "2026-11-21T19:55Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-21T19-55-20-412Z-59fc012d.aes256gcm.json",
+    "note": "agent-commands-v1 no nó Controle Bot - Comando Admin; execução 76870 presa como running desde 14:08Z marcada crashed antes do deploy."
   }
 }

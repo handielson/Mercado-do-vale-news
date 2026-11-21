@@ -13965,7 +13965,7 @@ const productManualCostVps = createProductManualCostService({ pool });
 // agente-custo-v1: rotas do agente OpenBot (custo do último lançamento do Bling), chave MDV_AGENT_KEY.
 require('./services/agentCostApi.cjs').registerAgentCostRoutes(fastify, { pool, manualCost: productManualCostVps });
 // bot-monitor-v1: leitura para os agentes de monitoramento do robô (painel do servidor de casa), chave MDV_MONITOR_KEY.
-require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });
+const botMonitorApiVps = require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });
 fastify.patch('/admin/products/:id/cost', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   try {
     const auth = await getVpsBearerAuthContext(request);
@@ -32109,6 +32109,12 @@ fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (re
   const identity = normalizeN8nBotAdminIdentity(req.body || {});
   const command = normalizeN8nBotAdminCommand(req.body?.message || req.body?.command || '');
   const relayCommand = normalizeRelayCommand(req.body?.message || req.body?.command || '');
+  // bot-monitor-commands-v1: "agentes ..." do admin vai para a fila dos agentes do servidor de casa.
+  const agentCommand = require('./services/botMonitorApi.cjs').parseAgentCommand(req.body?.message || req.body?.command || '');
+  if (identity && agentCommand) {
+    const agentAdmin = await findN8nBotAdminByIdentity(identity);
+    if (agentAdmin) return botMonitorApiVps.enqueueCommand({ command: agentCommand, admin: agentAdmin });
+  }
   if (!identity || (!command.valid && !relayCommand)) return { handled: false, reply: '' };
 
   const admin = await findN8nBotAdminByIdentity(identity);

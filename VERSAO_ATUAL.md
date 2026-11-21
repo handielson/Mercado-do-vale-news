@@ -1,3 +1,10 @@
+# v1.2.881-agentes-comandos-ia
+
+Data: 21/11/2026. Branch: `main`. Status: **publicada** (API + robô n8n, 21/11 ~16h55). Site sem mudança.
+Comandos "agentes ..." no WhatsApp do admin; rotas para os agentes de IA (conversa, catálogo), follow-up e fechamento aprovados. Registro: `docs/versoes/2026-11-21-v1.2.881-agentes-comandos-ia.md`.
+
+---
+
 # v1.2.880-bot-monitor-alertas
 
 Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
