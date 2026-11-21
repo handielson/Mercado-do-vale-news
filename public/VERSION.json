@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.875-sem-3dmv",
-  "date": "2026-11-19",
-  "status": "publicada",
+  "version": "v1.2.876-bot-garantia-handoff",
+  "date": "2026-11-21",
+  "status": "em publicação",
   "branch": "main",
-  "tag": "v1.2.875-sem-3dmv",
+  "tag": "v1.2.876-bot-garantia-handoff",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Domínio antigo 3dmv removido do sistema (nginx, código, testes) e últimos restos do 3D: confirmação por WhatsApp e limite de login só do Mercado do Vale; pasta apps/print3d, PENDENCIAS-LOJA-3D.md e migração 039 apagadas. Certificado de servidor.mercadodovale.com.br renovado.",
+  "summary": "Robô: garantia e horário voltam a consultar a API (fetch do n8n), não fala por cima da equipe, lista não some com 'bom dia', sem promessa vazia. API: garantia do Realme pelo prazo da marca. Dados: marcas ligadas aos produtos e forma das taxas.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -26,17 +26,18 @@
       "record": "docs/versoes/2026-11-10-v1.2.836-bot-preco-atual.md"
     },
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
-    "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque."
+    "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque.",
+    "debit_fee": "Taxa do débito está 0% no cadastro de taxas: digitar a taxa real da maquininha."
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-19-v1.2.875-sem-3dmv.md"
+    "ver docs/versoes/2026-11-21-v1.2.876-bot-garantia-handoff.md"
   ],
   "validations": [
-    "tmp-tests/saida-3d-mdv.test.cjs 9/9",
-    "npm run test:tmp: só as falhas de base",
-    "vps-api-nginx-cors-static passa (antes falhava pelo 3dmv)",
-    "customer-auth-protection 4/4; customer-phone-verification com as mesmas falhas de base"
+    "n8n-bot-correcoes-handoff-lista 6/6",
+    "n8n-sales-regression-gate 152/152",
+    "autoresponder-realme-warranty-brand-days 2/2",
+    "autoresponder* sem falha nova"
   ],
   "site_release": {
     "status": "publicada",
@@ -45,10 +46,10 @@
     "note": "Textos do cadastro sem 3DMV."
   },
   "api_release": {
-    "status": "publicada",
+    "status": "pendente",
     "service": "mdv-api",
-    "mode": "upload manual",
-    "note": "services/customerPhoneVerificationServer.cjs e services/storefrontAuthSecurity.cjs"
+    "mode": "deploy-vps-server-only",
+    "note": "vps_server.js: garantia do Realme pelo prazo da marca"
   },
   "nginx_release": {
     "status": "publicada",
@@ -103,7 +104,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.874-saida-3d-limpeza publicada.",
+  "pending_previous": "v1.2.875-sem-3dmv publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -115,9 +116,9 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "ac2b4034ab67612e8879c96f634a767aa8b8682e457d1c76c4a5c08de458da3b",
-    "candidate": "dd45b3982e9da3dd9b87ffa9a5f15858450df6746694dc443d7edddb3960235b",
-    "applied_at": "2026-11-18T22:09Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-18T22-09-26-025Z-df2fb1d0.aes256gcm.json"
+    "before": "dd45b3982e9da3dd9b87ffa9a5f15858450df6746694dc443d7edddb3960235b",
+    "candidate": "da4d803c0d4a36be8f50100f14ad86940c833752cfd8e2de80edcec7d1805290",
+    "applied_at": "2026-11-21T14:07Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-21T14-07-06-109Z-94a20c7d.aes256gcm.json"
   }
 }

@@ -19240,6 +19240,10 @@ async function buildAutoresponderModelAccessoryFollowUpReplies(accessoryGroups, 
 function formatAutoresponderWarrantyPeriod(days) {
   const safeDays = Number(days || 0);
   if (!Number.isFinite(safeDays) || safeDays <= 0) return '';
+  if (safeDays % 365 === 0) {
+    const years = safeDays / 365;
+    return years === 1 ? '1 ano' : `${years} anos`;
+  }
   if (safeDays % 30 === 0) {
     const months = safeDays / 30;
     return months === 1 ? '1 mes' : `${months} meses`;
@@ -19280,7 +19284,9 @@ function formatAutoresponderProductWarrantyLine(product) {
   }
 
   if (isAutoresponderRealmeBrand(brandName)) {
-    return `Garantia: ${period ? `${period} pelo fabricante` : 'pelo fabricante'}`;
+    // Garantia do fabricante: vale o prazo da marca (Realme = 365 dias); a categoria só se a marca não tiver prazo.
+    const manufacturerPeriod = brandPeriod || categoryPeriod;
+    return `Garantia: ${manufacturerPeriod ? `${manufacturerPeriod} pelo fabricante` : 'pelo fabricante'}`;
   }
 
   if (productWarrantyType === 'store' || productWarrantyType === 'loja') {

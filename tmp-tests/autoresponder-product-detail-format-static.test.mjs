@@ -19,7 +19,8 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
   assert(source.includes('function isAutoresponderXiaomiBrand'), `${fileName} must identify Xiaomi/Poco/Redmi warranty as store warranty`);
   assert(source.includes('function isAutoresponderRealmeBrand'), `${fileName} must identify Realme warranty as manufacturer warranty`);
   assert(source.includes('Garantia: ${period ? `${period} pela loja` : \'pela loja\'}'), `${fileName} must show Xiaomi warranty by store`);
-  assert(source.includes('Garantia: ${period ? `${period} pelo fabricante` : \'pelo fabricante\'}'), `${fileName} must show Realme warranty by manufacturer`);
+  // Realme: garantia do fabricante com o prazo da marca (tmp-tests/autoresponder-realme-warranty-brand-days.test.cjs roda a função).
+  assert(source.includes('Garantia: ${manufacturerPeriod ? `${manufacturerPeriod} pelo fabricante` : \'pelo fabricante\'}'), `${fileName} must show Realme warranty by manufacturer`);
 }
 
 console.log('autoresponder product detail format static checks passed');
