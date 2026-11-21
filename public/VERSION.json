@@ -4,7 +4,7 @@
   "status": "publicada",
   "branch": "main",
   "tag": "v1.2.877-pdv-termo-garantia",
-  "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
+  "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "PDV: Gerar Termo de Garantia volta a funcionar para aparelhos em 'Smartphones' (categoria acima 'Celulares' também conta) e o envio automático do termo no WhatsApp volta; sem termo, a tela diz o motivo.",
   "gestao_mdv_android": {
@@ -34,11 +34,12 @@
     "ver docs/versoes/2026-11-21-v1.2.877-pdv-termo-garantia.md"
   ],
   "validations": [
-    "pdv-warranty-term-category ok"
+    "pdv-warranty-term-category ok",
+    "site: /VERSION.json v1.2.877 e bundle do PDV com o aviso novo"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261121-165427",
     "previous": "/var/www/mdv-site/releases/20261119-220540-v1-2-875-sem-3dmv",
     "note": "PDV: termo de garantia pela árvore de categorias."
   },
