@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.878-bot-monitor",
+  "version": "v1.2.879-bot-monitor-nomes",
   "date": "2026-11-21",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.878-bot-monitor",
+  "tag": "v1.2.879-bot-monitor-nomes",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "API: rota só de leitura /agent/monitor/snapshot (chave MDV_MONITOR_KEY) para os agentes de monitoramento do robô no painel do servidor de casa: conversas recentes, clientes sem resposta, atendimentos abertos, respostas repetidas, tempo de resposta e estado da Evolution.",
+  "summary": "API do monitor do robô: nome do perfil do WhatsApp (Evolution findContacts, guardado 6 h) para quem não tem nome, e marcadores de mídia ([Áudio]...) não contam como resposta repetida.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,11 +31,11 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-21-v1.2.878-bot-monitor.md"
+    "ver docs/versoes/2026-11-21-v1.2.879-bot-monitor-nomes.md"
   ],
   "validations": [
-    "tmp-tests/bot-monitor-api.test.cjs ok (17 com agent-cost)",
-    "API /status 200; /agent/monitor/snapshot 401 sem chave e 200 com chave"
+    "tmp-tests/bot-monitor-api.test.cjs ok (9)",
+    "API /status 200; snapshot com nome em 18 de 21 conversas"
   ],
   "site_release": {
     "status": "publicada",
@@ -47,7 +47,7 @@
     "status": "publicada",
     "service": "mdv-api",
     "mode": "deploy-vps-server-only --bot-monitor-only",
-    "note": "gancho aplicado sobre server.js/vps_server.js/vps_server.cjs da VPS + services/botMonitorApi.cjs; backup /var/www/mdv-api/backups/bot-monitor-1795288180808. Site sem mudança."
+    "note": "só services/botMonitorApi.cjs mudou; backup /var/www/mdv-api/backups/bot-monitor-1795288705460. Site sem mudança."
   },
   "nginx_release": {
     "status": "publicada",
@@ -102,7 +102,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.877-pdv-termo-garantia publicada.",
+  "pending_previous": "v1.2.878-bot-monitor publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

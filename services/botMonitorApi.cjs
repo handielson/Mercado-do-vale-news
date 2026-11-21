@@ -57,7 +57,7 @@ function findDuplicates(rows, windowSec = 120) {
   for (const r of rows) {
     if (r.direction === 'inbound') continue;
     const text = clean(r.message_text, 400);
-    if (!text) continue;
+    if (!text || /^\[.*\]$/.test(text)) continue; // [Áudio], [imagem]... são marcadores, não texto repetido
     const key = `${r.remote_jid}|${text.toLowerCase()}`;
     const at = num(r.ts);
     const prev = last.get(key);
@@ -109,6 +109,34 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
     }
   }
 
+  // Nome do perfil do WhatsApp (pushName) pela Evolution, só para quem não tem nome; guarda 6 h.
+  const pushCache = new Map();
+  async function pushNames(jids) {
+    const out = new Map();
+    if (!evo.url || !evo.key || !evo.instance || typeof fetchImpl !== 'function') return out;
+    const falta = [];
+    for (const jid of jids) {
+      const c = pushCache.get(jid);
+      if (c && now() - c.at < 6 * 3600e3) { if (c.name) out.set(jid, c.name); } else falta.push(jid);
+    }
+    const fila = falta.slice(0, 40);
+    for (let i = 0; i < fila.length; i += 5) {
+      await Promise.all(fila.slice(i, i + 5).map(async (jid) => {
+        try {
+          const res = await fetchImpl(`${evo.url}/chat/findContacts/${encodeURIComponent(evo.instance)}`, {
+            method: 'POST', headers: { apikey: evo.key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ where: { remoteJid: jid } }), signal: AbortSignal.timeout(6000),
+          });
+          const list = await res.json().catch(() => []);
+          const name = clean(Array.isArray(list) ? list[0]?.pushName : '', 80) || null;
+          pushCache.set(jid, { name, at: now() });
+          if (name) out.set(jid, name);
+        } catch {}
+      }));
+    }
+    return out;
+  }
+
   async function customerNames(phones) {
     const tails = [...new Set(phones.map((p) => digits(p).slice(-8)).filter((t) => t.length === 8))];
     if (!tails.length) return new Map();
@@ -151,6 +179,9 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
       c.handoff_by = ctl ? clean(ctl.human_handoff_by, 60) || null : null;
       c.customer_name = c.phone ? names.get(c.phone.slice(-8)) || null : null;
     }
+    const semNome = conversations.filter((c) => !c.customer_name && !c.contact_name).map((c) => c.remote_jid);
+    const perfis = await pushNames(semNome);
+    for (const c of conversations) if (!c.contact_name && perfis.has(c.remote_jid)) c.contact_name = perfis.get(c.remote_jid);
     const [handoffs] = await pool.query(
       `SELECT remote_jid, phone, contact_name, code, status, UNIX_TIMESTAMP(requested_at) AS requested_at,
               UNIX_TIMESTAMP(expires_at) AS expires_at, UNIX_TIMESTAMP(last_admin_response_at) AS last_admin_response_at

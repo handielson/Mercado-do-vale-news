@@ -1,3 +1,10 @@
+# v1.2.879-bot-monitor-nomes
+
+Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
+Monitor do robô: nome do perfil do WhatsApp para quem não tem cadastro; marcador de mídia não conta como repetição. Registro: `docs/versoes/2026-11-21-v1.2.879-bot-monitor-nomes.md`.
+
+---
+
 # v1.2.878-bot-monitor
 
 Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.

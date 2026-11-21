@@ -45,10 +45,31 @@ test('resumo por conversa: conta o que o cliente mandou sem resposta e ignora gr
   assert.equal(b.unanswered_in, 0);
 });
 
-test('resposta repetida do robô em menos de 2 min vira suspeita de loop', () => {
+test('resposta repetida do robô em menos de 2 min vira suspeita de loop; marcador de mídia não conta', () => {
   const d = findDuplicates(rows);
   assert.equal(d.length, 1);
   assert.equal(d[0].gap_sec, 25);
+  const midia = [
+    { remote_jid: 'x', direction: 'outbound', message_text: '[Áudio enviado pelo atendente]', ts: 1 },
+    { remote_jid: 'x', direction: 'outbound', message_text: '[Áudio enviado pelo atendente]', ts: 20 },
+  ];
+  assert.equal(findDuplicates(midia).length, 0);
+});
+
+test('nome do perfil vem da Evolution só para quem não tem nome, e fica guardado', async () => {
+  const pedidos = [];
+  const fetchImpl = async (url, opt) => { pedidos.push(JSON.parse(opt.body).where.remoteJid); return { json: async () => [{ pushName: 'Carla' }] }; };
+  const pool = { async query(sql) {
+    if (sql.includes('FROM n8n_bot_messages')) return [[{ remote_jid: 'j1', phone: '5587999990001', direction: 'inbound', message_text: 'oi', ts: 1 }]];
+    if (sql.includes('n8n_bot_global_control')) return [[{ paused: 0 }]];
+    return [[]];
+  } };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl, evolution: { url: 'https://e', key: 'k', instance: 'i' } });
+  api.evolutionState = async () => ({});
+  const s1 = await api.snapshot({});
+  assert.equal(s1.conversations[0].contact_name, 'Carla');
+  await api.snapshot({});
+  assert.deepEqual(pedidos.filter((j) => j === 'j1').length, 1, 'cache evita pedir de novo');
 });
 
 test('tempo de resposta do robô usa a primeira mensagem do cliente até a próxima resposta', () => {
