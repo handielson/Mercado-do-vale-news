@@ -1,3 +1,10 @@
+# v1.2.877-pdv-termo-garantia
+
+Data: 21/11/2026. Branch: `main`. Status: **publicada** (site).
+PDV: "Gerar Termo de Garantia" e o envio automático do termo no WhatsApp voltam a funcionar para celulares em "Smartphones"; sem termo, a tela avisa o motivo. Registro: `docs/versoes/2026-11-21-v1.2.877-pdv-termo-garantia.md`.
+
+---
+
 # v1.2.876-bot-garantia-handoff
 
 Data: 21/11/2026. Branch: `main`. Status: **publicada** (robô n8n + API + dados, 21/11 ~11h10).

@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.876-bot-garantia-handoff",
+  "version": "v1.2.877-pdv-termo-garantia",
   "date": "2026-11-21",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.876-bot-garantia-handoff",
+  "tag": "v1.2.877-pdv-termo-garantia",
   "release_vps": "/var/www/mdv-site/releases/20261118-164113-v1-2-865-ajustes-aparelho-devolucao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô: garantia e horário voltam a consultar a API (fetch do n8n), não fala por cima da equipe, lista não some com 'bom dia', sem promessa vazia. API: garantia do Realme pelo prazo da marca. Dados: marcas ligadas aos produtos e forma das taxas.",
+  "summary": "PDV: Gerar Termo de Garantia volta a funcionar para aparelhos em 'Smartphones' (categoria acima 'Celulares' também conta) e o envio automático do termo no WhatsApp volta; sem termo, a tela diz o motivo.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,19 +31,16 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-21-v1.2.876-bot-garantia-handoff.md"
+    "ver docs/versoes/2026-11-21-v1.2.877-pdv-termo-garantia.md"
   ],
   "validations": [
-    "n8n-bot-correcoes-handoff-lista 6/6",
-    "n8n-sales-regression-gate 152/152",
-    "autoresponder-realme-warranty-brand-days 2/2",
-    "autoresponder* sem falha nova"
+    "pdv-warranty-term-category ok"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261119-220540-v1-2-875-sem-3dmv",
-    "previous": "/var/www/mdv-site/releases/20261119-213759-v1-2-872-saida-3d-api",
-    "note": "Textos do cadastro sem 3DMV."
+    "status": "pendente",
+    "release": "pendente",
+    "previous": "/var/www/mdv-site/releases/20261119-220540-v1-2-875-sem-3dmv",
+    "note": "PDV: termo de garantia pela árvore de categorias."
   },
   "api_release": {
     "status": "publicada",
@@ -104,7 +101,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.875-sem-3dmv publicada.",
+  "pending_previous": "v1.2.876-bot-garantia-handoff publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

@@ -13,6 +13,7 @@ import DeliverySection from '../../components/pdv/DeliverySection';
 import ReceiptPreview from '../../components/pdv/ReceiptPreview';
 import InstallmentCalculator from '../../components/pdv/InstallmentCalculator';
 import { WarrantyTermModal } from '../../components/warranty/WarrantyTermModal';
+import { isWarrantyTermCategoryTree, isWarrantyTermCategoryValue } from '../../utils/warrantyTermCategory';
 import { printSaleReceipt } from '../../utils/printSaleReceipt';
 import { printDanfeNfce } from '../../utils/printDanfeNfce';
 import { companyFiscalService } from '../../services/companyFiscalService';
@@ -177,30 +178,6 @@ function extractDeliveryPersonCustomerId(
     const selected = deliveryPersons.find(person => person.id === personId);
     if (selected?.customer_id) return selected.customer_id;
     return personId?.startsWith('customer:') ? personId.slice('customer:'.length) : undefined;
-}
-
-const WARRANTY_TERM_CATEGORY_KEYS = new Set([
-    'smartphones-e-tablet',
-    'smartphones-e-tablets',
-    'smartphone-e-tablet',
-    'smartphone-e-tablets',
-    'celular',
-    'celulares',
-]);
-
-function normalizeWarrantyCategoryKey(value: unknown): string {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim()
-        .replace(/&/g, ' e ')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-}
-
-function isWarrantyTermCategoryValue(value: unknown): boolean {
-    return WARRANTY_TERM_CATEGORY_KEYS.has(normalizeWarrantyCategoryKey(value));
 }
 
 export default function PDVPage() {
@@ -1265,8 +1242,7 @@ export default function PDVPage() {
 
                 const categoryId = (product as any).category_id || (item as any).product_category_id;
                 if (categoryId) {
-                    const category = await categoryService.getById(categoryId);
-                    if (isWarrantyTermCategoryValue(category?.slug) || isWarrantyTermCategoryValue(category?.name)) {
+                    if (await isWarrantyTermCategoryTree(categoryId, id => categoryService.getById(id) as any)) {
                         eligibleItems.push(item);
                     }
                 }
@@ -1319,7 +1295,7 @@ export default function PDVPage() {
         try {
             const data = await buildWarrantyTermData(sale, customer, items);
             if (!data) {
-                console.warn('Template de garantia não configurado ou venda sem aparelho elegível');
+                toast.warning('Esta venda não tem termo de garantia: nenhum aparelho com IMEI de uma categoria de celulares, ou o modelo do termo não está configurado em Configurações › Documentos.');
                 return;
             }
             setWarrantyContents(data.contents);
