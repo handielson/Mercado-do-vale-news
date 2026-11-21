@@ -22,6 +22,7 @@ function parseAgentCommand(value) {
 }
 
 const crypto = require('node:crypto');
+const { createBotErrorLibrary } = require('./botErrorLibrary.cjs');
 
 const clean = (value, limit) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit);
 const digits = (value) => String(value ?? '').replace(/\D/g, '');
@@ -364,6 +365,31 @@ function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
   route('get', '/agent/monitor/commands', api.commands);
   route('post', '/agent/monitor/send', api.sendToCustomer);
   route('post', '/agent/monitor/handoffs/close', api.closeHandoffs);
+
+  // bot-error-library-v1: biblioteca de erros (services/botErrorLibrary.cjs)
+  const biblioteca = createBotErrorLibrary({ pool });
+  api.biblioteca = biblioteca;
+  route('get', '/agent/monitor/errors', biblioteca.listar);
+  route('get', '/agent/monitor/errors/similar', biblioteca.parecidos);
+  route('post', '/agent/monitor/errors', biblioteca.registrar);
+  fastify.post('/agent/monitor/errors/:id', async (request, reply) => {
+    if (!api.authorize(request.headers)) return reply.code(401).send({ error: 'Chave do monitor inválida.' });
+    try { return await biblioteca.atualizar(request.params?.id, request.body || {}); }
+    catch (error) { return reply.code(error?.statusCode || 500).send({ error: error?.statusCode ? error.message : 'Falha na biblioteca de erros.' }); }
+  });
+  // erros do n8n (workflow de erros → /n8n-bot/error-alerts) entram sozinhos na biblioteca
+  fastify.addHook('onResponse', async (request, reply) => {
+    if (request.method !== 'POST' || reply.statusCode >= 300) return;
+    const url = request.routeOptions?.url || request.routerPath || String(request.url || '').split('?')[0];
+    if (url !== '/n8n-bot/error-alerts') return;
+    const b = request.body || {};
+    const workflow = clean(b.workflowName || 'Workflow', 120);
+    const erro = clean(b.error || 'Erro sem mensagem', 300);
+    biblioteca.registrar({
+      chave: `n8n|${workflow.toLowerCase()}|${erro.toLowerCase().replace(/\d+/g, '#')}`,
+      titulo: `${workflow}: ${erro}`.slice(0, 200), sintoma: erro, onde: `n8n · ${clean(b.node || 'nó não informado', 100)}`, origem: 'n8n', tags: 'n8n,erro-execucao',
+    }).catch((e) => console.warn('[bot-error-library] n8n:', e?.message || e));
+  });
   fastify.post('/agent/monitor/alert', async (request, reply) => {
     if (!api.authorize(request.headers)) return reply.code(401).send({ error: 'Chave do monitor inválida.' });
     try {

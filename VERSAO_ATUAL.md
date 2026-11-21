@@ -1,3 +1,10 @@
+# v1.2.882-biblioteca-erros
+
+Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
+Biblioteca de erros do robô (erro + causa + correção) para os agentes do servidor de casa. Registro: `docs/versoes/2026-11-21-v1.2.882-biblioteca-erros.md`.
+
+---
+
 # v1.2.881-agentes-comandos-ia
 
 Data: 21/11/2026. Branch: `main`. Status: **publicada** (API + robô n8n, 21/11 ~16h55). Site sem mudança.
