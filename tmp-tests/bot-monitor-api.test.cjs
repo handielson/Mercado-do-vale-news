@@ -1,0 +1,99 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { createBotMonitorApi, summarizeConversations, findDuplicates, responseTimes, clampHours } = require('../services/botMonitorApi.cjs');
+const { patch } = require('../scripts/deploy-bot-monitor.cjs');
+
+const KEY = 'm'.repeat(40);
+
+test('monitor: chave obrigatória e longa; sem MDV_MONITOR_KEY a rota fica desligada', () => {
+  const api = createBotMonitorApi({ pool: {}, key: KEY, fetchImpl: null });
+  assert.equal(api.authorize({ 'x-agent-key': KEY }), true);
+  assert.equal(api.authorize({ 'x-agent-key': 'errada' }), false);
+  assert.equal(api.authorize({}), false);
+  assert.equal(createBotMonitorApi({ pool: {}, key: '' }).authorize({ 'x-agent-key': '' }), false);
+  assert.equal(createBotMonitorApi({ pool: {}, key: 'curta' }).authorize({ 'x-agent-key': 'curta' }), false);
+});
+
+test('janela de horas fica entre 1 e 48 (padrão 24)', () => {
+  assert.equal(clampHours(undefined), 24);
+  assert.equal(clampHours('0'), 24);
+  assert.equal(clampHours('6'), 6);
+  assert.equal(clampHours('500'), 48);
+});
+
+const rows = [
+  { remote_jid: '5587999990001@s.whatsapp.net', phone: '5587999990001', direction: 'inbound', message_text: 'tem capinha?', ts: 1000 },
+  { remote_jid: '5587999990001@s.whatsapp.net', phone: '5587999990001', direction: 'outbound', message_text: 'Temos sim!', source_node: 'Controle Bot - Registrar Saida', ts: 1010 },
+  { remote_jid: '5587999990001@s.whatsapp.net', phone: '5587999990001', direction: 'inbound', message_text: 'qual valor?', ts: 1100 },
+  { remote_jid: '5587999990001@s.whatsapp.net', phone: '5587999990001', direction: 'inbound', message_text: '?', ts: 1200 },
+  { remote_jid: '5587999990002@s.whatsapp.net', phone: '5587999990002', direction: 'inbound', message_text: 'oi', ts: 1300 },
+  { remote_jid: '5587999990002@s.whatsapp.net', phone: '5587999990002', direction: 'outbound', message_text: 'Olá! Como posso ajudar?', ts: 1305 },
+  { remote_jid: '5587999990002@s.whatsapp.net', phone: '5587999990002', direction: 'outbound', message_text: 'Olá! Como posso ajudar?', ts: 1330 },
+  { remote_jid: '120363000@g.us', phone: null, direction: 'inbound', message_text: 'grupo', ts: 1400 },
+];
+
+test('resumo por conversa: conta o que o cliente mandou sem resposta e ignora grupos', () => {
+  const list = summarizeConversations(rows);
+  assert.equal(list.length, 2, 'grupo fica de fora');
+  const a = list.find((c) => c.phone === '5587999990001');
+  assert.equal(a.unanswered_in, 2);
+  assert.equal(a.last_in_text, '?');
+  assert.equal(a.last_out_at, 1010);
+  const b = list.find((c) => c.phone === '5587999990002');
+  assert.equal(b.unanswered_in, 0);
+});
+
+test('resposta repetida do robô em menos de 2 min vira suspeita de loop', () => {
+  const d = findDuplicates(rows);
+  assert.equal(d.length, 1);
+  assert.equal(d[0].gap_sec, 25);
+});
+
+test('tempo de resposta do robô usa a primeira mensagem do cliente até a próxima resposta', () => {
+  const r = responseTimes(rows);
+  assert.equal(r.samples, 2);
+  assert.equal(r.p50_sec, 10);
+  assert.equal(r.max_sec, 10);
+});
+
+test('snapshot junta controles, nome do cadastro e atendimentos abertos sem expor payload', async () => {
+  const calls = [];
+  const pool = { async query(sql, params) {
+    calls.push(sql.replace(/\s+/g, ' '));
+    if (sql.includes('FROM n8n_bot_messages')) return [rows];
+    if (sql.includes('FROM n8n_bot_client_controls')) return [[{ remote_jid: '5587999990001@s.whatsapp.net', blocked: 0, handoff_until: 2000, human_handoff_by: 'loja' }]];
+    if (sql.includes('FROM customers')) return [[{ name: 'João Silva', tail: '99990001' }]];
+    if (sql.includes('FROM n8n_bot_handoffs')) return [[{ remote_jid: 'x@s.whatsapp.net', phone: '558700000000', status: 'open', requested_at: 900 }]];
+    if (sql.includes('n8n_bot_global_control')) return [[{ paused: 0 }]];
+    return [[]];
+  } };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl: null, now: () => 5000 * 1000 });
+  const s = await api.snapshot({ horas: '12' });
+  assert.equal(s.hours, 12);
+  assert.equal(s.bot_paused, false);
+  const a = s.conversations.find((c) => c.phone === '5587999990001');
+  assert.equal(a.customer_name, 'João Silva');
+  assert.equal(a.handoff_until, 2000);
+  assert.equal(s.handoffs_open.length, 1);
+  assert.ok(!JSON.stringify(s).includes('payload_json'));
+  assert.ok(calls[0].includes("NOW() - INTERVAL ? HOUR"), 'janela pela hora do próprio MySQL');
+  assert.ok(!calls.some((c) => /payload_json/.test(c)), 'não lê o payload bruto');
+});
+
+test('deploy: gancho entra uma vez, logo depois do agente de custo', () => {
+  const anchor = "require('./services/agentCostApi.cjs').registerAgentCostRoutes(fastify, { pool, manualCost: productManualCostVps });";
+  const src = `a\n${anchor}\nb\n`;
+  const once = patch(src);
+  assert.equal(patch(once), once, 'idempotente');
+  assert.ok(once.includes(`${anchor}\n// bot-monitor-v1`));
+  assert.throws(() => patch('sem gancho'), /anchor/);
+});
+
+test('o código do servidor no repositório registra a rota do monitor', () => {
+  for (const f of ['vps_server.js', 'vps_server.cjs']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    assert.ok(src.includes("require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"), f);
+  }
+});

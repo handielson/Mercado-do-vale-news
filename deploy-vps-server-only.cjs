@@ -805,6 +805,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--bot-monitor-only') || process.argv.includes('--bot-monitor-check')) {
+    await require('./scripts/deploy-bot-monitor.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--bot-monitor-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--openai-finance-only') || process.argv.includes('--openai-finance-check')) {
     await require('./scripts/deploy-openai-finance.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--openai-finance-check'),

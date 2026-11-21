@@ -1,3 +1,10 @@
+# v1.2.878-bot-monitor
+
+Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
+API: rota só de leitura para os agentes de monitoramento do robô (painel do servidor de casa). Registro: `docs/versoes/2026-11-21-v1.2.878-bot-monitor.md`.
+
+---
+
 # v1.2.877-pdv-termo-garantia
 
 Data: 21/11/2026. Branch: `main`. Status: **publicada** (site).

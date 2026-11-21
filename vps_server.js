@@ -13964,6 +13964,8 @@ const { createProductManualCostService } = require('./services/productManualCost
 const productManualCostVps = createProductManualCostService({ pool });
 // agente-custo-v1: rotas do agente OpenBot (custo do último lançamento do Bling), chave MDV_AGENT_KEY.
 require('./services/agentCostApi.cjs').registerAgentCostRoutes(fastify, { pool, manualCost: productManualCostVps });
+// bot-monitor-v1: leitura para os agentes de monitoramento do robô (painel do servidor de casa), chave MDV_MONITOR_KEY.
+require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });
 fastify.patch('/admin/products/:id/cost', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   try {
     const auth = await getVpsBearerAuthContext(request);
