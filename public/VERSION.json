@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.879-bot-monitor-nomes",
+  "version": "v1.2.880-bot-monitor-alertas",
   "date": "2026-11-21",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.879-bot-monitor-nomes",
+  "tag": "v1.2.880-bot-monitor-alertas",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "API do monitor do robô: nome do perfil do WhatsApp (Evolution findContacts, guardado 6 h) para quem não tem nome, e marcadores de mídia ([Áudio]...) não contam como resposta repetida.",
+  "summary": "API do monitor do robô: POST /agent/monitor/alert manda os alertas dos agentes do servidor de casa no WhatsApp (número do robô para os admins ativos), com freio de 30 por hora e sem repetir o mesmo texto em 20 min.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,11 +31,11 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-21-v1.2.879-bot-monitor-nomes.md"
+    "ver docs/versoes/2026-11-21-v1.2.880-bot-monitor-alertas.md"
   ],
   "validations": [
-    "tmp-tests/bot-monitor-api.test.cjs ok (9)",
-    "API /status 200; snapshot com nome em 18 de 21 conversas"
+    "tmp-tests/bot-monitor-api.test.cjs ok (10)",
+    "API /status 200; /agent/monitor/alert 401 sem chave; alerta de teste entregue (1 admin)"
   ],
   "site_release": {
     "status": "publicada",
@@ -47,7 +47,7 @@
     "status": "publicada",
     "service": "mdv-api",
     "mode": "deploy-vps-server-only --bot-monitor-only",
-    "note": "só services/botMonitorApi.cjs mudou; backup /var/www/mdv-api/backups/bot-monitor-1795288705460. Site sem mudança."
+    "note": "só services/botMonitorApi.cjs mudou; backup /var/www/mdv-api/backups/bot-monitor-1795289288973. Site sem mudança."
   },
   "nginx_release": {
     "status": "publicada",
@@ -102,7 +102,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.878-bot-monitor publicada.",
+  "pending_previous": "v1.2.879-bot-monitor-nomes publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

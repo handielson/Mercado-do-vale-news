@@ -2,6 +2,7 @@
 
 // bot-monitor-v1 (21/11/2026): leitura para os agentes de monitoramento do robô (painel do servidor de casa).
 // - só leitura; acesso com a chave MDV_MONITOR_KEY no cabeçalho x-agent-key (sem a variável, a rota fica desligada);
+// - POST /agent/monitor/alert {text}: manda o alerta dos agentes no WhatsApp para os admins ativos (com freio);
 // - GET /agent/monitor/snapshot?horas=N (1 a 48, padrão 24): conversas recentes do robô (n8n_bot_messages),
 //   controles por cliente (pausa humana/bloqueio), atendimentos humanos abertos, respostas repetidas,
 //   tempo de resposta do robô e estado da instância da Evolution.
@@ -204,7 +205,38 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
     };
   }
 
-  return { authorize, snapshot, evolutionState };
+  // Alerta dos agentes no WhatsApp: vai do número do robô para os números de admin ativos (n8n_bot_admin_numbers).
+  // Freio: no máximo 30 por hora e o mesmo texto só uma vez a cada 20 min.
+  const enviados = [];
+  const ultimos = new Map();
+  async function alert(body = {}) {
+    const text = String(body.text ?? '').replace(/\u0000/g, '').trim().slice(0, 3500);
+    if (!text) throw Object.assign(new Error('Texto vazio.'), { statusCode: 400 });
+    if (!evo.url || !evo.key || !evo.instance || typeof fetchImpl !== 'function') throw Object.assign(new Error('Evolution não configurada.'), { statusCode: 503 });
+    const agora = now();
+    while (enviados.length && agora - enviados[0] > 3600e3) enviados.shift();
+    if (enviados.length >= 30) return { ok: false, skipped: 'limite_hora', sent: 0 };
+    const chave = text.toLowerCase();
+    if (ultimos.has(chave) && agora - ultimos.get(chave) < 20 * 60e3) return { ok: true, skipped: 'repetido', sent: 0 };
+    const [rows] = await pool.query('SELECT phone FROM n8n_bot_admin_numbers WHERE active = 1');
+    const numbers = [...new Set((rows || []).map((r) => digits(r.phone)).filter((n) => n.length >= 10))];
+    if (!numbers.length) return { ok: false, skipped: 'sem_admin', sent: 0 };
+    let sent = 0;
+    for (const number of numbers) {
+      try {
+        const res = await fetchImpl(`${evo.url}/message/sendText/${encodeURIComponent(evo.instance)}`, {
+          method: 'POST', headers: { apikey: evo.key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ number, text }), signal: AbortSignal.timeout(15000),
+        });
+        if (res.ok) sent += 1;
+      } catch {}
+    }
+    if (sent) { enviados.push(agora); ultimos.set(chave, agora); }
+    for (const [k, v] of ultimos) if (agora - v > 3600e3) ultimos.delete(k);
+    return { ok: sent > 0, sent, admins: numbers.length };
+  }
+
+  return { authorize, snapshot, evolutionState, alert };
 }
 
 function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
@@ -217,6 +249,16 @@ function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
     } catch (error) {
       console.error('[bot-monitor] snapshot failed:', error?.message || error);
       return reply.code(500).send({ error: 'Falha ao montar o retrato do robô.' });
+    }
+  });
+  fastify.post('/agent/monitor/alert', async (request, reply) => {
+    if (!api.authorize(request.headers)) return reply.code(401).send({ error: 'Chave do monitor inválida.' });
+    try {
+      return await api.alert(request.body || {});
+    } catch (error) {
+      if (error?.statusCode) return reply.code(error.statusCode).send({ error: error.message });
+      console.error('[bot-monitor] alert failed:', error?.message || error);
+      return reply.code(500).send({ error: 'Falha ao mandar o alerta.' });
     }
   });
   return api;

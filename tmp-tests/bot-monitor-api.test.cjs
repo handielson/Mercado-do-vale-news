@@ -118,3 +118,21 @@ test('o código do servidor no repositório registra a rota do monitor', () => {
     assert.ok(src.includes("require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"), f);
   }
 });
+
+test('alerta: manda para os admins ativos, segura repetição e respeita limite por hora', async () => {
+  const envios = [];
+  const fetchImpl = async (url, opt) => { envios.push({ url, body: JSON.parse(opt.body) }); return { ok: true, json: async () => ({}) }; };
+  const pool = { async query(sql) { assert.match(sql, /n8n_bot_admin_numbers WHERE active = 1/); return [[{ phone: '+55 87 99624-0000' }, { phone: '5587996240000' }]]; } };
+  let t = 0;
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl, evolution: { url: 'https://e', key: 'k', instance: 'bot' }, now: () => t });
+  const r = await api.alert({ text: 'Evolution caiu' });
+  assert.deepEqual([r.ok, r.sent, envios.length], [true, 1, 1], 'mesmo número em formatos diferentes vira um só');
+  assert.match(envios[0].url, /message\/sendText\/bot$/);
+  assert.equal(envios[0].body.number, '5587996240000');
+  assert.equal((await api.alert({ text: 'Evolution caiu' })).skipped, 'repetido');
+  t = 21 * 60e3;
+  assert.equal((await api.alert({ text: 'Evolution caiu' })).sent, 1, 'depois de 20 min pode repetir');
+  for (let i = 0; i < 40; i++) await api.alert({ text: `x${i}` });
+  assert.equal((await api.alert({ text: 'mais um' })).skipped, 'limite_hora');
+  await assert.rejects(api.alert({ text: '  ' }), /vazio/);
+});

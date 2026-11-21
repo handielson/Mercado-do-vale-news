@@ -1,3 +1,10 @@
+# v1.2.880-bot-monitor-alertas
+
+Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
+Alertas dos agentes do servidor de casa no WhatsApp dos admins, com freio. Registro: `docs/versoes/2026-11-21-v1.2.880-bot-monitor-alertas.md`.
+
+---
+
 # v1.2.879-bot-monitor-nomes
 
 Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
