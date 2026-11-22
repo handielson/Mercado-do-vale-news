@@ -1,3 +1,10 @@
+# v1.2.888-loja-aberta-agora
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 14h17). Site e API sem mudança.
+Endereço avisa se a loja está fechada agora; "tô indo" não repete o endereço. Registro: `docs/versoes/2026-11-22-v1.2.888-loja-aberta-agora.md`.
+
+---
+
 # v1.2.887-payjoy-link-entregue
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 13h29). Site e API sem mudança.
