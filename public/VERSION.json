@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.889-comandos-curtos",
+  "version": "v1.2.890-trava-categoria-celulares",
   "date": "2026-11-22",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.889-comandos-curtos",
+  "tag": "v1.2.890-trava-categoria-celulares",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Comandos dos agentes: \"17 aprovar\", \"aprovar 17\", \"16 reprovar, motivo\" e comando digitado pela loja na conversa do admin; motivo da recusa ensina a Qualidade (painel 1.16.2). Redmi 15C 4/256 movido de Celulares para Smartphones (sumia da lista do robô).",
+  "summary": "Categoria principal Celulares travada no banco: inserir ou mover produto para ela dá erro pedindo a subcategoria (Smartphones, Capinhas…). Os 5 produtos que estavam lá foram para Smartphones.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,13 +31,10 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-22-v1.2.889-comandos-curtos.md"
+    "ver docs/versoes/2026-11-22-v1.2.890-trava-categoria-celulares.md"
   ],
   "validations": [
-    "tmp-tests/bot-monitor-api.test.cjs + bot-error-library + agent-monitor-lock ok (29)",
-    "tmp-tests/n8n-agent-commands-short.test.cjs ok (2)",
-    "painel-servidor npm test ok (66)",
-    "API /status 200; n8n servicesHealthy"
+    "scripts/apply-celulares-category-guard.cjs --apply: update e insert na raiz bloqueados; update normal ok (transação desfeita)"
   ],
   "site_release": {
     "status": "publicada",
@@ -104,7 +101,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.888-loja-aberta-agora publicada.",
+  "pending_previous": "v1.2.889-comandos-curtos publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -122,13 +119,28 @@
     "backup": "/root/n8n-backups/meta-attendance-2026-11-22T18-51-07-105Z-aea3e50e.aes256gcm.json",
     "note": "agent-commands-v2 no nó Controle Bot - Comando Admin."
   },
+  "db_release": {
+    "status": "publicada",
+    "triggers": [
+      "mdv_products_celulares_root_ins",
+      "mdv_products_celulares_root_upd"
+    ],
+    "note": "criadas como root via socket; produtos na raiz Celulares: 0"
+  },
   "catalog_fix": {
     "skus": [
       "RC154256A",
-      "RC154256V"
+      "RC154256V",
+      "RC158256P",
+      "R15C4256",
+      "MODELO-6D1E07657065F6F43F3A"
     ],
-    "from": "Celulares (98a316a5)",
-    "to": "Smartphones (8b7c4852)",
-    "backup": "/var/www/mdv-api/backups/categoria-redmi15c-1795373675613.json"
+    "from": "Celulares",
+    "to": "Smartphones",
+    "backups": [
+      "/var/www/mdv-api/backups/categoria-redmi15c-1795373675613.json",
+      "/var/www/mdv-api/backups/categoria-redmi15c-2-1795373929479.json",
+      "/var/www/mdv-api/backups/categoria-redmi-a5-pai-1795373945160.json"
+    ]
   }
 }

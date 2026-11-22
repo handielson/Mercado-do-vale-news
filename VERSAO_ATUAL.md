@@ -1,3 +1,10 @@
+# v1.2.890-trava-categoria-celulares
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (banco). Site, API e robô sem mudança.
+Categoria principal Celulares não recebe produto (trigger). Registro: `docs/versoes/2026-11-22-v1.2.890-trava-categoria-celulares.md`.
+
+---
+
 # v1.2.889-comandos-curtos
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (API + robô n8n + painel do servidor 1.16.2). Site sem mudança.
