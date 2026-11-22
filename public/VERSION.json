@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.891-codigo-modelo-lista-completa",
+  "version": "v1.2.892-horario-cidade-loja",
   "date": "2026-11-22",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.891-codigo-modelo-lista-completa",
+  "tag": "v1.2.892-horario-cidade-loja",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô acha o modelo pelo código quando a marca vem errada (\"redimi 80s\" → Realme Note 80S) e diz quais não tem; lista de celulares não é mais cortada por \"?\" ou \"por favor\" do cliente no meio do envio.",
+  "summary": "Perguntas sobre a loja: horário/dias de funcionamento respondem o horário da semana + situação de agora; \"Juazeiro ou Petrolina?\" responde a cidade; o endereço não é mais repetido nessas perguntas.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,10 +31,11 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-22-v1.2.891-codigo-modelo-lista-completa.md"
+    "ver docs/versoes/2026-11-22-v1.2.892-horario-cidade-loja.md"
   ],
   "validations": [
-    "tmp-tests/n8n-catalog-model-fixes.test.cjs ok (4)",
+    "tmp-tests/n8n-store-questions.test.cjs ok (6)",
+    "tmp-tests/n8n-store-visit-status.test.cjs ok (7)",
     "scripts/n8n-sales-regression-gate.cjs ok (dry run)",
     "n8n servicesHealthy, entityHistoryAligned"
   ],
@@ -103,7 +104,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.890-trava-categoria-celulares publicada.",
+  "pending_previous": "v1.2.891-codigo-modelo-lista-completa publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -115,11 +116,11 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "3553963ecfca367e57ef563541f9b3536c8772f5b9c2bd9747120bfc45d3eaca",
-    "after": "29818e1ac89e588e295da1320e51a5a4f5009e74bf47bbea724bdf368e0dd9b3",
-    "applied_at": "2026-11-22T19:50Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T19-50-42-355Z-d239a305.aes256gcm.json",
-    "note": "model-token-match-v1 (Vendas - Contexto Produtos) + catalog-finish-send-v1 (Controle Bot - Aplicar mensagem atual)."
+    "before": "29818e1ac89e588e295da1320e51a5a4f5009e74bf47bbea724bdf368e0dd9b3",
+    "after": "f4e86a6ef4c8738a7582db2d67d4ef7a3aa920bd825eff8f3893e321bce323e5",
+    "applied_at": "2026-11-22T19:57Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T19-57-37-735Z-5f8cd204.aes256gcm.json",
+    "note": "store-questions-v1 no nó Loja - Localizacao."
   },
   "db_release": {
     "status": "publicada",

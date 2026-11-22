@@ -1,3 +1,10 @@
+# v1.2.892-horario-cidade-loja
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 16h57). Site e API sem mudança.
+Horário e cidade da loja respondidos sem repetir o endereço. Registro: `docs/versoes/2026-11-22-v1.2.892-horario-cidade-loja.md`.
+
+---
+
 # v1.2.891-codigo-modelo-lista-completa
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 16h50). Site e API sem mudança.
