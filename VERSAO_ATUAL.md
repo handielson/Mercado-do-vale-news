@@ -1,3 +1,10 @@
+# v1.2.891-codigo-modelo-lista-completa
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 16h50). Site e API sem mudança.
+Modelo achado pelo código ("redimi 80s" → Realme Note 80S); lista não é cortada por "?" no meio. Registro: `docs/versoes/2026-11-22-v1.2.891-codigo-modelo-lista-completa.md`.
+
+---
+
 # v1.2.890-trava-categoria-celulares
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (banco). Site, API e robô sem mudança.
