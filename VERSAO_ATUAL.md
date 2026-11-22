@@ -1,3 +1,10 @@
+# v1.2.886-rajada-mensagens
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 12h47). Site e API sem mudança.
+Mensagens seguidas do cliente lidas juntas (espera 10 s). Registro: `docs/versoes/2026-11-22-v1.2.886-rajada-mensagens.md`.
+
+---
+
 # v1.2.885-saudacao-cortesia
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 12h35). Site e API sem mudança.
