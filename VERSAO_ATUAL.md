@@ -1,3 +1,10 @@
+# v1.2.896-modelo-esperando-emoji
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 17h40). Site e API sem mudança.
+Frase "Esse modelo acabou e estamos esperando chegar" com emojis (😕 💰 📸 💾 😊), pedido do dono. Prompt do Especialista - Vendas; backup `/root/n8n-backups/meta-attendance-2026-11-22T20-39-05-117Z-48638680.aes256gcm.json`.
+
+---
+
 # v1.2.895-modelo-esperando-chegar
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 17h36). Site e API sem mudança.

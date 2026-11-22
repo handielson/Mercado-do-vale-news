@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.895-modelo-esperando-chegar",
+  "version": "v1.2.896-modelo-esperando-emoji",
   "date": "2026-11-22",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.895-modelo-esperando-chegar",
+  "tag": "v1.2.896-modelo-esperando-emoji",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Modelo pedido que não está na lista já enviada: \"Esse modelo acabou e estamos esperando chegar, Nome. Se quiser, me diga o que é mais importante para você — como preço, câmera ou armazenamento — e te indico uma opção entre os modelos da lista.\" (frase do dono, prompt do Especialista - Vendas).",
+  "summary": "Frase de modelo fora da lista com emoji: \"Esse modelo acabou e estamos esperando chegar, Nome 😕 … preço 💰, câmera 📸 ou armazenamento 💾 … da lista 😊\".",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,12 +31,13 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-22-v1.2.895-modelo-esperando-chegar.md"
+    "scripts/n8n-model-out-of-stock-wording.cjs (v2)",
+    "tmp-tests/n8n-model-out-of-stock-wording.test.cjs"
   ],
   "validations": [
-    "tmp-tests/n8n-model-out-of-stock-wording.test.cjs ok (1)",
+    "tmp-tests/n8n-model-out-of-stock-wording.test.cjs ok",
     "scripts/n8n-sales-regression-gate.cjs ok (dry run)",
-    "n8n servicesHealthy, entityHistoryAligned"
+    "n8n servicesHealthy"
   ],
   "site_release": {
     "status": "publicada",
@@ -101,7 +102,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.894-cumprimento-meio-conversa publicada.",
+  "pending_previous": "v1.2.895-modelo-esperando-chegar publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -113,11 +114,11 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "6e8b7871d4936f6857d044eb67bae16ef6903fa6741aea5621600219c2836c3a",
-    "after": "8c35f78780a7622d1c6e6f0b194931ec8ceafebb78762970cdfd263cd360d275",
-    "applied_at": "2026-11-22T20:36Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T20-36-48-139Z-8054e4b9.aes256gcm.json",
-    "note": "model-waiting-stock-v1 no prompt do Especialista - Vendas."
+    "before": "8c35f78780a7622d1c6e6f0b194931ec8ceafebb78762970cdfd263cd360d275",
+    "after": "9b04dc999c017e4f1443974cca77e3875a5166510b0622bccac593539f43b44d",
+    "applied_at": "2026-11-22T20:40Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T20-39-05-117Z-48638680.aes256gcm.json",
+    "note": "model-waiting-stock-v1 v2 (emojis) no prompt do Especialista - Vendas."
   },
   "db_release": {
     "status": "publicada",
