@@ -1,3 +1,10 @@
+# v1.2.893-entrega-hoje-motoboy
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (API + robô n8n, 22/11 17h10). Site sem mudança.
+Entrega para hoje: robô avisa que vamos chamar um motoboy e o admin recebe aviso no WhatsApp. Registro: `docs/versoes/2026-11-22-v1.2.893-entrega-hoje-motoboy.md`.
+
+---
+
 # v1.2.892-horario-cidade-loja
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 16h57). Site e API sem mudança.

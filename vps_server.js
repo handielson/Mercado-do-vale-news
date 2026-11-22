@@ -32431,7 +32431,10 @@ fastify.post('/n8n-bot/client-control/consume-reset', { preHandler: requireSyncK
 
 fastify.post('/n8n-bot/messages/log', { preHandler: requireSyncKey }, async (req, reply) => {
   try {
-    return await insertN8nBotMessage(req.body || {});
+    // delivery-alert-v1: "vamos chamar um motoboy" → aviso no WhatsApp do admin (não atrasa o registro).
+    const loggedMessage = await insertN8nBotMessage(req.body || {});
+    botMonitorApiVps.deliveryAlertFromLog(req.body || {}).catch((error) => req.log.warn({ err: error }, 'delivery alert failed'));
+    return loggedMessage;
   } catch (error) {
     return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao registrar mensagem' });
   }

@@ -107,12 +107,13 @@ test('deploy: ganchos entram uma vez (rotas + comandos do admin), inclusive sobr
   const anchor = "require('./services/agentCostApi.cjs').registerAgentCostRoutes(fastify, { pool, manualCost: productManualCostVps });";
   const admin = "  const relayCommand = normalizeRelayCommand(req.body?.message || req.body?.command || '');\n  if (!identity || (!command.valid && !relayCommand)) return { handled: false, reply: '' };";
   const handoff = "  const handoffBy = String(body.handoffBy || 'whatsapp-manual').trim().slice(0, 120) || 'whatsapp-manual';\n";
-  const src = `a\n${anchor}\nb\n${admin}\nc\n${handoff}`;
+  const log = '    return await insertN8nBotMessage(req.body || {});\n';
+  const src = `a\n${anchor}\nb\n${admin}\nc\n${handoff}${log}`;
   const once = patch(src);
   assert.equal(patch(once), once, 'idempotente');
   assert.ok(once.includes("const botMonitorApiVps = require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"));
   assert.ok(once.indexOf('bot-monitor-commands-v1') > once.indexOf('const relayCommand'), 'comando antes do teste de comando válido');
-  const v1 = `a\n${anchor}\n// bot-monitor-v1: x\nrequire('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });\nb\n${admin}\n${handoff}`;
+  const v1 = `a\n${anchor}\n// bot-monitor-v1: x\nrequire('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });\nb\n${admin}\n${handoff}${log}`;
   const up = patch(v1);
   assert.equal(up.split('registerBotMonitorRoutes').length - 1, 1, 'v1 vira constante, sem registrar duas vezes');
   assert.throws(() => patch('sem gancho'), /anchor/);
@@ -124,6 +125,7 @@ test('o código do servidor no repositório registra a rota e os comandos do mon
     assert.ok(src.includes("const botMonitorApiVps = require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"), f);
     assert.ok(src.includes('bot-monitor-commands-v1'), f);
     assert.ok(src.includes('bot-monitor-commands-v2'), f);
+    assert.ok(src.includes('delivery-alert-v1'), f);
   }
 });
 
@@ -249,4 +251,22 @@ test('bot-monitor-commands-v2: comando digitado pela loja na conversa do admin e
   const i = out.indexOf(HANDOFF_MARK);
   assert.ok(out.indexOf("const handoffBy = String(body.handoffBy", i - 400) < i);
   assert.ok(out.indexOf('INSERT INTO n8n_bot_client_controls', i) > i, 'antes de abrir atendimento humano');
+});
+
+test('delivery-alert-v1: "vamos chamar um motoboy" avisa o admin com nome, número e o pedido; o resto não', async () => {
+  const sent = [];
+  const pool = { query: async (sql) => {
+    if (/FROM n8n_bot_admin_numbers/.test(sql)) return [[{ phone: '5587996246812' }]];
+    if (/contact_name, message_text/.test(sql)) return [[{ contact_name: 'Daniel', message_text: 'vc entrega hj' }]];
+    return [[]];
+  } };
+  const fetchImpl = async (url, opt) => { sent.push(JSON.parse(opt.body)); return { ok: true, json: async () => ({}) }; };
+  const api = createBotMonitorApi({ pool, key: 'k'.repeat(32), fetchImpl, evolution: { url: 'https://e', key: 'k', instance: 'i' } });
+  const r = await api.deliveryAlertFromLog({ direction: 'outbound', remoteJid: '558781026485@s.whatsapp.net', message: 'Vamos chamar um motoboy para fazer a sua entrega e já já te confirmo, tá bom? 😊🛵' });
+  assert.equal(r.sent, 1);
+  assert.match(sent[0].text, /🛵 \*Entrega esperando você\*\nCliente: Daniel · \(87\) 8102-6485\nPediu: "vc entrega hj"/);
+  assert.match(sent[0].text, /https:\/\/wa\.me\/558781026485/);
+  assert.equal((await api.deliveryAlertFromLog({ direction: 'outbound', remoteJid: 'x@s.whatsapp.net', message: 'Qual é o bairro?' })).skipped, 'texto');
+  assert.equal((await api.deliveryAlertFromLog({ direction: 'inbound', remoteJid: 'x@s.whatsapp.net', message: 'chamar um motoboy' })).skipped, 'direcao');
+  assert.equal(sent.length, 1);
 });

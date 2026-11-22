@@ -378,7 +378,29 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
     return { ok: true, closed: Number(r?.affectedRows || 0), older_than_hours: hours };
   }
 
-  return { authorize, snapshot, evolutionState, alert, enqueueCommand, commands, conversation, products, sendToCustomer, closeHandoffs, trava };
+  // delivery-alert-v1: o robô disse ao cliente que vamos chamar um motoboy → avisa o admin no WhatsApp na hora.
+  const DELIVERY_MARK = /chamar um motoboy/i;
+  async function deliveryAlertFromLog(body = {}) {
+    if (String(body.direction || '') !== 'outbound') return { skipped: 'direcao' };
+    const text = String(body.message || body.text || body.message_text || '');
+    if (!DELIVERY_MARK.test(text)) return { skipped: 'texto' };
+    const jid = clean(body.remoteJid || body.remote_jid, 120);
+    if (!jid || jid.endsWith('@g.us')) return { skipped: 'conversa' };
+    const phone = digits(jid.split('@')[0]);
+    const [rows] = await pool.query(`SELECT contact_name, message_text FROM n8n_bot_messages WHERE remote_jid = ? AND direction = 'inbound'
+      AND created_at >= NOW() - INTERVAL 2 HOUR ORDER BY id DESC LIMIT 5`, [jid]);
+    const name = clean((rows || []).map((r) => r.contact_name).find(Boolean) || '', 60);
+    const pedido = clean((rows || [])[0]?.message_text || '', 160);
+    const national = phone.startsWith('55') && phone.length >= 12 ? phone.slice(2) : phone;
+    const local = national.slice(2);
+    const quem = [name, national.length >= 10 ? `(${national.slice(0, 2)}) ${local.slice(0, -4)}-${local.slice(-4)}` : phone].filter(Boolean).join(' · ');
+    const aviso = `🛵 *Entrega esperando você*\nCliente: ${quem || jid}\n${pedido ? `Pediu: "${pedido}"\n` : ''}`
+      + 'O robô disse que vamos chamar um motoboy e que já já confirmamos a entrega.\n'
+      + `➜ Responda pelo WhatsApp da loja: https://wa.me/${phone}`;
+    return alert({ text: aviso });
+  }
+
+  return { authorize, snapshot, evolutionState, alert, enqueueCommand, commands, conversation, products, sendToCustomer, closeHandoffs, trava, deliveryAlertFromLog };
 }
 
 function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {

@@ -43,6 +43,16 @@ const HANDOFF = HANDOFF_ANCHOR + [
   '  }',
 ].join('\n') + '\n';
 
+// v4 (delivery-alert-v1): mensagem do robô com "chamar um motoboy" registrada em /n8n-bot/messages/log avisa o admin.
+const LOG_ANCHOR = '    return await insertN8nBotMessage(req.body || {});';
+const LOG_MARK = 'delivery-alert-v1';
+const LOG = [
+  `    // ${LOG_MARK}: "vamos chamar um motoboy" → aviso no WhatsApp do admin (não atrasa o registro).`,
+  '    const loggedMessage = await insertN8nBotMessage(req.body || {});',
+  "    botMonitorApiVps.deliveryAlertFromLog(req.body || {}).catch((error) => req.log.warn({ err: error }, 'delivery alert failed'));",
+  '    return loggedMessage;',
+].join('\n');
+
 function patch(source) {
   let next = String(source).replace(/\r\n/g, '\n');
   if (!next.includes(HOOK)) {
@@ -51,6 +61,7 @@ function patch(source) {
   }
   if (!next.includes(CMD_MARK)) next = once(next, CMD_ANCHOR, CMD, 'Admin command');
   if (!next.includes(HANDOFF_MARK)) next = once(next, HANDOFF_ANCHOR, HANDOFF, 'Manual handoff');
+  if (!next.includes(LOG_MARK)) next = once(next, LOG_ANCHOR, LOG, 'Messages log');
   return next;
 }
 
@@ -58,4 +69,4 @@ function deploy(ctx) {
   return openAiFinance.deploy({ ...ctx, patchSource: patch, moduleFiles: ['services/agentMonitorLock.cjs', 'services/botErrorLibrary.cjs', 'services/botMonitorApi.cjs'], backupSlug: 'bot-monitor' });
 }
 
-module.exports = { patch, deploy, HOOK, CMD_MARK, HANDOFF_MARK };
+module.exports = { patch, deploy, HOOK, CMD_MARK, HANDOFF_MARK, LOG_MARK };
