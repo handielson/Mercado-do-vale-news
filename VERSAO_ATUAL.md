@@ -1,3 +1,10 @@
+# v1.2.895-modelo-esperando-chegar
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 17h36). Site e API sem mudança.
+Modelo fora da lista já enviada: "Esse modelo acabou e estamos esperando chegar…". Registro: `docs/versoes/2026-11-22-v1.2.895-modelo-esperando-chegar.md`.
+
+---
+
 # v1.2.894-cumprimento-meio-conversa
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 17h15). Site e API sem mudança.
