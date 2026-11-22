@@ -41,7 +41,7 @@ function patch(source) {
 }
 
 function deploy(ctx) {
-  return openAiFinance.deploy({ ...ctx, patchSource: patch, moduleFiles: ['services/botErrorLibrary.cjs', 'services/botMonitorApi.cjs'], backupSlug: 'bot-monitor' });
+  return openAiFinance.deploy({ ...ctx, patchSource: patch, moduleFiles: ['services/agentMonitorLock.cjs', 'services/botErrorLibrary.cjs', 'services/botMonitorApi.cjs'], backupSlug: 'bot-monitor' });
 }
 
 module.exports = { patch, deploy, HOOK, CMD_MARK };

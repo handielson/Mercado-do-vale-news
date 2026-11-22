@@ -23,6 +23,7 @@ function parseAgentCommand(value) {
 
 const crypto = require('node:crypto');
 const { createBotErrorLibrary } = require('./botErrorLibrary.cjs');
+const { createAgentMonitorLock } = require('./agentMonitorLock.cjs');
 
 const clean = (value, limit) => String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit);
 const digits = (value) => String(value ?? '').replace(/\D/g, '');
@@ -223,6 +224,24 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
   // Freio: no máximo 30 por hora e o mesmo texto só uma vez a cada 20 min.
   const enviados = [];
   const ultimos = new Map();
+  // manda direto para os admins ativos (sem freio): usado pela trava de emergência
+  async function enviarAdmins(text) {
+    if (!evo.url || !evo.key || !evo.instance || typeof fetchImpl !== 'function') throw new Error('Evolution não configurada.');
+    const [rows] = await pool.query('SELECT phone FROM n8n_bot_admin_numbers WHERE active = 1');
+    const numbers = [...new Set((rows || []).map((r) => digits(r.phone)).filter((n) => n.length >= 10))];
+    let sent = 0;
+    for (const number of numbers) {
+      try {
+        const res = await fetchImpl(`${evo.url}/message/sendText/${encodeURIComponent(evo.instance)}`, {
+          method: 'POST', headers: { apikey: evo.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ number, text: String(text).slice(0, 3500) }), signal: AbortSignal.timeout(15000),
+        });
+        if (res.ok) sent += 1;
+      } catch {}
+    }
+    if (!sent) throw new Error('WhatsApp não enviou.');
+    return sent;
+  }
+  const trava = createAgentMonitorLock({ pool, sendAdmins: enviarAdmins, now });
   async function alert(body = {}) {
     const text = String(body.text ?? '').replace(/\u0000/g, '').trim().slice(0, 3500);
     if (!text) throw Object.assign(new Error('Texto vazio.'), { statusCode: 400 });
@@ -314,6 +333,7 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
   }
 
   async function sendToCustomer(body = {}) {
+    await trava.exigirDestravado();
     const jid = clean(body.remote_jid, 120);
     const text = String(body.text ?? '').trim().slice(0, 2000);
     if (!jid || !text || jid.endsWith('@g.us')) throw Object.assign(new Error('Conversa ou texto inválido.'), { statusCode: 400 });
@@ -333,6 +353,7 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
   }
 
   async function closeHandoffs(body = {}) {
+    await trava.exigirDestravado();
     const h = Number.parseInt(body.older_than_hours, 10);
     const hours = Number.isFinite(h) && h >= 2 ? Math.min(h, 24 * 90) : 2;
     const [r] = await pool.query(`UPDATE n8n_bot_handoffs SET status = 'closed', last_admin_phone = 'agente-pausa-esquecida'
@@ -340,7 +361,7 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
     return { ok: true, closed: Number(r?.affectedRows || 0), older_than_hours: hours };
   }
 
-  return { authorize, snapshot, evolutionState, alert, enqueueCommand, commands, conversation, products, sendToCustomer, closeHandoffs };
+  return { authorize, snapshot, evolutionState, alert, enqueueCommand, commands, conversation, products, sendToCustomer, closeHandoffs, trava };
 }
 
 function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
@@ -371,6 +392,11 @@ function registerBotMonitorRoutes(fastify, { pool, ...options } = {}) {
   route('get', '/agent/monitor/commands', api.commands);
   route('post', '/agent/monitor/send', api.sendToCustomer);
   route('post', '/agent/monitor/handoffs/close', api.closeHandoffs);
+  // agent-lock-v1: trava de emergência (destravar só com código mandado no WhatsApp dos admins)
+  route('get', '/agent/monitor/lock', () => api.trava.estado());
+  route('post', '/agent/monitor/lock', (b) => api.trava.travar(b));
+  route('post', '/agent/monitor/unlock/request', () => api.trava.pedirCodigo());
+  route('post', '/agent/monitor/unlock', (b) => api.trava.destravar(b));
 
   // bot-error-library-v1: biblioteca de erros (services/botErrorLibrary.cjs)
   const biblioteca = createBotErrorLibrary({ pool });

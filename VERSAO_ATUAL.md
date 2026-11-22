@@ -1,3 +1,10 @@
+# v1.2.884-trava-emergencia
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
+Trava de emergência dos agentes (destrava só com código no WhatsApp). Registro: `docs/versoes/2026-11-22-v1.2.884-trava-emergencia.md`.
+
+---
+
 # v1.2.883-monitor-variacao
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.

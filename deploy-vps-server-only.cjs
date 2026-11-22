@@ -256,7 +256,7 @@ async function uploadMobileSalesPushFiles(appDir) {
   );
   console.log(`Uploaded ${agentCostApiPath}`);
   // bot-monitor-v1/bot-error-library-v1: rotas dos agentes do servidor de casa
-  for (const relativePath of ['services/botErrorLibrary.cjs', 'services/botMonitorApi.cjs']) {
+  for (const relativePath of ['services/agentMonitorLock.cjs', 'services/botErrorLibrary.cjs', 'services/botMonitorApi.cjs']) {
     await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
     console.log(`Uploaded ${relativePath}`);
   }

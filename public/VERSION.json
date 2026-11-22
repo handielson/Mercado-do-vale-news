@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.883-monitor-variacao",
+  "version": "v1.2.884-trava-emergencia",
   "date": "2026-11-22",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.883-monitor-variacao",
+  "tag": "v1.2.884-trava-emergencia",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Catálogo dos agentes do servidor de casa passa a trazer a variação (memória e cor, de specs) de cada produto, sem IMEI/serial; evita falso alarme da Qualidade sobre cor indisponível.",
+  "summary": "Trava de emergência dos agentes do servidor de casa: com a trava, a API recusa mensagem a cliente e fechamento de atendimento (e, depois, aplicar correção no robô); destravar só com código de 6 dígitos mandado no WhatsApp dos admins.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,11 +31,12 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-22-v1.2.883-monitor-variacao.md"
+    "ver docs/versoes/2026-11-22-v1.2.884-trava-emergencia.md"
   ],
   "validations": [
-    "tmp-tests/bot-monitor-api.test.cjs ok (17)",
-    "/agent/monitor/products?q=poco x8 pro mostra 8GB/256GB Branco estoque 1; sem imei na resposta"
+    "tmp-tests/agent-monitor-lock.test.cjs ok (3)",
+    "tmp-tests/bot-monitor-api.test.cjs + bot-error-library ok",
+    "API /status 200; /agent/monitor/lock {\"travado\":false}"
   ],
   "site_release": {
     "status": "publicada",
@@ -47,7 +48,7 @@
     "status": "publicada",
     "service": "mdv-api",
     "mode": "deploy-vps-server-only --bot-monitor-only",
-    "note": "só services/botMonitorApi.cjs; backup /var/www/mdv-api/backups/bot-monitor-1795355837862. Site e robô sem mudança."
+    "note": "services/agentMonitorLock.cjs + botMonitorApi.cjs; tabela agent_monitor_settings; backup /var/www/mdv-api/backups/bot-monitor-1795358908461. Site e robô sem mudança."
   },
   "nginx_release": {
     "status": "publicada",
@@ -102,7 +103,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.882-biblioteca-erros publicada.",
+  "pending_previous": "v1.2.883-monitor-variacao publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
