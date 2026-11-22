@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.884-trava-emergencia",
+  "version": "v1.2.885-saudacao-cortesia",
   "date": "2026-11-22",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.884-trava-emergencia",
+  "tag": "v1.2.885-saudacao-cortesia",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Trava de emergência dos agentes do servidor de casa: com a trava, a API recusa mensagem a cliente e fechamento de atendimento (e, depois, aplicar correção no robô); destravar só com código de 6 dígitos mandado no WhatsApp dos admins.",
+  "summary": "Robô mais educado: a primeira resposta da conversa (nada nosso nas últimas 6 h) começa com \"Bom dia/Boa tarde/Boa noite, Nome! Tudo bem? 😊\"; se o cliente perguntou \"tudo bem?\", responde \"Tudo ótimo por aqui, e com você?\". No meio da conversa nada muda.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,12 +31,12 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-22-v1.2.884-trava-emergencia.md"
+    "ver docs/versoes/2026-11-22-v1.2.885-saudacao-cortesia.md"
   ],
   "validations": [
-    "tmp-tests/agent-monitor-lock.test.cjs ok (3)",
-    "tmp-tests/bot-monitor-api.test.cjs + bot-error-library ok",
-    "API /status 200; /agent/monitor/lock {\"travado\":false}"
+    "tmp-tests/n8n-greeting-courtesy.test.cjs ok (7)",
+    "scripts/n8n-sales-regression-gate.cjs ok (dry run do deploy)",
+    "n8n servicesHealthy, entityHistoryAligned"
   ],
   "site_release": {
     "status": "publicada",
@@ -45,10 +45,8 @@
     "note": "PDV: termo de garantia pela árvore de categorias."
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "mode": "deploy-vps-server-only --bot-monitor-only",
-    "note": "services/agentMonitorLock.cjs + botMonitorApi.cjs; tabela agent_monitor_settings; backup /var/www/mdv-api/backups/bot-monitor-1795358908461. Site e robô sem mudança."
+    "status": "sem mudança",
+    "note": "Só o robô n8n mudou."
   },
   "nginx_release": {
     "status": "publicada",
@@ -103,7 +101,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.883-monitor-variacao publicada.",
+  "pending_previous": "v1.2.884-trava-emergencia publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -115,10 +113,10 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "da4d803c0d4a36be8f50100f14ad86940c833752cfd8e2de80edcec7d1805290",
-    "after": "f71f6e719d87aaeeab42adf9398a5ca5e60cd2cd0cbaf6eca430ff83de956508",
-    "applied_at": "2026-11-21T19:55Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-21T19-55-20-412Z-59fc012d.aes256gcm.json",
-    "note": "agent-commands-v1 no nó Controle Bot - Comando Admin; execução 76870 presa como running desde 14:08Z marcada crashed antes do deploy."
+    "before": "f71f6e719d87aaeeab42adf9398a5ca5e60cd2cd0cbaf6eca430ff83de956508",
+    "after": "25f60706e1a6707f32ca3d7d1ffa4e9f0b2fdcb7bab83609f228a3a9d2f0f56f",
+    "applied_at": "2026-11-22T15:35Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T15-35-12-807Z-0132c31a.aes256gcm.json",
+    "note": "greeting-courtesy-v1 no nó Dividir mensagens."
   }
 }

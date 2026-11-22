@@ -1,3 +1,10 @@
+# v1.2.885-saudacao-cortesia
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 12h35). Site e API sem mudança.
+Primeira resposta da conversa com "Bom dia/Boa tarde/Boa noite, Nome! Tudo bem? 😊". Registro: `docs/versoes/2026-11-22-v1.2.885-saudacao-cortesia.md`.
+
+---
+
 # v1.2.884-trava-emergencia
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
