@@ -1,3 +1,10 @@
+# v1.2.894-cumprimento-meio-conversa
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 17h15). Site e API sem mudança.
+Cumprimento no meio da conversa vira resposta curta, sem repetir "Sou a Val". Registro: `docs/versoes/2026-11-22-v1.2.894-cumprimento-meio-conversa.md`.
+
+---
+
 # v1.2.893-entrega-hoje-motoboy
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (API + robô n8n, 22/11 17h10). Site sem mudança.
