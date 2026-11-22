@@ -162,6 +162,21 @@ test('produtos: busca por termo, centavos viram reais, promoção só dentro do 
   assert.deepEqual(r.products.map((p) => [p.sku, p.price, p.promo_price, p.stock]), [['R15', 999, 899, 3], ['R15B', 1299, null, 0]]);
 });
 
+test('produtos: traz a variação (memória e cor) e nunca IMEI ou serial', async () => {
+  let sqlVisto = '';
+  const pool = { async query(sql) {
+    sqlVisto = sql;
+    return [[{ id: 'x', name: 'Poco X8 Pro 5G', sku: 'PX8', price_retail: '266000.00', stock_quantity: 1, cor: 'Branco', ram: '8GB', armazenamento: '256GB' },
+      { id: 'y', name: 'Capa Poco', sku: 'CP', price_retail: '1490.00', stock_quantity: 2, cor: null, ram: null, armazenamento: null }]];
+  } };
+  const api = createBotMonitorApi({ pool, key: KEY, fetchImpl: null });
+  const r = await api.products({ q: 'poco x8 pro' });
+  assert.equal(r.products[0].variant, '8GB/256GB Branco');
+  assert.equal(r.products[1].variant, null);
+  assert.ok(!/imei|serial/i.test(sqlVisto), 'não lê IMEI nem serial');
+  assert.ok(!/imei|serial/i.test(JSON.stringify(r)));
+});
+
 test('conversa: separa cliente, robô e equipe, em ordem', async () => {
   const pool = { async query() { return [[
     { direction: 'outbound', message_text: 'Oi! Vou chamar alguém', source_node: 'whatsapp-manual-handoff', ts: 3 },

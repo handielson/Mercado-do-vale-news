@@ -292,19 +292,25 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
     const seen = new Map();
     for (const term of terms) {
       const [rows] = await pool.query(
-        `SELECT id, name, sku, price_retail, price_promo, promo_start, promo_end, stock_quantity FROM products
-          WHERE status = 'active' AND (is_parent = 0 OR is_parent IS NULL) AND name LIKE ? ORDER BY stock_quantity > 0 DESC, sales_count DESC LIMIT 8`,
+        `SELECT id, name, sku, price_retail, price_promo, promo_start, promo_end, stock_quantity,
+                JSON_UNQUOTE(JSON_EXTRACT(specs, '$.color')) AS cor, JSON_UNQUOTE(JSON_EXTRACT(specs, '$.ram')) AS ram,
+                JSON_UNQUOTE(JSON_EXTRACT(specs, '$.storage')) AS armazenamento
+           FROM products
+          WHERE status = 'active' AND (is_parent = 0 OR is_parent IS NULL) AND name LIKE ? ORDER BY stock_quantity > 0 DESC, sales_count DESC LIMIT 30`,
         [`%${term.replace(/[%_\\]/g, (c) => `\\${c}`)}%`]);
       for (const r of rows || []) {
         if (seen.has(r.id)) continue;
         const t = now();
         const promoOn = r.price_promo && Number(r.price_promo) > 0 && (!r.promo_start || Date.parse(r.promo_start) <= t) && (!r.promo_end || Date.parse(r.promo_end) >= t);
         // preços ficam em centavos no banco; aqui saem em reais
-        seen.set(r.id, { name: clean(r.name, 160), sku: clean(r.sku, 60), price: r.price_retail == null ? null : Number(r.price_retail) / 100,
+        // variação (cor, memória) vem de specs; só esses campos saem (specs também tem IMEI e serial, que nunca saem)
+        const variante = [clean(r.ram, 12) && clean(r.armazenamento, 12) ? `${clean(r.ram, 12)}/${clean(r.armazenamento, 12)}` : clean(r.ram || r.armazenamento, 12), clean(r.cor, 30)]
+          .filter((v) => v && v !== 'null').join(' ');
+        seen.set(r.id, { name: clean(r.name, 160), variant: variante || null, sku: clean(r.sku, 60), price: r.price_retail == null ? null : Number(r.price_retail) / 100,
           promo_price: promoOn ? Number(r.price_promo) / 100 : null, stock: Number(r.stock_quantity || 0), term });
       }
     }
-    return { products: [...seen.values()].slice(0, 40) };
+    return { products: [...seen.values()].slice(0, 80) };
   }
 
   async function sendToCustomer(body = {}) {

@@ -1,3 +1,10 @@
+# v1.2.883-monitor-variacao
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
+Catálogo dos agentes com memória e cor de cada variação. Registro: `docs/versoes/2026-11-22-v1.2.883-monitor-variacao.md`.
+
+---
+
 # v1.2.882-biblioteca-erros
 
 Data: 21/11/2026. Branch: `main`. Status: **publicada** (API). Site e robô sem mudança.
