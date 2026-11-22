@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.886-rajada-mensagens",
+  "version": "v1.2.887-payjoy-link-entregue",
   "date": "2026-11-22",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.886-rajada-mensagens",
+  "tag": "v1.2.887-payjoy-link-entregue",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô lê mensagens seguidas do cliente juntas: espera 10 s, relê; a execução da mensagem antiga para e a mais nova responde tudo junto (até 3 min desde nossa última resposta). Conferência antes de enviar continua.",
+  "summary": "PayJoy: link marcado como enviado sem ter saído (resposta descartada no envio) volta a ser reenviado no aceite do cliente; saudação não usa nome grudado longo.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,10 +31,10 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-22-v1.2.886-rajada-mensagens.md"
+    "ver docs/versoes/2026-11-22-v1.2.887-payjoy-link-entregue.md"
   ],
   "validations": [
-    "tmp-tests/n8n-burst-merge.test.cjs ok (7)",
+    "tmp-tests/n8n-payjoy-link-delivered.test.cjs ok (6)",
     "scripts/n8n-sales-regression-gate.cjs ok (dry run)",
     "n8n servicesHealthy, entityHistoryAligned"
   ],
@@ -101,7 +101,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.885-saudacao-cortesia publicada.",
+  "pending_previous": "v1.2.886-rajada-mensagens publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -113,10 +113,10 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "25f60706e1a6707f32ca3d7d1ffa4e9f0b2fdcb7bab83609f228a3a9d2f0f56f",
-    "after": "173a02c2252ed6eea8202628a6288c3dc72a9d37cbbf83bf258f8b97e75885e1",
-    "applied_at": "2026-11-22T15:47Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T15-47-24-114Z-857f89e9.aes256gcm.json",
-    "note": "burst-merge-v1: nós Rajada - Aguardar 10s / Buscar mensagens / Juntar mensagens entre Controle Bot - Pausa global? e Buscar Controle; Aplicar Controle e Resolver Acao usam o texto junto."
+    "before": "173a02c2252ed6eea8202628a6288c3dc72a9d37cbbf83bf258f8b97e75885e1",
+    "after": "ddfe27149e8a72793ec4740c40bf8b23b819f88b76754891ae195ed1cf4d6502",
+    "applied_at": "2026-11-22T16:29Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T16-29-15-044Z-5bf856a6.aes256gcm.json",
+    "note": "payjoy-link-delivered-v1 (Aplicar Controle, Estado Conversa - Restaurar) + greeting-name-v1 (Dividir mensagens)."
   }
 }

@@ -1,3 +1,10 @@
+# v1.2.887-payjoy-link-entregue
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 13h29). Site e API sem mudança.
+Link da PayJoy não entregue volta a ser reenviado; saudação sem nome grudado. Registro: `docs/versoes/2026-11-22-v1.2.887-payjoy-link-entregue.md`.
+
+---
+
 # v1.2.886-rajada-mensagens
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 12h47). Site e API sem mudança.
