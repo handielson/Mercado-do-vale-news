@@ -14,11 +14,25 @@
 // Telefone e texto saem truncados; nada de payload bruto.
 
 // Comando do admin no WhatsApp para os agentes: "agentes", "agentes pausar alertas", "agentes aprovar 1"...
-const AGENT_COMMAND = /^agentes?(?:\s+(status|pausar|reativar|rodar|aprovar|recusar|ajuda)(?:\s+([\s\S]{1,80}))?)?\s*$/i;
+const AGENT_COMMAND = /^agentes?(?:\s+(status|pausar|reativar|rodar|aprovar|recusar|reprovar|ajuda)(?:\s+([\s\S]{1,300}))?)?\s*$/i;
+// bot-monitor-commands-v2: formas curtas do admin — "17 aprovar", "aprovar 17", "16 reprovar, motivo…", "#16 recusa".
+const DECISAO = '(aprovar|aprova|aprovo|aprovado|aprovada|recusar|recusa|recuso|recusado|recusada|reprovar|reprova|reprovo|reprovado|reprovada)';
+const SHORT_NUM_FIRST = new RegExp(`^#?(\\d{1,4})\\s*[-:,.]?\\s*${DECISAO}\\b[\\s,.:;-]*([\\s\\S]{0,300})$`, 'i');
+const SHORT_ACTION_FIRST = new RegExp(`^${DECISAO}\\s*#?(\\d{1,4})\\b[\\s,.:;-]*([\\s\\S]{0,300})$`, 'i');
+const decisao = (word) => (/^aprov/i.test(word) ? 'aprovar' : 'recusar');
 function parseAgentCommand(value) {
-  const m = String(value || '').trim().match(AGENT_COMMAND);
-  if (!m) return null;
-  return { action: (m[1] || 'status').toLowerCase(), target: clean(m[2] || '', 80).toLowerCase() };
+  const text = String(value || '').trim();
+  const m = text.match(AGENT_COMMAND);
+  if (m) {
+    const action = (m[1] || 'status').toLowerCase();
+    const target = clean(m[2] || '', 300);
+    return { action: action === 'reprovar' ? 'recusar' : action, target: ['aprovar', 'recusar', 'reprovar'].includes(action) ? target : target.toLowerCase() };
+  }
+  const a = text.match(SHORT_NUM_FIRST);
+  if (a) return { action: decisao(a[2]), target: clean(`${a[1]} ${a[3] || ''}`, 300) };
+  const b = text.match(SHORT_ACTION_FIRST);
+  if (b) return { action: decisao(b[1]), target: clean(`${b[2]} ${b[3] || ''}`, 300) };
+  return null;
 }
 
 const crypto = require('node:crypto');
@@ -272,15 +286,18 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
   let commandsReady = null;
   function ensureCommandsTable() {
     if (!commandsReady) commandsReady = pool.query(`CREATE TABLE IF NOT EXISTS agent_monitor_commands (
-      id BIGINT AUTO_INCREMENT PRIMARY KEY, action VARCHAR(20) NOT NULL, target VARCHAR(80) NOT NULL DEFAULT '',
+      id BIGINT AUTO_INCREMENT PRIMARY KEY, action VARCHAR(20) NOT NULL, target VARCHAR(300) NOT NULL DEFAULT '',
       admin_phone VARCHAR(32) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, consumed_at TIMESTAMP NULL,
-      KEY idx_pending (consumed_at, id)) DEFAULT CHARSET=utf8mb4`).catch((e) => { commandsReady = null; throw e; });
+      KEY idx_pending (consumed_at, id)) DEFAULT CHARSET=utf8mb4`)
+      // bot-monitor-commands-v2: motivo da recusa cabe no alvo.
+      .then(() => pool.query("ALTER TABLE agent_monitor_commands MODIFY target VARCHAR(300) NOT NULL DEFAULT ''"))
+      .catch((e) => { commandsReady = null; throw e; });
     return commandsReady;
   }
   async function enqueueCommand({ command, admin = {} }) {
     await ensureCommandsTable();
     await pool.query('INSERT INTO agent_monitor_commands (action, target, admin_phone) VALUES (?, ?, ?)', [command.action, command.target, digits(admin.phone).slice(0, 32) || null]);
-    const what = command.action === 'ajuda' ? 'Pedido de ajuda' : `${command.action}${command.target ? ` ${command.target}` : ''}`;
+    const what = command.action === 'ajuda' ? 'Pedido de ajuda' : `${command.action}${command.target ? ` ${String(command.target).slice(0, 60)}` : ''}`;
     return { handled: true, reply: `🤖 Agentes: recebi "${what}". O servidor aplica em até 1 minuto e te responde aqui.` };
   }
   async function commands() {

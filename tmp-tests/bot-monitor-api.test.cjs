@@ -106,12 +106,13 @@ test('snapshot junta controles, nome do cadastro e atendimentos abertos sem expo
 test('deploy: ganchos entram uma vez (rotas + comandos do admin), inclusive sobre a v1 já publicada', () => {
   const anchor = "require('./services/agentCostApi.cjs').registerAgentCostRoutes(fastify, { pool, manualCost: productManualCostVps });";
   const admin = "  const relayCommand = normalizeRelayCommand(req.body?.message || req.body?.command || '');\n  if (!identity || (!command.valid && !relayCommand)) return { handled: false, reply: '' };";
-  const src = `a\n${anchor}\nb\n${admin}\nc\n`;
+  const handoff = "  const handoffBy = String(body.handoffBy || 'whatsapp-manual').trim().slice(0, 120) || 'whatsapp-manual';\n";
+  const src = `a\n${anchor}\nb\n${admin}\nc\n${handoff}`;
   const once = patch(src);
   assert.equal(patch(once), once, 'idempotente');
   assert.ok(once.includes("const botMonitorApiVps = require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"));
   assert.ok(once.indexOf('bot-monitor-commands-v1') > once.indexOf('const relayCommand'), 'comando antes do teste de comando válido');
-  const v1 = `a\n${anchor}\n// bot-monitor-v1: x\nrequire('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });\nb\n${admin}\n`;
+  const v1 = `a\n${anchor}\n// bot-monitor-v1: x\nrequire('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });\nb\n${admin}\n${handoff}`;
   const up = patch(v1);
   assert.equal(up.split('registerBotMonitorRoutes').length - 1, 1, 'v1 vira constante, sem registrar duas vezes');
   assert.throws(() => patch('sem gancho'), /anchor/);
@@ -122,6 +123,7 @@ test('o código do servidor no repositório registra a rota e os comandos do mon
     const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
     assert.ok(src.includes("const botMonitorApiVps = require('./services/botMonitorApi.cjs').registerBotMonitorRoutes(fastify, { pool });"), f);
     assert.ok(src.includes('bot-monitor-commands-v1'), f);
+    assert.ok(src.includes('bot-monitor-commands-v2'), f);
   }
 });
 
@@ -225,4 +227,26 @@ test('alerta: manda para os admins ativos, segura repetição e respeita limite 
   for (let i = 0; i < 40; i++) await api.alert({ text: `x${i}` });
   assert.equal((await api.alert({ text: 'mais um' })).skipped, 'limite_hora');
   await assert.rejects(api.alert({ text: '  ' }), /vazio/);
+});
+
+test('bot-monitor-commands-v2: formas curtas do admin e motivo da recusa', () => {
+  const { parseAgentCommand: p } = require('../services/botMonitorApi.cjs');
+  assert.deepEqual(p('17 aprovar'), { action: 'aprovar', target: '17' });
+  assert.deepEqual(p('aprovar 17'), { action: 'aprovar', target: '17' });
+  assert.deepEqual(p('agentes aprovar 17'), { action: 'aprovar', target: '17' });
+  assert.deepEqual(p('16 reprovar, se o cliente pediu celular não vamos mostrar capas'), { action: 'recusar', target: '16 se o cliente pediu celular não vamos mostrar capas' });
+  assert.deepEqual(p('#16 recusa'), { action: 'recusar', target: '16' });
+  assert.deepEqual(p('agentes pausar Alertas'), { action: 'pausar', target: 'alertas' });
+  for (const t of ['17', 'aprova o 17?', 'Boa tarde', '2 reais', 'quero aprovar o crédito']) assert.equal(p(t), null, t);
+});
+
+test('bot-monitor-commands-v2: comando digitado pela loja na conversa do admin entra na fila', () => {
+  const { patch, HANDOFF_MARK } = require('../scripts/deploy-bot-monitor.cjs');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'vps_server.js'), 'utf8');
+  const out = patch(src);
+  assert.ok(out.includes(HANDOFF_MARK));
+  assert.equal(patch(out), out);
+  const i = out.indexOf(HANDOFF_MARK);
+  assert.ok(out.indexOf("const handoffBy = String(body.handoffBy", i - 400) < i);
+  assert.ok(out.indexOf('INSERT INTO n8n_bot_client_controls', i) > i, 'antes de abrir atendimento humano');
 });

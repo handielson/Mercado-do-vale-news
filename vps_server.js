@@ -32220,6 +32220,12 @@ fastify.post('/n8n-bot/client-control/handoff', { preHandler: requireSyncKey }, 
   const message = String(body.message || body.text || '').trim();
   const waMessageId = String(body.waMessageId || body.messageId || '').trim().slice(0, 160);
   const handoffBy = String(body.handoffBy || 'whatsapp-manual').trim().slice(0, 120) || 'whatsapp-manual';
+  // bot-monitor-commands-v2: "agentes aprovar 17" / "17 aprovar" digitado pela loja na conversa do admin vai para os agentes.
+  const agentCommandManual = require('./services/botMonitorApi.cjs').parseAgentCommand(message);
+  if (agentCommandManual) {
+    const agentAdminManual = await findN8nBotAdminByIdentity(identity);
+    if (agentAdminManual) return { ok: true, agentCommand: true, ...(await botMonitorApiVps.enqueueCommand({ command: agentCommandManual, admin: agentAdminManual })) };
+  }
 
   await pool.query(
     `INSERT INTO n8n_bot_client_controls

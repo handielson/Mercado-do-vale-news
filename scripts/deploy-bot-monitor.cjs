@@ -30,6 +30,19 @@ function once(src, a, b, label) {
   return src.replace(a, () => b);
 }
 
+// v3 (bot-monitor-commands-v2): comando dos agentes digitado no WhatsApp da loja, na conversa do admin
+// (chega como mensagem manual da equipe em /n8n-bot/client-control/handoff), vai para a fila em vez de abrir atendimento humano.
+const HANDOFF_ANCHOR = "  const handoffBy = String(body.handoffBy || 'whatsapp-manual').trim().slice(0, 120) || 'whatsapp-manual';\n";
+const HANDOFF_MARK = 'bot-monitor-commands-v2';
+const HANDOFF = HANDOFF_ANCHOR + [
+  `  // ${HANDOFF_MARK}: "agentes aprovar 17" / "17 aprovar" digitado pela loja na conversa do admin vai para os agentes.`,
+  "  const agentCommandManual = require('./services/botMonitorApi.cjs').parseAgentCommand(message);",
+  '  if (agentCommandManual) {',
+  '    const agentAdminManual = await findN8nBotAdminByIdentity(identity);',
+  '    if (agentAdminManual) return { ok: true, agentCommand: true, ...(await botMonitorApiVps.enqueueCommand({ command: agentCommandManual, admin: agentAdminManual })) };',
+  '  }',
+].join('\n') + '\n';
+
 function patch(source) {
   let next = String(source).replace(/\r\n/g, '\n');
   if (!next.includes(HOOK)) {
@@ -37,6 +50,7 @@ function patch(source) {
     else next = once(next, ANCHOR, `${ANCHOR}\n${COMMENT}\n${HOOK}`, 'Agent cost');
   }
   if (!next.includes(CMD_MARK)) next = once(next, CMD_ANCHOR, CMD, 'Admin command');
+  if (!next.includes(HANDOFF_MARK)) next = once(next, HANDOFF_ANCHOR, HANDOFF, 'Manual handoff');
   return next;
 }
 
@@ -44,4 +58,4 @@ function deploy(ctx) {
   return openAiFinance.deploy({ ...ctx, patchSource: patch, moduleFiles: ['services/agentMonitorLock.cjs', 'services/botErrorLibrary.cjs', 'services/botMonitorApi.cjs'], backupSlug: 'bot-monitor' });
 }
 
-module.exports = { patch, deploy, HOOK, CMD_MARK };
+module.exports = { patch, deploy, HOOK, CMD_MARK, HANDOFF_MARK };

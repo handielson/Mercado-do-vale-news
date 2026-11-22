@@ -1,3 +1,10 @@
+# v1.2.889-comandos-curtos
+
+Data: 22/11/2026. Branch: `main`. Status: **publicada** (API + robô n8n + painel do servidor 1.16.2). Site sem mudança.
+Comandos curtos dos agentes ("17 aprovar") também pelo WhatsApp da loja; Redmi 15C 4/256 de volta à lista. Registro: `docs/versoes/2026-11-22-v1.2.889-comandos-curtos.md`.
+
+---
+
 # v1.2.888-loja-aberta-agora
 
 Data: 22/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 22/11 14h17). Site e API sem mudança.

@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.888-loja-aberta-agora",
+  "version": "v1.2.889-comandos-curtos",
   "date": "2026-11-22",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.888-loja-aberta-agora",
+  "tag": "v1.2.889-comandos-curtos",
   "release_vps": "/var/www/mdv-site/releases/20261121-165427",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Endereço da loja diz se está aberta agora (fechada hoje/antes de abrir/almoço/encerrada + próxima abertura); \"tô indo\" depois do endereço vira confirmação curta sem repetir.",
+  "summary": "Comandos dos agentes: \"17 aprovar\", \"aprovar 17\", \"16 reprovar, motivo\" e comando digitado pela loja na conversa do admin; motivo da recusa ensina a Qualidade (painel 1.16.2). Redmi 15C 4/256 movido de Celulares para Smartphones (sumia da lista do robô).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,12 +31,13 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-22-v1.2.888-loja-aberta-agora.md"
+    "ver docs/versoes/2026-11-22-v1.2.889-comandos-curtos.md"
   ],
   "validations": [
-    "tmp-tests/n8n-store-visit-status.test.cjs ok (7)",
-    "scripts/n8n-sales-regression-gate.cjs ok (dry run)",
-    "n8n servicesHealthy, entityHistoryAligned"
+    "tmp-tests/bot-monitor-api.test.cjs + bot-error-library + agent-monitor-lock ok (29)",
+    "tmp-tests/n8n-agent-commands-short.test.cjs ok (2)",
+    "painel-servidor npm test ok (66)",
+    "API /status 200; n8n servicesHealthy"
   ],
   "site_release": {
     "status": "publicada",
@@ -45,8 +46,10 @@
     "note": "PDV: termo de garantia pela árvore de categorias."
   },
   "api_release": {
-    "status": "sem mudança",
-    "note": "Só o robô n8n mudou."
+    "status": "publicada",
+    "service": "mdv-api",
+    "mode": "deploy-vps-server-only --bot-monitor-only",
+    "note": "services/botMonitorApi.cjs (parseAgentCommand v2, alvo até 300) + gancho bot-monitor-commands-v2 em /n8n-bot/client-control/handoff; backup /var/www/mdv-api/backups/bot-monitor-1795373421356."
   },
   "nginx_release": {
     "status": "publicada",
@@ -101,7 +104,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.887-payjoy-link-entregue publicada.",
+  "pending_previous": "v1.2.888-loja-aberta-agora publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
@@ -113,10 +116,19 @@
   "n8n_release": {
     "status": "publicada",
     "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "ddfe27149e8a72793ec4740c40bf8b23b819f88b76754891ae195ed1cf4d6502",
-    "after": "38b0f019a16fa715cae6b8a49ac0567248990b14fe3285e4c71bf494697a9579",
-    "applied_at": "2026-11-22T17:17Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T17-17-04-435Z-023d09fc.aes256gcm.json",
-    "note": "store-visit-status-v1 no nó Loja - Localizacao."
+    "before": "38b0f019a16fa715cae6b8a49ac0567248990b14fe3285e4c71bf494697a9579",
+    "after": "3553963ecfca367e57ef563541f9b3536c8772f5b9c2bd9747120bfc45d3eaca",
+    "applied_at": "2026-11-22T18:51Z",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T18-51-07-105Z-aea3e50e.aes256gcm.json",
+    "note": "agent-commands-v2 no nó Controle Bot - Comando Admin."
+  },
+  "catalog_fix": {
+    "skus": [
+      "RC154256A",
+      "RC154256V"
+    ],
+    "from": "Celulares (98a316a5)",
+    "to": "Smartphones (8b7c4852)",
+    "backup": "/var/www/mdv-api/backups/categoria-redmi15c-1795373675613.json"
   }
 }
