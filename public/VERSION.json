@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.900-medidas-materiais",
+  "version": "v1.2.901-medidas-fonte-unica",
   "date": "2026-11-23",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.900-medidas-materiais",
-  "release_vps": "/var/www/mdv-site/releases/20261123-105143-v1-2-900-medidas-materiais",
+  "tag": "v1.2.901-medidas-fonte-unica",
+  "release_vps": "/var/www/mdv-site/releases/20261123-112305-v1-2-901-medidas-fonte-unica",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Medidas/peso da família passam para as variações; Calcular Frete usa peso e medidas do próprio produto (kits); materiais do produto de volta (PLA, PETG, TPU, ASA e variações).",
+  "summary": "Peso e medidas do produto com uma fonte só: Especificações e seção de medidas gravam o mesmo lugar; o modelo só preenche o que faltar. 1585 produtos alinhados (177 mudaram a medida do frete).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,24 +31,23 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-23-v1.2.900-medidas-materiais.md"
+    "ver docs/versoes/2026-11-23-v1.2.901-medidas-fonte-unica.md"
   ],
   "validations": [
-    "tmp-tests/product-materials.test.cjs ok (2)",
-    "tmp-tests/shipping-secrets.test.cjs ok (4)",
-    "tsc sem erro em ProductForm/FreightCalculator",
-    "API /admin/product-materials 401 sem login (rota existe)"
+    "tmp-tests/product-measures.test.cjs ok (5)",
+    "backfill: 0 divergências depois de aplicar",
+    "tsc sem erro em products.ts"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261123-105143-v1-2-900-medidas-materiais",
-    "previous": "/var/www/mdv-site/releases/20261123-102459-v1-2-899-frete-tokens"
+    "release": "/var/www/mdv-site/releases/20261123-112305-v1-2-901-medidas-fonte-unica",
+    "previous": "/var/www/mdv-site/releases/20261123-105143-v1-2-900-medidas-materiais"
   },
   "api_release": {
-    "status": "publicada",
+    "status": "sem mudança de código",
     "service": "mdv-api",
-    "mode": "--shipping-secrets-only (product-shipping-fields-v1) + --product-materials-only",
-    "note": "backups /var/www/mdv-api/backups/shipping-secrets-1795441261688 e product-materials-1795441872132."
+    "mode": "só dados (scripts/backfill-product-measures.cjs --apply)",
+    "note": "backup /var/www/mdv-api/backups/product-measures-2026-11-23T14-21-31-932Z.json"
   },
   "nginx_release": {
     "status": "publicada",

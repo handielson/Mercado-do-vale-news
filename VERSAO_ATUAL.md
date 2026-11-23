@@ -1,3 +1,10 @@
+# v1.2.901-medidas-fonte-unica
+
+Data: 23/11/2026. Branch: `main`. Status: **publicada** (site, release `20261123-112305-v1-2-901-medidas-fonte-unica`; dados alinhados). Robô sem mudança.
+Peso e medidas com uma fonte só (Especificações e seção de medidas gravam o mesmo lugar; modelo só preenche o que falta). Registro: `docs/versoes/2026-11-23-v1.2.901-medidas-fonte-unica.md`.
+
+---
+
 # v1.2.900-medidas-materiais
 
 Data: 23/11/2026. Branch: `main`. Status: **publicada** (API + site, release `20261123-105143-v1-2-900-medidas-materiais`). Robô sem mudança.

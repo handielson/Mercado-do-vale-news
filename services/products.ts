@@ -14,6 +14,7 @@ import { isLocalCatalogPreviewRuntime } from './localCatalogPreview';
 import { mercadoLivreService } from './mercadoLivreService';
 import { toast } from 'sonner';
 import { isSmartphoneModel, stripModelOwnedSpecs } from './smartphoneModelSpecs.mjs';
+import { resolveProductMeasures } from './productMeasures.mjs';
 import { productImageList } from './productFamilyImages.js';
 
 /**
@@ -447,8 +448,10 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     const brand = await resolveModelBrandName(modelData, input.brand);
     // Respeita override manual de categoria no formulário.
     const category_id = input.category_id || modelData?.category_id;
-    const dimensions = input.dimensions || modelData?.template_values?.dimensions;
-    const weight_kg = input.weight_kg || modelData?.template_values?.weight_kg;
+    // product-measures-single-source-v1: especificação e seção de medidas gravam a mesma fonte.
+    const measures = resolveProductMeasures({ inputSpecs: input.specs, inputDimensions: input.dimensions, inputWeight: input.weight_kg, templateValues: modelData?.template_values });
+    const dimensions = measures.dimensions;
+    const weight_kg = measures.weight_kg;
 
     const isSerializedCategory = !input.is_print3d && await isSerializedProductCategory(category_id);
     const specsModel = { ...modelData, category_name: (await categoryService.getById(modelData?.category_id || category_id))?.name };
@@ -560,6 +563,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
             tags_venda: ensureTag(parseTagsVenda(payload.specs?.tags_venda), brand),
         };
     }
+    payload.specs = { ...(payload.specs || {}), ...measures.specsPatch };
     payload.specs = markLocalNameManaged(payload.specs);
 
     const result = await vpsApiService.createProduct(payload);
@@ -617,8 +621,10 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     const brand = await resolveModelBrandName(modelData, input.brand || oldProduct.brand);
     // Respeita override manual de categoria no formulário.
     const category_id = input.category_id || modelData?.category_id || oldProduct.category_id;
-    const dimensions = input.dimensions || modelData?.template_values?.dimensions || oldProduct.dimensions;
-    const weight_kg = input.weight_kg || modelData?.template_values?.weight_kg || oldProduct.weight_kg;
+    // product-measures-single-source-v1: vale o campo que a pessoa mexeu; o modelo só preenche o que faltar.
+    const measures = resolveProductMeasures({ inputSpecs: input.specs, inputDimensions: input.dimensions, inputWeight: input.weight_kg, old: oldProduct, templateValues: modelData?.template_values });
+    const dimensions = measures.dimensions;
+    const weight_kg = measures.weight_kg;
 
     let finalVideoUrl = input.video_url || null;
     if (!finalVideoUrl && modelData?.template_values?.has_video && systemSku) {
@@ -700,6 +706,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
             tags_venda: ensureTag(parseTagsVenda(payload.specs?.tags_venda), brand),
         };
     }
+    payload.specs = { ...(payload.specs || {}), ...measures.specsPatch };
     payload.specs = markLocalNameManaged(payload.specs);
 
     const ok = await vpsApiService.updateProduct(id, payload);
