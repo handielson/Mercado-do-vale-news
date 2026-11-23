@@ -47,7 +47,7 @@ function saleMessage(sale, { label, links = {} }) {
 
 function printMessage({ ok, label, order, tracking, stage, reason, instructions }) {
   if (ok) return [`🖨️✅ *Etiqueta impressa* · ${label}`, `🧾 Pedido: ${order}`, tracking ? `🚚 Rastreio: ${tracking}` : ''].filter(Boolean).join('\n');
-  return [`⚠️❌ *Etiqueta NÃO impressa* · ${label}`, `🧾 Pedido: ${order}`, stage ? `📍 Etapa: ${stage}` : '',
+  return [`⚠️❌ *Etiqueta NÃO impressa* · ${label}`, `🧾 Pedido: ${order}`, tracking ? `🚚 Rastreio: ${tracking}` : '', stage ? `📍 Etapa: ${stage}` : '',
     `❓ Motivo: ${String(reason || 'não informado').slice(0, 600)}`, instructions ? `🛠️ O que fazer: ${String(instructions).slice(0, 500)}` : ''].filter(Boolean).join('\n');
 }
 
@@ -170,7 +170,7 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
     if (await wasSent(ref)) return { ok: true, skipped: 'repetido' };
     const names = await shopeeNames();
     const label = body.label ? String(body.label).slice(0, 40) : channelLabel('shopee', String(body.connection || ''), names);
-    await send(cfg.group_jid, printMessage({ ok, label, order, tracking: body.tracking, stage: body.stage, reason, instructions: body.instructions }));
+    await send(cfg.group_jid, printMessage({ ok, label, order, tracking: String(body.tracking || '').trim().slice(0, 60), stage: body.stage, reason, instructions: body.instructions }));
     await markSent(ref, 'print', ok);
     return { ok: true };
   }

@@ -1172,7 +1172,18 @@ async function processShopeePrintConnection(settings, connection, ptp) {
                 });
                 markPrintStep(markers.label);
                 console.log(`[${connection.displayName}] Etiqueta ${orderSn} impressa e marcada.`);
-                await notifySalesGroup({ ok: true, order: orderSn, connection: connection.id });
+                // marketplace-sales-group-v2: rastreio da Shopee no aviso de etiqueta impressa.
+                let groupTracking = '';
+                try {
+                    const trackingResult = await callVpsShopeeAction('get_tracking_info', { order_sn: orderSn }, connection.id);
+                    if (isVpsActionSuccess(trackingResult)) {
+                        const r = trackingResult.data?.response || {};
+                        groupTracking = String(r.tracking_number_explicit || r.tracking_number || r.first_mile_tracking_number || '').trim();
+                    }
+                } catch (trackingError) {
+                    console.warn(`[GRUPO VENDAS] Rastreio de ${orderSn} indisponível: ${trackingError.message || trackingError}`);
+                }
+                await notifySalesGroup({ ok: true, order: orderSn, connection: connection.id, tracking: groupTracking });
             }
 
             if (settings.shopee_printer_a4 && !fs.existsSync(markers.summary)) {

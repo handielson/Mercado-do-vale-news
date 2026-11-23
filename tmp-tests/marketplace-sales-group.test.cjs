@@ -60,3 +60,11 @@ test('evento da Shopee (Lenovo): sem repetir', async () => {
   await g.printEvent({ order: '2511AB', ok: false, stage: 'Nota fiscal', reason: 'NCM 85177099 inválido', connection: 'g1' });
   assert.equal(sent.length, 1); assert.match(sent[0], /Shopee G/); assert.match(sent[0], /O que fazer: Corrija o NCM/);
 });
+
+test('rastreio da Shopee no aviso de etiqueta impressa', async () => {
+  const state = { cfg: { group_jid: '1203@g.us', baseline_done: '1' }, sent: new Set(), sales: [] };
+  const sent = [];
+  const g = createMarketplaceSalesGroup({ pool: fakePool(state), delayMs: 0, evolution: { url: 'https://e', key: 'k', instance: 'i' }, fetchImpl: async (u, o) => { sent.push(JSON.parse(o.body).text); return { ok: true }; } });
+  await g.printEvent({ order: '2611X', ok: true, connection: 'primary', tracking: ' BR2611X9 ' });
+  assert.match(sent[0], /Etiqueta impressa\* · Shopee MV/); assert.match(sent[0], /🚚 Rastreio: BR2611X9$/m);
+});
