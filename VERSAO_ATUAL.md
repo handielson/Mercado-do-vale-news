@@ -1,6 +1,6 @@
 # v1.2.897-pix-taxa-certa
 
-Data: 23/11/2026. Branch: `main`. Status: **pendente** (site). API e robô sem mudança.
+Data: 23/11/2026. Branch: `main`. Status: **publicada** (site, release `20261123-092734-v1-2-897-pix`). API e robô sem mudança.
 PIX do orçamento compartilhado usava a taxa do crédito 1x (3,99%). Registro: `docs/versoes/2026-11-23-v1.2.897-pix-taxa-certa.md`.
 
 ---

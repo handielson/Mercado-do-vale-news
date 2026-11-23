@@ -1,10 +1,10 @@
 {
   "version": "v1.2.897-pix-taxa-certa",
-  "date": "2026-11-22",
-  "status": "pendente (site)",
+  "date": "2026-11-23",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.897-pix-taxa-certa",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261123-092734-v1-2-897-pix",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Orçamento compartilhado/site: \"à vista no PIX\" usava a taxa do crédito 1x (3,99%) desde 21/11 (taxas ganharam forma de pagamento). Agora PIX usa a taxa pix e o cartão a de crédito. Código no repo; site ainda não publicado.",
   "gestao_mdv_android": {
@@ -36,11 +36,14 @@
     "tmp-tests/payment-fee-method.test.cjs"
   ],
   "validations": [
-    "tmp-tests/payment-fee-method.test.cjs ok (3); com o código antigo o caso real dá 207876 (R$ 2.078,76)"
+    "tmp-tests/payment-fee-method.test.cjs ok (3); com o código antigo o caso real dá 207876 (R$ 2.078,76)",
+    "Site no ar: /VERSION.json v1.2.897; chunk installmentCalculator com findPixFee (pix)"
   ],
   "site_release": {
-    "status": "pendente",
-    "note": "Precisa de npm run deploy:vps-site no PC (o build usa o .env.local do PC)."
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261123-092734-v1-2-897-pix",
+    "previous": "/var/www/mdv-site/releases/20261121-165427",
+    "note": "PIX do orçamento compartilhado usa a taxa pix. Build no clone do Claude com o .env.local do PC (cópia apagada depois)."
   },
   "api_release": {
     "status": "sem mudança",
