@@ -1,3 +1,10 @@
+# v1.2.900-medidas-materiais
+
+Data: 23/11/2026. Branch: `main`. Status: **publicada** (API + site, release `20261123-105143-v1-2-900-medidas-materiais`). Robô sem mudança.
+Medidas da família valem para as variações; frete com peso/medida do próprio produto (kits); materiais do produto de volta. Registro: `docs/versoes/2026-11-23-v1.2.900-medidas-materiais.md`.
+
+---
+
 # v1.2.899-frete-tokens-servidor
 
 Data: 23/11/2026. Branch: `main`. Status: **publicada** (API + site, release `20261123-102459-v1-2-899-frete-tokens`). Robô sem mudança.

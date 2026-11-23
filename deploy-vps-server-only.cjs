@@ -810,6 +810,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--product-materials-only') || process.argv.includes('--product-materials-check')) {
+    await require('./scripts/deploy-product-materials.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--product-materials-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--shipping-secrets-only') || process.argv.includes('--shipping-secrets-check')) {
     await require('./scripts/deploy-shipping-secrets.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--shipping-secrets-check'),

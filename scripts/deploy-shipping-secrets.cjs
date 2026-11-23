@@ -10,7 +10,24 @@ function once(src, a, b, label) {
   return src.replace(a, () => b);
 }
 
+// v2 (product-shipping-fields-v1): /products devolve weight_kg e dimensions do próprio produto (kit com peso/medida
+// do kit; antes o Calcular Frete só tinha as medidas do modelo, que exigiam login e falhavam).
+const FIELDS_MARK = 'product-shipping-fields-v1';
+const FIELDS_ANCHOR = '       ${modelSpecsCol}\n       slug, origin, specs, custom_fields, kits,';
+const FIELDS_NEW = '       ${modelSpecsCol}\n       weight_kg, dimensions, /* ' + FIELDS_MARK + ' */\n       slug, origin, specs, custom_fields, kits,';
+
+function patchFields(source) {
+  if (source.includes(FIELDS_MARK)) return source;
+  const n = source.split(FIELDS_ANCHOR).length - 1;
+  if (n !== 2) throw Error(`products columns anchor drift (${n})`);
+  return source.split(FIELDS_ANCHOR).join(FIELDS_NEW);
+}
+
 function patch(source) {
+  return patchFields(patchSecrets(source));
+}
+
+function patchSecrets(source) {
   let next = String(source).replace(/\r\n/g, '\n');
   if (next.includes(MARK)) return next;
   next = once(next, "  return row;\n});\n\nfastify.patch('/shipping/settings'",
@@ -33,4 +50,4 @@ function deploy(ctx) {
   return openAiFinance.deploy({ ...ctx, patchSource: patch, moduleFiles: ['services/shippingSecrets.cjs'], backupSlug: 'shipping-secrets' });
 }
 
-module.exports = { patch, deploy, MARK };
+module.exports = { patch, deploy, MARK, FIELDS_MARK };

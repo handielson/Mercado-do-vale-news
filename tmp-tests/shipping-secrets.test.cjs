@@ -35,3 +35,12 @@ test('servidor: GET sem tokens, PATCH ignora vazio/marcador, /api/shipping com t
     assert.ok(src.includes('handleShippingApiVps(request.query, shippingBodyV1)'));
   }
 });
+
+test('product-shipping-fields-v1: /products devolve weight_kg e dimensions (compacto e completo)', () => {
+  const { FIELDS_MARK } = require('../scripts/deploy-shipping-secrets.cjs');
+  for (const f of ['vps_server.js', 'vps_server.cjs']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    assert.equal(src.split(FIELDS_MARK).length - 1, 2, f);
+    assert.equal(patch(src), src);
+  }
+});

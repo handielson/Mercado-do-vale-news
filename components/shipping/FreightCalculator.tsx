@@ -302,11 +302,17 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         return products.map((p: any) => {
             const tv: any = modelMap.get(p.model_id) ?? {};
 
-            // Dimensões vindas do template do modelo na VPS
-            const rawWeight = tv['weight_kg'] != null ? tv['weight_kg'] * 1000 : null;
-            const height_cm = tv['dimensions.height_cm'] ?? null;
-            const width_cm  = tv['dimensions.width_cm'] ?? null;
-            const length_cm = tv['dimensions.depth_cm'] ?? null;
+            // product-shipping-fields-v1: peso e medidas do próprio produto (kit já com o peso/medida do kit);
+            // o template do modelo fica de reserva.
+            let ownDims: any = p.dimensions ?? null;
+            if (typeof ownDims === 'string') { try { ownDims = JSON.parse(ownDims); } catch { ownDims = null; } }
+            const num = (v: any) => (v == null || v === '' || !Number.isFinite(Number(v)) || Number(v) <= 0 ? null : Number(v));
+            const ownWeightKg = num(p.weight_kg);
+            const modelWeightKg = num(tv['weight_kg']);
+            const rawWeight = ownWeightKg != null ? ownWeightKg * 1000 : (modelWeightKg != null ? modelWeightKg * 1000 : null);
+            const height_cm = num(ownDims?.height_cm) ?? num(tv['dimensions.height_cm']);
+            const width_cm  = num(ownDims?.width_cm) ?? num(tv['dimensions.width_cm']);
+            const length_cm = num(ownDims?.depth_cm ?? ownDims?.length_cm) ?? num(tv['dimensions.depth_cm']);
 
             // Preço vindo da VPS
             const price = parseFloat(String(p.price_retail ?? p.price ?? 0)) || 0;

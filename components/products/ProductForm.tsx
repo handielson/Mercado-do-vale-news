@@ -1337,6 +1337,26 @@ export function ProductForm({ initialData, initialDraft, onSaveDraft, initialPro
             const baseSetup = mergedData.is_print3d ? productionSetups[isParent ? 'parent' : 'single'] : undefined;
             if (baseSetup) mergedData = withPrint3dCost(mergedData, baseSetup);
             let rowsToSave = familyRows.map(row => mergedData.is_print3d && productionSetups[row.key] ? { ...row, data:withPrint3dCost(row.data, productionSetups[row.key]!) } : row);
+            // family-shared-measures-v1: medidas/peso alterados no cadastro da família valem para as variações que
+            // tinham as mesmas medidas do pai (as que foram personalizadas ficam como estão). Antes só o pai mudava.
+            if (isParent && initialData?.id) {
+                const measures = (value: any) => { let v = value; if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } } return (v && typeof v === 'object') ? v : {}; };
+                const keys = ['height_cm', 'width_cm', 'depth_cm'] as const;
+                const before = measures((initialData as any).dimensions);
+                const after = measures((mergedData as any).dimensions);
+                const same = (x: any, y: any) => Number(x || 0) === Number(y || 0);
+                const dimsChanged = keys.some(key => !same(before[key], after[key]));
+                const weightChanged = !same((initialData as any).weight_kg, (mergedData as any).weight_kg);
+                if (dimsChanged || weightChanged) {
+                    rowsToSave = rowsToSave.map(row => {
+                        const data: any = { ...row.data };
+                        const own = measures(data.dimensions);
+                        if (dimsChanged && keys.every(key => same(own[key], before[key]))) data.dimensions = { ...own, ...Object.fromEntries(keys.map(key => [key, after[key] ?? null])) };
+                        if (weightChanged && same(data.weight_kg, (initialData as any).weight_kg)) data.weight_kg = (mergedData as any).weight_kg;
+                        return { ...row, data };
+                    });
+                }
+            }
             let pendingPriceRows: FamilyRow[] = [];
             if (isParent && rowsToSave.some(row => !row.data.id)) {
                 const familyCategoryName = categoryConfig?.__category_id === mergedData.category_id

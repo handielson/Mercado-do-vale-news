@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.899-frete-tokens-servidor",
+  "version": "v1.2.900-medidas-materiais",
   "date": "2026-11-23",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.899-frete-tokens-servidor",
-  "release_vps": "/var/www/mdv-site/releases/20261123-102459-v1-2-899-frete-tokens",
+  "tag": "v1.2.900-medidas-materiais",
+  "release_vps": "/var/www/mdv-site/releases/20261123-105143-v1-2-900-medidas-materiais",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Tokens do Melhor Envio e da Frenet fora da leitura pública de /shipping/settings; /api/shipping usa o token guardado no banco; gerar etiqueta exige login de admin. Falta trocar os tokens nos painéis (vazaram).",
+  "summary": "Medidas/peso da família passam para as variações; Calcular Frete usa peso e medidas do próprio produto (kits); materiais do produto de volta (PLA, PETG, TPU, ASA e variações).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,23 +31,24 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-23-v1.2.899-frete-tokens-servidor.md"
+    "ver docs/versoes/2026-11-23-v1.2.900-medidas-materiais.md"
   ],
   "validations": [
-    "tmp-tests/shipping-secrets.test.cjs ok (3)",
-    "/shipping/settings sem tokens; cotação ME e Frenet ok com marcador; etiqueta sem login 401"
+    "tmp-tests/product-materials.test.cjs ok (2)",
+    "tmp-tests/shipping-secrets.test.cjs ok (4)",
+    "tsc sem erro em ProductForm/FreightCalculator",
+    "API /admin/product-materials 401 sem login (rota existe)"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261123-102459-v1-2-899-frete-tokens",
-    "previous": "/var/www/mdv-site/releases/20261123-101359-v1-2-898-frete-busca",
-    "note": "Etiqueta do Melhor Envio manda o login de admin. Build no clone do Claude com cópia do .env.local do PC (apagada depois)."
+    "release": "/var/www/mdv-site/releases/20261123-105143-v1-2-900-medidas-materiais",
+    "previous": "/var/www/mdv-site/releases/20261123-102459-v1-2-899-frete-tokens"
   },
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
-    "mode": "deploy-vps-server-only --shipping-secrets-only",
-    "note": "services/shippingSecrets.cjs + ganchos shipping-secrets-v1; backup /var/www/mdv-api/backups/shipping-secrets-1795440256104."
+    "mode": "--shipping-secrets-only (product-shipping-fields-v1) + --product-materials-only",
+    "note": "backups /var/www/mdv-api/backups/shipping-secrets-1795441261688 e product-materials-1795441872132."
   },
   "nginx_release": {
     "status": "publicada",
@@ -102,7 +103,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.898-frete-busca-produto publicada.",
+  "pending_previous": "v1.2.899-frete-tokens-servidor publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

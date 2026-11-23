@@ -1042,6 +1042,8 @@ async function requireAdminBearerToken(request, reply) {
 }
 
 require('./services/openAiFinanceServer.cjs').registerOpenAiFinanceRoutes(fastify, { pool, requireAdminBearerToken });
+// product-materials-v1: materiais do campo "Material" do produto (PLA, PETG, TPU, ASA... e os que o admin cadastrar).
+require('./services/productMaterialsServer.cjs').registerProductMaterialRoutes(fastify, { pool, requireAdminBearerToken });
 
 async function requireSyncKeyOrCustomer(request, reply) {
   const key = request.headers['x-sync-key'] || request.headers['x-api-key'];
@@ -26568,6 +26570,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
        ${modelSpecsCol}
+       weight_kg, dimensions, /* product-shipping-fields-v1 */
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -26583,6 +26586,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        images, ${productFamilyNameSelectSql('products')}, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_background_no_price_url, marketing_video_url,
        ${modelBlueprintSelectSql('products')},
        ${modelSpecsCol}
+       weight_kg, dimensions, /* product-shipping-fields-v1 */
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
