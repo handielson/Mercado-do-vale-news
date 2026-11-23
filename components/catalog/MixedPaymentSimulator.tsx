@@ -59,9 +59,10 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
     const cardOptions: CardOption[] = useMemo(() => {
         if (cardCents <= 0) return [];
 
-        // method é null no banco — filtra apenas por channel e installments
+        // payment-fee-method-v1: só taxas de crédito (ou antigas sem forma de pagamento); pix/débito 1x não entram no cartão.
         const creditFees = paymentFees
-            .filter(f => f.channel === 'presencial' && f.installments >= 1 && f.installments <= 12)
+            .filter(f => f.channel === 'presencial' && f.installments >= 1 && f.installments <= 12
+                && ['credit', ''].includes(String((f as any).payment_method ?? (f as any).method ?? '').toLowerCase()))
             .sort((a, b) => a.installments - b.installments)
             .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
 

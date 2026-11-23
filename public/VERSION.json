@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.896-modelo-esperando-emoji",
+  "version": "v1.2.897-pix-taxa-certa",
   "date": "2026-11-22",
-  "status": "publicada",
+  "status": "pendente (site)",
   "branch": "main",
-  "tag": "v1.2.896-modelo-esperando-emoji",
-  "release_vps": "/var/www/mdv-site/releases/20261121-165427",
+  "tag": "v1.2.897-pix-taxa-certa",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Frase de modelo fora da lista com emoji: \"Esse modelo acabou e estamos esperando chegar, Nome 😕 … preço 💰, câmera 📸 ou armazenamento 💾 … da lista 😊\".",
+  "summary": "Orçamento compartilhado/site: \"à vista no PIX\" usava a taxa do crédito 1x (3,99%) desde 21/11 (taxas ganharam forma de pagamento). Agora PIX usa a taxa pix e o cartão a de crédito. Código no repo; site ainda não publicado.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,19 +31,16 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "scripts/n8n-model-out-of-stock-wording.cjs (v2)",
-    "tmp-tests/n8n-model-out-of-stock-wording.test.cjs"
+    "services/installmentCalculator.ts",
+    "components/catalog/MixedPaymentSimulator.tsx",
+    "tmp-tests/payment-fee-method.test.cjs"
   ],
   "validations": [
-    "tmp-tests/n8n-model-out-of-stock-wording.test.cjs ok",
-    "scripts/n8n-sales-regression-gate.cjs ok (dry run)",
-    "n8n servicesHealthy"
+    "tmp-tests/payment-fee-method.test.cjs ok (3); com o código antigo o caso real dá 207876 (R$ 2.078,76)"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261121-165427",
-    "previous": "/var/www/mdv-site/releases/20261119-220540-v1-2-875-sem-3dmv",
-    "note": "PDV: termo de garantia pela árvore de categorias."
+    "status": "pendente",
+    "note": "Precisa de npm run deploy:vps-site no PC (o build usa o .env.local do PC)."
   },
   "api_release": {
     "status": "sem mudança",
@@ -102,7 +99,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.895-modelo-esperando-chegar publicada.",
+  "pending_previous": "v1.2.896-modelo-esperando-emoji publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
