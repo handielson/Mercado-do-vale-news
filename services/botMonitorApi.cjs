@@ -257,7 +257,8 @@ function createBotMonitorApi({ pool, key = process.env.MDV_MONITOR_KEY, evolutio
   }
   const trava = createAgentMonitorLock({ pool, sendAdmins: enviarAdmins, now });
   async function alert(body = {}) {
-    const text = String(body.text ?? '').replace(/\u0000/g, '').trim().slice(0, 3500);
+    // alert-surrogate-v1: meio emoji (corte de texto) faz a Evolution mandar e responder erro → aviso reenviado sem parar.
+    const text = String(body.text ?? '').replace(/\u0000/g, '').trim().slice(0, 3500).replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
     if (!text) throw Object.assign(new Error('Texto vazio.'), { statusCode: 400 });
     if (!evo.url || !evo.key || !evo.instance || typeof fetchImpl !== 'function') throw Object.assign(new Error('Evolution não configurada.'), { statusCode: 503 });
     const agora = now();

@@ -270,3 +270,14 @@ test('delivery-alert-v1: "vamos chamar um motoboy" avisa o admin com nome, núme
   assert.equal((await api.deliveryAlertFromLog({ direction: 'inbound', remoteJid: 'x@s.whatsapp.net', message: 'chamar um motoboy' })).skipped, 'direcao');
   assert.equal(sent.length, 1);
 });
+
+// alert-surrogate-v1: meio emoji não vai para a Evolution.
+test('alerta sem meio emoji', async () => {
+  const corpos = [];
+  const pool = { query: async (sql) => (/n8n_bot_admin_numbers/.test(sql) ? [[{ phone: '5587999990000' }]] : [[]]) };
+  const api = createBotMonitorApi({ pool, key: KEY, evolution: { url: 'https://evo.test', key: 'k', instance: 'i' },
+    fetchImpl: async (url, opt) => { corpos.push(JSON.parse(opt.body)); return { ok: true, json: async () => ({}) }; } });
+  const r = await api.alert({ text: 'lista 📱 ok 📱'.slice(0, 7) + ' fim' });
+  assert.equal(r.ok, true);
+  assert.equal(corpos[0].text, 'lista  fim');
+});
