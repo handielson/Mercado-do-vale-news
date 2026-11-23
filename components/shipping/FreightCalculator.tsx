@@ -111,6 +111,9 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
     const [allProducts, setAllProducts] = useState<ProductDimension[]>([]);
     const [loadingProducts, setLoadingProducts] = useState(true);
     const [search, setSearch] = useState('');
+    // freight-product-search-v1: busca no servidor (nome/SKU) — a lista local tem no máximo 2000 dos ~2500 produtos.
+    const [remoteResults, setRemoteResults] = useState<ProductDimension[]>([]);
+    const [searchingRemote, setSearchingRemote] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
 
@@ -276,6 +279,12 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
             return;
         }
 
+        setAllProducts(await withShippingDimensions(products));
+        setLoadingProducts(false);
+    }
+
+    // Dimensões e preço de envio a partir do modelo (models.template_values) — usado na lista inicial e na busca no servidor.
+    async function withShippingDimensions(products: any[]): Promise<ProductDimension[]> {
         // ── Passo 3: Buscar dimensões pela VPS (models.template_values) ──────
         const modelIds = [...new Set(products.map((p: any) => p.model_id).filter(Boolean))];
         const models = await Promise.all(modelIds.map(async (modelId) => {
@@ -289,7 +298,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         const modelMap = new Map(models.filter(Boolean).map((m: any) => [m.id, m.template_values ?? {}]));
 
         // ── Passo 4: Mesclar produto + dimensões da VPS ──────────────────
-        setAllProducts(products.map((p: any) => {
+        return products.map((p: any) => {
             const tv: any = modelMap.get(p.model_id) ?? {};
 
             // Dimensões vindas do template do modelo na VPS
@@ -313,19 +322,41 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                 price,
                 price_cost,
             };
-        }));
-
-        setLoadingProducts(false);
+        });
     }
+
+    useEffect(() => {
+        const term = search.trim();
+        if (term.length < 2) { setRemoteResults([]); setSearchingRemote(false); return; }
+        let cancelled = false;
+        setSearchingRemote(true);
+        const timer = setTimeout(async () => {
+            try {
+                const found = await vpsApiService.getProducts({ status: 'active', search: term, limit: 30, noCache: true });
+                const items = await withShippingDimensions((found || []).filter((p: any) => !p.is_parent));
+                if (!cancelled) setRemoteResults(items);
+            } catch {
+                if (!cancelled) setRemoteResults([]);
+            } finally {
+                if (!cancelled) setSearchingRemote(false);
+            }
+        }, 300);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [search]);
 
     // ── Filtro de busca ───────────────────────────────────────────────────────
     const filtered = useMemo(() => {
         if (!search.trim()) return allProducts.slice(0, 8);
-        const q = search.toLowerCase();
-        return allProducts.filter(p =>
+        const q = search.trim().toLowerCase();
+        const local = allProducts.filter(p =>
             p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)
-        ).slice(0, 8);
-    }, [search, allProducts]);
+        );
+        const seen = new Set(local.map(p => p.id));
+        const merged = [...local, ...remoteResults.filter(p => !seen.has(p.id))];
+        // SKU exato primeiro; depois nome que começa com o termo.
+        const rank = (p: ProductDimension) => (p.sku?.toLowerCase() === q ? 0 : p.name.toLowerCase().startsWith(q) ? 1 : 2);
+        return merged.sort((a, b) => rank(a) - rank(b)).slice(0, 12);
+    }, [search, allProducts, remoteResults]);
 
     // Fechar dropdown clicando fora
     useEffect(() => {
@@ -881,6 +912,10 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                             {loadingProducts ? (
                                 <div className="p-4 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
                                     <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
+                                </div>
+                            ) : filtered.length === 0 && searchingRemote ? (
+                                <div className="p-4 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
+                                    <Loader2 className="w-4 h-4 animate-spin" /> Buscando...
                                 </div>
                             ) : filtered.length === 0 ? (
                                 <div className="p-4 text-center text-slate-400 text-sm">Nenhum produto encontrado</div>

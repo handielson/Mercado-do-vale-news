@@ -1,3 +1,10 @@
+# v1.2.898-frete-busca-produto
+
+Data: 23/11/2026. Branch: `main`. Status: **publicada** (site, release `20261123-101359-v1-2-898-frete-busca`). API e robô sem mudança.
+Calcular Frete acha produto por nome/SKU no servidor; transportadoras do Melhor Envio liberadas. Registro: `docs/versoes/2026-11-23-v1.2.898-frete-busca-produto.md`.
+
+---
+
 # v1.2.897-pix-taxa-certa
 
 Data: 23/11/2026. Branch: `main`. Status: **publicada** (site, release `20261123-092734-v1-2-897-pix`). API e robô sem mudança.

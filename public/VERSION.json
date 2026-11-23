@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.897-pix-taxa-certa",
+  "version": "v1.2.898-frete-busca-produto",
   "date": "2026-11-23",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.897-pix-taxa-certa",
-  "release_vps": "/var/www/mdv-site/releases/20261123-092734-v1-2-897-pix",
+  "tag": "v1.2.898-frete-busca-produto",
+  "release_vps": "/var/www/mdv-site/releases/20261123-101359-v1-2-898-frete-busca",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Orçamento compartilhado/site: \"à vista no PIX\" usava a taxa do crédito 1x (3,99%) desde 21/11 (taxas ganharam forma de pagamento). Agora PIX usa a taxa pix e o cartão a de crédito. Código no repo; site ainda não publicado.",
+  "summary": "Calcular Frete (admin): busca de produto também no servidor por nome/SKU (a lista local carregava só 2000 dos ~2500 produtos com modelo); filtro do Melhor Envio liberado para correios, jadlog, jet, azul.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,19 +31,18 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "services/installmentCalculator.ts",
-    "components/catalog/MixedPaymentSimulator.tsx",
-    "tmp-tests/payment-fee-method.test.cjs"
+    "components/shipping/FreightCalculator.tsx",
+    "ver docs/versoes/2026-11-23-v1.2.898-frete-busca-produto.md"
   ],
   "validations": [
-    "tmp-tests/payment-fee-method.test.cjs ok (3); com o código antigo o caso real dá 207876 (R$ 2.078,76)",
-    "Site no ar: /VERSION.json v1.2.897; chunk installmentCalculator com findPixFee (pix)"
+    "tsc sem erro no FreightCalculator",
+    "/products?search=SFKU3XMVCIN devolve o SKU; modelo com peso/medidas"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261123-092734-v1-2-897-pix",
-    "previous": "/var/www/mdv-site/releases/20261121-165427",
-    "note": "PIX do orçamento compartilhado usa a taxa pix. Build no clone do Claude com o .env.local do PC (cópia apagada depois)."
+    "release": "/var/www/mdv-site/releases/20261123-101359-v1-2-898-frete-busca",
+    "previous": "/var/www/mdv-site/releases/20261123-092734-v1-2-897-pix",
+    "note": "Busca de produto no Calcular Frete também no servidor. Build no clone do Claude com cópia do .env.local do PC (apagada depois)."
   },
   "api_release": {
     "status": "sem mudança",
@@ -102,7 +101,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.896-modelo-esperando-emoji publicada.",
+  "pending_previous": "v1.2.897-pix-taxa-certa publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
