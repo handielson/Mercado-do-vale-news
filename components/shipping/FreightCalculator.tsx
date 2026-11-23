@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { getAuthSessionToken } from '@/services/authSession';
 import { Search, Plus, Minus, Trash2, Package, AlertTriangle, CheckCircle, Loader2, Calculator, Share2, MessageCircle, Copy, Tag, X, User, FileText, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
@@ -694,9 +695,11 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         if (!activeCarrier || !settings?.melhor_envio_token) return;
         setLabelLoading(true);
         try {
+            // shipping-secrets-v1: etiqueta gasta saldo — o servidor exige login de admin e usa o token guardado.
+            const authToken = await getAuthSessionToken();
             const res = await fetch('/api/shipping?provider=melhor-envio&action=label', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
                 body: JSON.stringify({
                     token: settings.melhor_envio_token,
                     sandbox: settings.melhor_envio_sandbox,

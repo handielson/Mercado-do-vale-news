@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.898-frete-busca-produto",
+  "version": "v1.2.899-frete-tokens-servidor",
   "date": "2026-11-23",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.898-frete-busca-produto",
-  "release_vps": "/var/www/mdv-site/releases/20261123-101359-v1-2-898-frete-busca",
+  "tag": "v1.2.899-frete-tokens-servidor",
+  "release_vps": "/var/www/mdv-site/releases/20261123-102459-v1-2-899-frete-tokens",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Calcular Frete (admin): busca de produto também no servidor por nome/SKU (a lista local carregava só 2000 dos ~2500 produtos com modelo); filtro do Melhor Envio liberado para correios, jadlog, jet, azul.",
+  "summary": "Tokens do Melhor Envio e da Frenet fora da leitura pública de /shipping/settings; /api/shipping usa o token guardado no banco; gerar etiqueta exige login de admin. Falta trocar os tokens nos painéis (vazaram).",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,22 +31,23 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "components/shipping/FreightCalculator.tsx",
-    "ver docs/versoes/2026-11-23-v1.2.898-frete-busca-produto.md"
+    "ver docs/versoes/2026-11-23-v1.2.899-frete-tokens-servidor.md"
   ],
   "validations": [
-    "tsc sem erro no FreightCalculator",
-    "/products?search=SFKU3XMVCIN devolve o SKU; modelo com peso/medidas"
+    "tmp-tests/shipping-secrets.test.cjs ok (3)",
+    "/shipping/settings sem tokens; cotação ME e Frenet ok com marcador; etiqueta sem login 401"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261123-101359-v1-2-898-frete-busca",
-    "previous": "/var/www/mdv-site/releases/20261123-092734-v1-2-897-pix",
-    "note": "Busca de produto no Calcular Frete também no servidor. Build no clone do Claude com cópia do .env.local do PC (apagada depois)."
+    "release": "/var/www/mdv-site/releases/20261123-102459-v1-2-899-frete-tokens",
+    "previous": "/var/www/mdv-site/releases/20261123-101359-v1-2-898-frete-busca",
+    "note": "Etiqueta do Melhor Envio manda o login de admin. Build no clone do Claude com cópia do .env.local do PC (apagada depois)."
   },
   "api_release": {
-    "status": "sem mudança",
-    "note": "Só o robô n8n mudou."
+    "status": "publicada",
+    "service": "mdv-api",
+    "mode": "deploy-vps-server-only --shipping-secrets-only",
+    "note": "services/shippingSecrets.cjs + ganchos shipping-secrets-v1; backup /var/www/mdv-api/backups/shipping-secrets-1795440256104."
   },
   "nginx_release": {
     "status": "publicada",
@@ -101,7 +102,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.897-pix-taxa-certa publicada.",
+  "pending_previous": "v1.2.898-frete-busca-produto publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",

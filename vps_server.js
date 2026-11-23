@@ -5427,7 +5427,12 @@ async function handleShippingApiVps(query, body = {}) {
 
 fastify.post('/api/shipping', async (request, reply) => {
   try {
-    const result = await handleShippingApiVps(request.query, request.body || {});
+    // shipping-secrets-v1: token do banco (o do navegador é ignorado); etiqueta gasta saldo → só admin.
+    if (String(request.query?.action || '') === 'label' && !(await isAdminBearerToken(request))) {
+      return reply.code(401).send({ error: 'Entre como admin para gerar etiqueta.' });
+    }
+    const shippingBodyV1 = await require('./services/shippingSecrets.cjs').withStoredShippingToken(pool, request.query, request.body || {});
+    const result = await handleShippingApiVps(request.query, shippingBodyV1);
     return reply.code(result.status).send(result.body);
   } catch (err) {
     return reply.code(500).send({
@@ -35557,7 +35562,8 @@ fastify.get('/shipping/settings', async (req, reply) => {
   if (row.extra_config && typeof row.extra_config === 'string') {
     try { row.extra_config = JSON.parse(row.extra_config); } catch { row.extra_config = null; }
   }
-  return row;
+  // shipping-secrets-v1: leitura pública sem os tokens do Melhor Envio e da Frenet.
+  return require('./services/shippingSecrets.cjs').publicShippingSettings(row);
 });
 
 fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -35585,9 +35591,9 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
       `UPDATE shipping_settings SET
        origin_cep=COALESCE(?,origin_cep), origin_label=COALESCE(?,origin_label),
        secondary_origin_cep=COALESCE(?,secondary_origin_cep), secondary_origin_label=COALESCE(?,secondary_origin_label),
-       melhor_envio_token=COALESCE(?,melhor_envio_token), melhor_envio_sandbox=COALESCE(?,melhor_envio_sandbox),
+       melhor_envio_token=COALESCE(NULLIF(NULLIF(?,''),'configurado-no-servidor'),melhor_envio_token), melhor_envio_sandbox=COALESCE(?,melhor_envio_sandbox),
        melhor_envio_enabled=COALESCE(?,melhor_envio_enabled), melhor_envio_allowed_services=COALESCE(?,melhor_envio_allowed_services),
-       frenet_token=COALESCE(?,frenet_token), frenet_enabled=COALESCE(?,frenet_enabled),
+       frenet_token=COALESCE(NULLIF(NULLIF(?,''),'configurado-no-servidor'),frenet_token), frenet_enabled=COALESCE(?,frenet_enabled),
        local_delivery_enabled=COALESCE(?,local_delivery_enabled),
        enable_progressive_shipping_subsidy=COALESCE(?,enable_progressive_shipping_subsidy),
        min_order_value_for_subsidy=COALESCE(?,min_order_value_for_subsidy),

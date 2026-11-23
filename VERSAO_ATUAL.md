@@ -1,3 +1,10 @@
+# v1.2.899-frete-tokens-servidor
+
+Data: 23/11/2026. Branch: `main`. Status: **publicada** (API + site, release `20261123-102459-v1-2-899-frete-tokens`). Robô sem mudança.
+Tokens do frete fora da leitura pública; cálculo com o token do servidor; etiqueta só admin. **Falta trocar os tokens nos painéis.** Registro: `docs/versoes/2026-11-23-v1.2.899-frete-tokens-servidor.md`.
+
+---
+
 # v1.2.898-frete-busca-produto
 
 Data: 23/11/2026. Branch: `main`. Status: **publicada** (site, release `20261123-101359-v1-2-898-frete-busca`). API e robô sem mudança.
