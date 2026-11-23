@@ -184,6 +184,30 @@ function markPrintStep(markerPath) {
     fs.writeFileSync(markerPath, new Date().toISOString());
 }
 
+// marketplace-sales-group-v1: resultado da etiqueta no grupo "Vendas Marketplaces MdV" do WhatsApp.
+// O servidor não repete o mesmo aviso; falha aqui nunca atrapalha a impressão.
+const STAGE_LABELS = {
+    invoice: 'Nota fiscal',
+    personal_document: 'Documento da conta PF',
+    ship_order: 'Preparar envio',
+    shipping_document: 'Gerar etiqueta',
+    label_print: 'Imprimir etiqueta',
+    summary: 'Imprimir resumo',
+};
+async function notifySalesGroup(event) {
+    try {
+        const requestFetch = await getFetch();
+        await requestFetch(`${VPS_API_URL}/api/marketplace-group/print-event`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-sync-key': VPS_SYNC_KEY },
+            body: JSON.stringify({ channel: 'shopee', ...event }),
+            signal: AbortSignal.timeout(30000),
+        });
+    } catch (error) {
+        console.warn(`[GRUPO VENDAS] Aviso não enviado (${event.order}): ${error.message || error}`);
+    }
+}
+
 function normalizeInterventionIssue(stage, resultOrError) {
     const data = resultOrError?.data || {};
     const errorCode = String(
@@ -414,6 +438,13 @@ async function getShopeeOrderSummaryDataFromVps(connection, orderSn) {
 }
 
 async function printHumanInterventionReceipt({ settings, shopeeApiUrl, connection, orderSn, stage, resultOrError }) {
+    {
+        const notice = normalizeInterventionIssue(stage, resultOrError);
+        await notifySalesGroup({
+            ok: false, order: orderSn, connection: connection?.id || 'primary',
+            stage: STAGE_LABELS[stage] || stage, reason: notice.message, instructions: interventionInstructions(stage, notice.message),
+        });
+    }
     const summaryPrinter = String(settings?.shopee_printer_a4 || '').trim();
     if (!summaryPrinter) {
         console.error(`[INTERVENTION] Impressora de comprovante não configurada para ${orderSn}.`);
@@ -456,14 +487,7 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, connectio
         const receipt = await createShopeeInterventionReceiptPdf({
             order: orderData,
             stage,
-            stageLabel: {
-                invoice: 'Nota fiscal',
-                personal_document: 'Documento da conta PF',
-                ship_order: 'Preparar envio',
-                shipping_document: 'Gerar etiqueta',
-                label_print: 'Imprimir etiqueta',
-                summary: 'Imprimir resumo',
-            }[stage] || stage,
+            stageLabel: STAGE_LABELS[stage] || stage,
             errorCode: issue.errorCode,
             message: issue.message,
             instructions: interventionInstructions(stage, issue.message),
@@ -1148,6 +1172,7 @@ async function processShopeePrintConnection(settings, connection, ptp) {
                 });
                 markPrintStep(markers.label);
                 console.log(`[${connection.displayName}] Etiqueta ${orderSn} impressa e marcada.`);
+                await notifySalesGroup({ ok: true, order: orderSn, connection: connection.id });
             }
 
             if (settings.shopee_printer_a4 && !fs.existsSync(markers.summary)) {
