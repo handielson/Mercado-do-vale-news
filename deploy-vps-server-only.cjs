@@ -850,6 +850,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--bling-stock-inbox-only') || process.argv.includes('--bling-stock-inbox-check')) {
+    await require('./scripts/deploy-bling-stock-inbox.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--bling-stock-inbox-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--marketplace-cancel-stock-only') || process.argv.includes('--marketplace-cancel-stock-check')) {
     await require('./scripts/deploy-marketplace-cancel-stock.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--marketplace-cancel-stock-check'),
