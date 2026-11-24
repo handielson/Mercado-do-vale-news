@@ -18,6 +18,7 @@ function world() {
     if (/SELECT 1 FROM shopee_g_stock_moves/.test(sql)) { const m = moves.find((x) => x.k === [a[0], a[1], a[2], 'S'].join('|')); return [[m && m.status === 'ok' ? { 1: 1 } : undefined]]; }
     if (/UPDATE shopee_g_stock_moves SET status='sending'/.test(sql)) { moves.find((m) => m.k === a.join('|')).status = 'sending'; return [{}]; }
     if (/UPDATE shopee_g_stock_moves SET status='ok'/.test(sql)) { const m = moves.find((x) => x.k === a.slice(1).join('|')); m.status = 'ok'; m.attempts += 1; return [{}]; }
+    if (/UPDATE shopee_g_stock_moves SET status='bling'/.test(sql)) { const m = moves.find((x) => x.k === a.slice(1).join('|')); m.status = 'bling'; return [{}]; }
     if (/UPDATE shopee_g_stock_moves SET status='skipped'/.test(sql)) { const m = moves.find((x) => x.k === a.slice(1).join('|')); m.status = 'skipped'; m.attempts += 1; return [{}]; }
     if (/UPDATE shopee_g_stock_moves SET status='error'/.test(sql)) { const m = moves.find((x) => x.k === a.slice(1).join('|')); m.status = 'error'; m.attempts += 1; m.error = a[0]; return [{}]; }
     if (/FROM products WHERE sku/.test(sql)) return [[st.products[a[0]]]];
@@ -27,7 +28,8 @@ function world() {
   st.fetch = async (url, init = {}) => {
     const path = url.replace('https://api.bling.com.br/Api/v3', '');
     let body = {};
-    if (path.startsWith('/depositos')) body = { data: [{ id: 5, descricao: 'Depósito 01 (Loja)' }] };
+    if (path.startsWith('/pedidos/vendas')) body = { data: path.includes('NOBLING') ? [{ numero: 11554 }] : [] };
+    else if (path.startsWith('/depositos')) body = { data: [{ id: 5, descricao: 'Depósito 01 (Loja)' }] };
     else if (path === '/produtos/900') body = { data: { formato: 'E', estrutura: { componentes: [{ produto: { id: 111 }, quantidade: 2 }] } } };
     else if (path.startsWith('/produtos/')) body = { data: { formato: 'S' } };
     else if (path === '/estoques') st.bling.push(JSON.parse(init.body));
@@ -78,4 +80,13 @@ test('retroativo: estoque já zerado não baixa (não deixa negativo) e não avi
     { ...sale('OLD2', 'SHIPPED', [{ sku: 'NAOEXISTE', quantity: 1 }]), occurred_at: new Date(Date.now() - 86400e3) });
   const r = await s.tick();
   assert.equal(r.pulado, 1); assert.equal(r.erro, 1); assert.equal(w.bling.length, 0); assert.equal(notes.length, 0);
+});
+
+test('pedido que já está no Bling não baixa de novo', async () => {
+  const w = world();
+  const s = createShopeeIndividualStock({ pool: w.pool, fetchImpl: w.fetch, getAuthHeader: async () => 'Bearer x', notify: async () => {}, logger: {} });
+  w.sales.push(sale('NOBLING', 'SHIPPED', [{ sku: 'SLNBKUG', quantity: 1 }]));
+  await s.tick();
+  assert.equal(w.bling.length, 0);
+  assert.equal(w.moves[0].status, 'bling');
 });

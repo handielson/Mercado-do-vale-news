@@ -71,6 +71,15 @@ function createShopeeIndividualStock({ pool, getAuthHeader, fetchImpl = globalTh
     try {
       const [[product]] = await pool.query('SELECT bling_id, name FROM products WHERE sku = ? AND bling_id IS NOT NULL LIMIT 1', [sku]);
       if (!product) throw new Error(`SKU ${sku} sem produto ligado ao Bling no MdV`);
+      // shopee-g-stock-v2: se a loja PF voltar a mandar pedidos ao Bling (ela teve integração até 13/11/2026),
+      // o próprio pedido do Bling baixa o estoque: aqui não baixa de novo.
+      if (op === 'S') {
+        const found = await bling(`/pedidos/vendas?numerosLojas[]=${encodeURIComponent(orderSn)}`);
+        if (Array.isArray(found.data) && found.data.length) {
+          await pool.query("UPDATE shopee_g_stock_moves SET status='bling', error=?, attempts=attempts+1 WHERE connection_id=? AND order_sn=? AND sku=? AND op=?", [`pedido ${found.data[0].numero} já está no Bling`, ...where]);
+          return 'no_bling';
+        }
+      }
       // Retroativo (venda de antes de ligar): estoque já zerado = alguém já acertou na mão; não deixa negativo.
       if (backfill && op === 'S') {
         const [[cur]] = await pool.query('SELECT stock_quantity FROM products WHERE sku = ? LIMIT 1', [sku]);
