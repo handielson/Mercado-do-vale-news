@@ -282,3 +282,11 @@
         font-size: 16px;
     }
 }
+
+/* admin-mobile-layout-v1 (24/11/2026): no celular, tabela larga rola para o lado (antes ficava cortada pelo
+ * overflow-x-hidden do <main>) e linha de título com botões quebra em vez de empurrar os botões para fora da tela. */
+@media (max-width: 767px) {
+  .admin-main table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .admin-main .flex.items-center.justify-between,
+  .admin-main .flex.justify-between.items-center { flex-wrap: wrap; row-gap: 0.5rem; }
+}

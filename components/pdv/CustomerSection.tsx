@@ -465,14 +465,14 @@ export default function CustomerSection({
                             <button
                                 onClick={handleSearch}
                                 disabled={isSearching}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                                className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
                             >
                                 <Search size={18} />
                             </button>
                             <button
                                 type="button"
                                 onClick={openQuickCreate}
-                                className="px-4 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
+                                className="px-3 sm:px-4 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
                                 title="Cadastrar novo cliente"
                             >
                                 <UserPlus size={18} />
@@ -482,7 +482,7 @@ export default function CustomerSection({
                                     type="button"
                                     onClick={onSelectWalkInCustomer}
                                     disabled={isSelectingWalkInCustomer}
-                                    className="inline-flex items-center gap-2 px-4 py-2 border border-amber-200 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                                    className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 border border-amber-200 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
                                     title="Venda rápida para Cliente Balcão"
                                 >
                                     {isSelectingWalkInCustomer ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}

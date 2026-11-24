@@ -172,8 +172,8 @@ export default function CatalogConfigPage() {
                     {/* Conteúdo Principal */}
                     <div className="flex-1 min-w-0 space-y-6">
                         {/* 🎯 ATALHO: Configuração de Badges */}
-                        <div className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-2 border-purple-300 rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
-                            <div className="flex items-start justify-between gap-4">
+                        <div className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-2 border-purple-300 rounded-xl shadow-lg p-4 sm:p-6 hover:shadow-xl transition-shadow">
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-3">
                                         <div className="p-2 bg-purple-600 rounded-lg">

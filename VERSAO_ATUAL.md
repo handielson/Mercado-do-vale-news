@@ -1,3 +1,10 @@
+# v1.2.904-layout-celular
+
+Data: 24/11/2026. Branch: `main`. Status: **publicada** (site `20261124-154723-v1-2-904-layout-celular`). API e robô sem mudança nesta versão.
+Painel no celular: tabelas rolam, títulos quebram linha, Config. do Catálogo não quebra. Registro: `docs/versoes/2026-11-24-v1.2.904-layout-celular.md`.
+
+---
+
 # v1.2.903-celular-em-foco
 
 Data: 24/11/2026. Branch: `main`. Status: **publicada** (API + site `20261124-144701-v1-2-903-celular-em-foco` + robô).

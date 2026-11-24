@@ -379,12 +379,12 @@ export const CatalogSettingsPage: React.FC = () => {
                         </label>
                         <input
                             type="text"
-                            value={settings.meta_title}
+                            value={settings.meta_title || ""}
                             onChange={(e) => setSettings({ ...settings, meta_title: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             maxLength={60}
                         />
-                        <p className="text-xs text-gray-500 mt-1">{settings.meta_title.length}/60 caracteres</p>
+                        <p className="text-xs text-gray-500 mt-1">{(settings.meta_title || "").length}/60 caracteres</p>
                     </div>
 
                     <div>
@@ -392,13 +392,13 @@ export const CatalogSettingsPage: React.FC = () => {
                             Meta Descrição
                         </label>
                         <textarea
-                            value={settings.meta_description}
+                            value={settings.meta_description || ""}
                             onChange={(e) => setSettings({ ...settings, meta_description: e.target.value })}
                             rows={3}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             maxLength={160}
                         />
-                        <p className="text-xs text-gray-500 mt-1">{settings.meta_description.length}/160 caracteres</p>
+                        <p className="text-xs text-gray-500 mt-1">{(settings.meta_description || "").length}/160 caracteres</p>
                     </div>
 
                     <div>

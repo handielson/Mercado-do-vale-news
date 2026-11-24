@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.903-celular-em-foco",
+  "version": "v1.2.904-layout-celular",
   "date": "2026-11-24",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.903-celular-em-foco",
-  "release_vps": "/var/www/mdv-site/releases/20261124-144701-v1-2-903-celular-em-foco",
+  "tag": "v1.2.904-layout-celular",
+  "release_vps": "/var/www/mdv-site/releases/20261124-154723-v1-2-904-layout-celular",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Estrela no card do produto: escolhe o celular em foco do robô (um por vez); a lista de celulares do WhatsApp fecha com a indicação dele.",
+  "summary": "Painel no celular: tabelas largas rolam para o lado (antes cortadas), títulos com botões quebram linha; Config. do Catálogo não quebra mais com SEO vazio; Catálogo e PDV cabem na tela.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,23 +31,20 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-24-v1.2.903-celular-em-foco.md"
+    "ver docs/versoes/2026-11-24-v1.2.904-layout-celular.md"
   ],
   "validations": [
-    "tmp-tests/n8n-sales-focus-product.test.cjs ok (3) + gate de vendas",
-    "tsc sem erro em ProductCard/botFocusProduct",
-    "GET /admin/bot-focus-product 401 sem login"
+    "varredura de 87 páginas do painel a 390 px",
+    "tsc sem erro nos arquivos alterados"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261124-144701-v1-2-903-celular-em-foco",
-    "previous": "/var/www/mdv-site/releases/20261124-124831-v1-2-902-vendas-celular"
+    "release": "/var/www/mdv-site/releases/20261124-154723-v1-2-904-layout-celular",
+    "previous": "/var/www/mdv-site/releases/20261124-144701-v1-2-903-celular-em-foco"
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "mode": "--bot-focus-product-only",
-    "note": "backup /var/www/mdv-api/backups/bot-focus-product-1795542182712"
+    "status": "sem mudança nesta versão",
+    "service": "mdv-api"
   },
   "nginx_release": {
     "status": "publicada",

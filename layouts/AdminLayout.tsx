@@ -518,7 +518,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         )}
       </aside>
-      <main className={cn("flex-1 min-w-0 p-4 pb-24 overflow-y-auto w-full md:w-auto overflow-x-hidden", location.pathname.startsWith('/admin/settings/models') ? "md:p-6" : "md:p-10")}>
+      <main className={cn("admin-main flex-1 min-w-0 p-4 pb-24 overflow-y-auto w-full md:w-auto overflow-x-hidden", location.pathname.startsWith('/admin/settings/models') ? "md:p-6" : "md:p-10")}>
         {botHealth?.status === 'offline' && (
           <div role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm">
             <div className="flex items-start gap-3">
