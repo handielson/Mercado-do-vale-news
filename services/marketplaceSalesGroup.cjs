@@ -140,8 +140,9 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
       const ref = `sale:${row.channel}:${row.connection_id}:${row.external_id}`;
       items.push({ ref, kind: 'sale', row, skip: SKIP_STATUS.test(String(row.status || '').trim()) });
     }
+    // v4: impressa = etiqueta impressa nas últimas 24 h (updated_at muda quando o envio vira "enviado"/"entregue").
     const [ml] = await pool.query(`SELECT shipment_id, order_id, pack_id, status, tracking_number, last_error, updated_at FROM mercado_livre_print_jobs
-      WHERE updated_at > NOW() - INTERVAL 3 DAY AND status IN ('printed','intervention')`).catch(() => [[]]);
+      WHERE (status = 'printed' AND label_printed_at > NOW() - INTERVAL 1 DAY) OR (status = 'intervention' AND updated_at > NOW() - INTERVAL 3 DAY)`).catch(() => [[]]);
     for (const j of ml || []) {
       const err = j.status === 'intervention' ? String(j.last_error || 'Remessa não está pronta para imprimir no Mercado Livre.') : '';
       items.push({ ref: `print:ml:${j.shipment_id}:${j.status}${err ? `:${hashOf(err)}` : ''}`, kind: 'print', lookup: ['mercado_livre', [j.order_id, j.pack_id]], print: {
@@ -149,7 +150,7 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
         instructions: err ? 'Abra a venda no Mercado Livre, resolva o que está no motivo e imprima de novo pelo painel.' : '' } });
     }
     const [tt] = await pool.query(`SELECT package_id, order_id, status, tracking_number, last_error, updated_at FROM tiktok_shop_print_jobs
-      WHERE updated_at > NOW() - INTERVAL 3 DAY AND status IN ('printed','intervention')`).catch(() => [[]]);
+      WHERE (status = 'printed' AND label_printed_at > NOW() - INTERVAL 1 DAY) OR (status = 'intervention' AND updated_at > NOW() - INTERVAL 3 DAY)`).catch(() => [[]]);
     for (const j of tt || []) {
       const err = j.status === 'intervention' ? String(j.last_error || 'Falha na impressão.') : '';
       items.push({ ref: `print:tiktok:${j.package_id}:${j.status}${err ? `:${hashOf(err)}` : ''}`, kind: 'print', lookup: ['tiktok', [j.order_id]], print: {
