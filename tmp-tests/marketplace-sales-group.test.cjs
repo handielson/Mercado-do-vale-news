@@ -8,8 +8,9 @@ function fakePool(state) {
     if (/CREATE TABLE/.test(sql)) return [[]];
     if (/SELECT k, v FROM marketplace_group_config/.test(sql)) return [Object.entries(state.cfg).map(([k, v]) => ({ k, v }))];
     if (/INSERT INTO marketplace_group_config/.test(sql)) { state.cfg[args[0]] = args[1]; return [[]]; }
+    if (/SELECT 1 FROM marketplace_group_sent WHERE ref = \? AND ok = 1/.test(sql)) return [(state.announced || new Set()).has(args[0]) ? [{ 1: 1 }] : []];
     if (/SELECT 1 FROM marketplace_group_sent/.test(sql)) return [state.sent.has(args[0]) ? [{ 1: 1 }] : []];
-    if (/INSERT IGNORE INTO marketplace_group_sent/.test(sql)) { state.sent.add(args[0]); return [[]]; }
+    if (/INSERT IGNORE INTO marketplace_group_sent/.test(sql)) { state.sent.add(args[0]); if (args[2]) (state.announced ||= new Set()).add(args[0]); return [[]]; }
     if (/FROM marketplace_sales_cache WHERE channel = \? AND external_id IN/.test(sql)) return [state.sales.filter((x) => x.channel === args[0] && args.slice(1).includes(x.external_id))];
     if (/FROM marketplace_sales_cache/.test(sql)) return [state.sales];
     if (/FROM mercado_livre_print_jobs/.test(sql)) return [state.ml || []];
@@ -80,4 +81,16 @@ test('aviso de etiqueta traz o resumo do pedido (cliente, itens, SKU, link)', as
   const msg = sent.find((x) => /Etiqueta impressa/.test(x));
   assert.match(msg, /👤 Maria · Petrolina\/PE/); assert.match(msg, /\*1x\* Capa A03 \(Rosa\)/); assert.match(msg, /SKU: CCSAGA03ROS/);
   assert.match(msg, /mercadodovale\.com\.br\/produto\/capa-a03/); assert.match(msg, /Total: \*R\$\s?29,90\*/);
+});
+
+test('v5: venda já avisada no grupo → etiqueta só com os itens, sem repetir cliente/link/total', async () => {
+  const state = { cfg: { group_jid: '1203@g.us', baseline_done: '1' }, sent: new Set(), sales: [sale('2611A', 'READY_TO_SHIP')] };
+  const sent = [];
+  const g = createMarketplaceSalesGroup({ pool: fakePool(state), delayMs: 0, evolution: { url: 'https://e', key: 'k', instance: 'i' }, fetchImpl: async (u, o) => { sent.push(JSON.parse(o.body).text); return { ok: true }; } });
+  await g.tick();
+  assert.match(sent[0], /Venda nova/);
+  await g.printEvent({ order: '2611A', ok: true, connection: 'primary', tracking: 'AP1BR' });
+  const msg = sent[1];
+  assert.match(msg, /Etiqueta impressa/); assert.match(msg, /🚚 Rastreio: AP1BR/); assert.match(msg, /📦 1x Capa A03 \(Rosa\) · CCSAGA03ROS/);
+  assert.doesNotMatch(msg, /Maria|🔗|Total/);
 });

@@ -64,6 +64,12 @@ function orderSummary(sale, links = {}) {
   return lines.join('\n');
 }
 
+// marketplace-sales-group-v5: se a venda já foi avisada no grupo, a etiqueta traz só os itens (sem repetir cliente, link e total).
+function shortSummary(sale) {
+  const items = (sale?.details?.items || []).map((item) => `📦 ${Number(item.quantity || 1)}x ${item.name || 'Produto'}${item.variation ? ` (${item.variation})` : ''}${item.sku ? ` · ${item.sku}` : ''}`);
+  return items.join('\n');
+}
+
 function printMessage({ ok, label, order, tracking, stage, reason, instructions, summary = '' }) {
   const extra = summary ? `\n\n${summary}` : '';
   if (ok) return [`🖨️✅ *Etiqueta impressa* · ${label}`, `🧾 Pedido: ${order}`, tracking ? `🚚 Rastreio: ${tracking}` : ''].filter(Boolean).join('\n') + extra;
@@ -95,6 +101,7 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
   }
   async function setConfig(k, v) { await ensure(); await pool.query('INSERT INTO marketplace_group_config (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)', [k, String(v)]); }
   async function wasSent(ref) { const [r] = await pool.query('SELECT 1 FROM marketplace_group_sent WHERE ref = ? LIMIT 1', [ref]); return r.length > 0; }
+  async function wasAnnounced(ref) { const [r] = await pool.query('SELECT 1 FROM marketplace_group_sent WHERE ref = ? AND ok = 1 LIMIT 1', [ref]); return r.length > 0; }
   async function markSent(ref, kind, ok = 1) { await pool.query('INSERT IGNORE INTO marketplace_group_sent (ref, kind, ok) VALUES (?, ?, ?)', [ref.slice(0, 190), kind, ok ? 1 : 0]); }
 
   async function send(groupJid, text) {
@@ -124,9 +131,10 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
     const list = [...new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean))];
     if (!list.length) return '';
     try {
-      const [rows] = await pool.query(`SELECT sale_json FROM marketplace_sales_cache WHERE channel = ? AND external_id IN (${list.map(() => '?').join(',')}) LIMIT 1`, [channel, ...list]);
+      const [rows] = await pool.query(`SELECT connection_id, external_id, sale_json FROM marketplace_sales_cache WHERE channel = ? AND external_id IN (${list.map(() => '?').join(',')}) LIMIT 1`, [channel, ...list]);
       if (!rows?.length) return '';
       const sale = json(rows[0].sale_json);
+      if (await wasAnnounced(`sale:${channel}:${rows[0].connection_id}:${rows[0].external_id}`)) return shortSummary(sale);
       return orderSummary(sale, await productLinks((sale.details?.items || []).map((i) => i.sku)));
     } catch { return ''; }
   }
@@ -173,11 +181,11 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
       for (const it of items) {
         if (await wasSent(it.ref)) continue;
         if (it.kind === 'sale' && it.skip) continue; // não pago/cancelado: espera mudar de status
-        if (baseline) { await markSent(it.ref, it.kind); continue; }
+        if (baseline) { await markSent(it.ref, it.kind, 0); continue; }
         let text;
         if (it.kind === 'sale') {
           const sale = json(it.row.sale_json);
-          if (now() - new Date(it.row.occurred_at).getTime() > MAX_AGE_MS) { await markSent(it.ref, it.kind); continue; }
+          if (now() - new Date(it.row.occurred_at).getTime() > MAX_AGE_MS) { await markSent(it.ref, it.kind, 0); continue; }
           const links = await productLinks((sale.details?.items || []).map((i) => i.sku));
           text = saleMessage({ ...sale, external_id: sale.external_id || it.row.external_id }, { label: channelLabel(it.row.channel, it.row.connection_id, names), links });
         } else text = printMessage({ ...it.print, summary: it.lookup ? await summaryFor(...it.lookup) : '' });
@@ -244,4 +252,4 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
   return { tick, printEvent, start, register, config, setConfig, saleMessage, printMessage, notice };
 }
 
-module.exports = { createMarketplaceSalesGroup, saleMessage, printMessage, orderSummary, channelLabel, SKIP_STATUS };
+module.exports = { shortSummary, createMarketplaceSalesGroup, saleMessage, printMessage, orderSummary, channelLabel, SKIP_STATUS };
