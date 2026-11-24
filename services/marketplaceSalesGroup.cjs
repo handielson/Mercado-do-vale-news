@@ -201,7 +201,14 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
     });
   }
 
-  return { tick, printEvent, start, register, config, setConfig, saleMessage, printMessage };
+  // Aviso avulso no grupo (ex.: estoque da loja PF não baixado).
+  async function notice(text) {
+    const cfg = await config();
+    if (!cfg.group_jid || cfg.enabled === '0') return false;
+    return send(cfg.group_jid, text);
+  }
+
+  return { tick, printEvent, start, register, config, setConfig, saleMessage, printMessage, notice };
 }
 
 module.exports = { createMarketplaceSalesGroup, saleMessage, printMessage, channelLabel, SKIP_STATUS };

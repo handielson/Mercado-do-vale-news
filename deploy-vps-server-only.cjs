@@ -826,6 +826,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--shopee-g-stock-only') || process.argv.includes('--shopee-g-stock-check')) {
+    await require('./scripts/deploy-shopee-g-stock.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--shopee-g-stock-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--shipping-secrets-only') || process.argv.includes('--shipping-secrets-check')) {
     await require('./scripts/deploy-shipping-secrets.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--shipping-secrets-check'),
