@@ -395,11 +395,20 @@ export default function SalesPage() {
         };
     }, [sales]);
 
+    const openRow = (row: (typeof filteredRows)[number]) => {
+        if (row.localSale) {
+            setSelectedSale(row.localSale);
+            setIsModalOpen(true);
+        } else {
+            setSelectedMarketplaceSale(row.marketplaceSale);
+        }
+    };
+
     return (
         <div className="animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-5 sm:mb-8">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
+                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
                         <ShoppingBag className="text-blue-600" size={32} />
                         Gestão de Vendas
                     </h2>
@@ -422,10 +431,10 @@ export default function SalesPage() {
 
             {/* Metrics Dashboard */}
             <p className="mb-2 text-xs text-slate-500">Indicadores financeiros calculados pelas vendas do PDV, onde custo e lucro real estão disponíveis.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+                <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center justify-between mb-2 sm:mb-4">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
                             <DollarSign size={20} />
                         </div>
                         <span className="text-xs font-semibold px-2 py-1 bg-blue-50 text-blue-600 rounded-full">
@@ -433,16 +442,16 @@ export default function SalesPage() {
                         </span>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">Faturamento Bruto</p>
-                        <h3 className="text-2xl font-bold text-slate-800">
+                        <p className="text-xs sm:text-sm font-medium text-slate-500 mb-1">Faturamento Bruto</p>
+                        <h3 className="text-lg sm:text-2xl font-bold text-slate-800">
                             {formatCurrency(summaryStats.total_revenue)}
                         </h3>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center justify-between mb-2 sm:mb-4">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
                             <ArrowUpRight size={20} />
                         </div>
                         <span className="text-xs font-semibold px-2 py-1 bg-emerald-50 text-emerald-600 rounded-full">
@@ -450,16 +459,16 @@ export default function SalesPage() {
                         </span>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">Lucro Real</p>
-                        <h3 className="text-2xl font-bold text-slate-800">
+                        <p className="text-xs sm:text-sm font-medium text-slate-500 mb-1">Lucro Real</p>
+                        <h3 className="text-lg sm:text-2xl font-bold text-slate-800">
                             {formatCurrency(summaryStats.total_profit)}
                         </h3>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
+                <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center justify-between mb-2 sm:mb-4">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                             <ShoppingBag size={20} />
                         </div>
                         <span className="text-xs font-semibold px-2 py-1 bg-purple-50 text-purple-600 rounded-full">
@@ -467,16 +476,16 @@ export default function SalesPage() {
                         </span>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">Ticket Médio</p>
-                        <h3 className="text-2xl font-bold text-slate-800">
+                        <p className="text-xs sm:text-sm font-medium text-slate-500 mb-1">Ticket Médio</p>
+                        <h3 className="text-lg sm:text-2xl font-bold text-slate-800">
                             {formatCurrency(summaryStats.average_ticket)}
                         </h3>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                <div className="bg-white p-3 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center justify-between mb-2 sm:mb-4">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
                             <ArrowDownRight size={20} />
                         </div>
                         <span className="text-xs font-semibold px-2 py-1 bg-orange-50 text-orange-600 rounded-full">
@@ -484,8 +493,8 @@ export default function SalesPage() {
                         </span>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">Margem de Lucro</p>
-                        <h3 className="text-2xl font-bold text-slate-800">
+                        <p className="text-xs sm:text-sm font-medium text-slate-500 mb-1">Margem de Lucro</p>
+                        <h3 className="text-lg sm:text-2xl font-bold text-slate-800">
                             {summaryStats.profit_margin.toFixed(1)}%
                         </h3>
                     </div>
@@ -493,7 +502,7 @@ export default function SalesPage() {
             </div>
 
             {/* Cards de Período */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
                 {([
                     { key: 'day', label: 'Hoje', color: 'blue', icon: '📅' },
                     { key: 'week', label: 'Esta Semana', color: 'violet', icon: '📆' },
@@ -506,7 +515,7 @@ export default function SalesPage() {
                         <button
                             key={key}
                             onClick={() => isActive ? clearPeriod() : applyPeriod(key)}
-                            className={`text-left p-4 rounded-xl border-2 transition-all ${isActive
+                            className={`text-left p-3 sm:p-4 rounded-xl border-2 transition-all ${isActive
                                     ? 'border-blue-500 bg-blue-50 shadow-md'
                                     : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
                                 }`}
@@ -525,7 +534,7 @@ export default function SalesPage() {
 
             {/* Filtros de Data + Busca + Status */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col gap-3">
+                <div className="p-3 sm:p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col gap-3">
                     {/* Linha 1: busca + status */}
                     <div className="flex flex-col sm:flex-row gap-3 items-center">
                         <div className="relative w-full sm:max-w-md">
@@ -616,7 +625,73 @@ export default function SalesPage() {
                     )}
                 </div>
 
-                <div className="w-full overflow-hidden">
+                {/* sales-mobile-cards-v1: no celular cada venda vira um cartão (a tabela de 8 colunas ficava espremida). */}
+                <div className="md:hidden divide-y divide-slate-100">
+                    {isLoading ? (
+                        <div className="flex flex-col items-center justify-center p-8 text-slate-500">
+                            <RefreshCw className="animate-spin mb-2 text-blue-500" size={24} />
+                            <span>Carregando vendas...</span>
+                        </div>
+                    ) : filteredRows.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500">
+                            <ShoppingBag size={40} className="mx-auto text-slate-300 mb-3" />
+                            <p className="font-medium text-slate-700">Nenhuma venda encontrada</p>
+                            <p className="text-sm">Tente ajustar seus filtros de busca ou status.</p>
+                        </div>
+                    ) : (
+                        filteredRows.map((row) => {
+                            const loss = row.profitCents !== null && row.profitCents < 0;
+                            return (
+                                <button
+                                    key={row.key}
+                                    type="button"
+                                    onClick={() => openRow(row)}
+                                    className={`block w-full px-3 py-3 text-left transition-colors active:bg-slate-100 ${loss ? 'bg-red-50 shadow-[inset_4px_0_0_#dc2626]' : 'bg-white'}`}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                                                    {row.channelLabel}
+                                                </span>
+                                                <span className="truncate text-xs text-slate-500">{formatDate(row.occurredAt)}</span>
+                                            </div>
+                                            <div className="mt-1 truncate text-sm font-semibold text-slate-800">{row.customerName}</div>
+                                            <div className="truncate text-xs text-slate-500">
+                                                {row.itemCount} {row.itemCount === 1 ? 'item' : 'itens'} · <span className="font-mono">{row.displayId}</span>
+                                                {row.localSale?.seller?.name ? ` · Vend: ${row.localSale.seller.name.split(' ')[0]}` : ''}
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <div className="whitespace-nowrap text-base font-bold text-slate-800">{formatCurrency(row.totalCents)}</div>
+                                            {loss && (
+                                                <div className="whitespace-nowrap text-xs font-semibold text-red-700">
+                                                    Prejuízo {formatCurrency(row.profitCents as number)}{row.profitEstimated ? ' (est.)' : ''}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${row.localSale ? getSaleOperationalStatusStyle(row.localSale) : getMarketplaceStatusStyle(row.normalizedStatus)}`}>
+                                            {row.localSale ? getSaleOperationalStatusLabel(row.localSale) : getMarketplaceStatusLabel(row.normalizedStatus)}
+                                        </span>
+                                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${row.localSale ? getDeliveryStatusStyle(row.localSale) : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                            <Truck size={12} className="shrink-0" />
+                                            {row.localSale ? getDeliveryStatusLabel(row.localSale) : 'Marketplace'}
+                                        </span>
+                                        {row.localSale?.finalization_status === 'needs_review' && (
+                                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">Corrigir log</span>
+                                        )}
+                                        {isPayJoySale(row.localSale) && <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">{PAYJOY_SALE_NOTE}</span>}
+                                        <span className="ml-auto text-xs font-medium text-blue-600">Ver detalhes ›</span>
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+
+                <div className="hidden w-full overflow-hidden md:block">
                     <table className="w-full table-fixed text-left border-collapse">
                         <colgroup>
                             <col className="w-[11%]" />
@@ -728,14 +803,7 @@ export default function SalesPage() {
                                         </td>
                                         <td className="px-1 py-4 text-center lg:px-2">
                                             <button
-                                                onClick={() => {
-                                                    if (row.localSale) {
-                                                        setSelectedSale(row.localSale);
-                                                        setIsModalOpen(true);
-                                                    } else {
-                                                        setSelectedMarketplaceSale(row.marketplaceSale);
-                                                    }
-                                                }}
+                                                onClick={() => openRow(row)}
                                                 className="max-w-full whitespace-normal rounded-lg p-1.5 text-xs font-medium leading-tight text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
                                             >
                                                 Ver Detalhes

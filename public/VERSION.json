@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.901-medidas-fonte-unica",
-  "date": "2026-11-23",
+  "version": "v1.2.902-vendas-celular",
+  "date": "2026-11-24",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.901-medidas-fonte-unica",
-  "release_vps": "/var/www/mdv-site/releases/20261123-112305-v1-2-901-medidas-fonte-unica",
+  "tag": "v1.2.902-vendas-celular",
+  "release_vps": "/var/www/mdv-site/releases/20261124-124831-v1-2-902-vendas-celular",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Peso e medidas do produto com uma fonte só: Especificações e seção de medidas gravam o mesmo lugar; o modelo só preenche o que faltar. 1585 produtos alinhados (177 mudaram a medida do frete).",
+  "summary": "Página de vendas no celular: cada venda vira um cartão (canal, data, cliente, total, status, entrega) e o resumo do topo fica 2 por linha.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,23 +31,20 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-23-v1.2.901-medidas-fonte-unica.md"
+    "ver docs/versoes/2026-11-24-v1.2.902-vendas-celular.md"
   ],
   "validations": [
-    "tmp-tests/product-measures.test.cjs ok (5)",
-    "backfill: 0 divergências depois de aplicar",
-    "tsc sem erro em products.ts"
+    "tsc sem erro em SalesPage.tsx",
+    "build ok"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261123-112305-v1-2-901-medidas-fonte-unica",
-    "previous": "/var/www/mdv-site/releases/20261123-105143-v1-2-900-medidas-materiais"
+    "release": "/var/www/mdv-site/releases/20261124-124831-v1-2-902-vendas-celular",
+    "previous": "/var/www/mdv-site/releases/20261123-112305-v1-2-901-medidas-fonte-unica"
   },
   "api_release": {
-    "status": "sem mudança de código",
-    "service": "mdv-api",
-    "mode": "só dados (scripts/backfill-product-measures.cjs --apply)",
-    "note": "backup /var/www/mdv-api/backups/product-measures-2026-11-23T14-21-31-932Z.json"
+    "status": "sem mudança nesta versão",
+    "service": "mdv-api"
   },
   "nginx_release": {
     "status": "publicada",

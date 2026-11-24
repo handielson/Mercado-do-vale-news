@@ -1,3 +1,10 @@
+# v1.2.902-vendas-celular
+
+Data: 24/11/2026. Branch: `main`. Status: **publicada** (site, release `20261124-124831-v1-2-902-vendas-celular`). API e robô sem mudança nesta versão.
+Página de vendas em cartões no celular. Registro: `docs/versoes/2026-11-24-v1.2.902-vendas-celular.md`.
+
+---
+
 # v1.2.901-medidas-fonte-unica
 
 Data: 23/11/2026. Branch: `main`. Status: **publicada** (site, release `20261123-112305-v1-2-901-medidas-fonte-unica`; dados alinhados). Robô sem mudança.
