@@ -1600,6 +1600,7 @@ module.exports = {
   isErpPriceWriteEnabled,
   requireMercadoLivreErpRead,
   syncMercadoLivreStockFromBlingTargets,
+  mlRequest, // marketplace-auto-link-v1
   parseNotificationResource,
   classifyShipment,
   normalizeAvailableQuantity,
