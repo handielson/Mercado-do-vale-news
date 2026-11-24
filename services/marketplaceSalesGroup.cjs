@@ -45,10 +45,30 @@ function saleMessage(sale, { label, links = {} }) {
   return lines.join('\n');
 }
 
-function printMessage({ ok, label, order, tracking, stage, reason, instructions }) {
-  if (ok) return [`🖨️✅ *Etiqueta impressa* · ${label}`, `🧾 Pedido: ${order}`, tracking ? `🚚 Rastreio: ${tracking}` : ''].filter(Boolean).join('\n');
+// marketplace-sales-group-v3: resumo do pedido (cliente, itens, SKU, link) também no aviso de etiqueta.
+function orderSummary(sale, links = {}) {
+  if (!sale) return '';
+  const d = sale.details || {};
+  const addr = d.shipping_address || {};
+  const lines = [];
+  const who = [sale.customer_name || addr.name, [addr.city, addr.state].filter(Boolean).join('/')].filter(Boolean).join(' · ');
+  if (who) lines.push(`👤 ${who}`);
+  lines.push('📦 *Itens:*');
+  for (const item of d.items || []) {
+    lines.push(`*${Number(item.quantity || 1)}x* ${item.name || 'Produto'}${item.variation ? ` (${item.variation})` : ''}`);
+    if (item.sku) lines.push(`   SKU: ${item.sku}`);
+    const link = links[String(item.sku || '').toUpperCase()];
+    if (link) lines.push(`   🔗 ${link}`);
+  }
+  if (sale.total_cents) lines.push(`💰 Total: *${brl(sale.total_cents)}*`);
+  return lines.join('\n');
+}
+
+function printMessage({ ok, label, order, tracking, stage, reason, instructions, summary = '' }) {
+  const extra = summary ? `\n\n${summary}` : '';
+  if (ok) return [`🖨️✅ *Etiqueta impressa* · ${label}`, `🧾 Pedido: ${order}`, tracking ? `🚚 Rastreio: ${tracking}` : ''].filter(Boolean).join('\n') + extra;
   return [`⚠️❌ *Etiqueta NÃO impressa* · ${label}`, `🧾 Pedido: ${order}`, tracking ? `🚚 Rastreio: ${tracking}` : '', stage ? `📍 Etapa: ${stage}` : '',
-    `❓ Motivo: ${String(reason || 'não informado').slice(0, 600)}`, instructions ? `🛠️ O que fazer: ${String(instructions).slice(0, 500)}` : ''].filter(Boolean).join('\n');
+    `❓ Motivo: ${String(reason || 'não informado').slice(0, 600)}`, instructions ? `🛠️ O que fazer: ${String(instructions).slice(0, 500)}` : ''].filter(Boolean).join('\n') + extra;
 }
 
 function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalThis.fetch, now = () => Date.now(), logger = console, delayMs = 1500 }) {
@@ -100,6 +120,17 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
     return Object.fromEntries((rows || []).map((r) => [String(r.sku).toUpperCase(), `${SITE}/produto/${encodeURIComponent(r.slug || r.id)}`]));
   }
 
+  async function summaryFor(channel, ids) {
+    const list = [...new Set((ids || []).map((x) => String(x || '').trim()).filter(Boolean))];
+    if (!list.length) return '';
+    try {
+      const [rows] = await pool.query(`SELECT sale_json FROM marketplace_sales_cache WHERE channel = ? AND external_id IN (${list.map(() => '?').join(',')}) LIMIT 1`, [channel, ...list]);
+      if (!rows?.length) return '';
+      const sale = json(rows[0].sale_json);
+      return orderSummary(sale, await productLinks((sale.details?.items || []).map((i) => i.sku)));
+    } catch { return ''; }
+  }
+
   // Coleta o que ainda não foi avisado. baseline=true só marca (primeira rodada).
   async function pending() {
     const items = [];
@@ -109,11 +140,11 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
       const ref = `sale:${row.channel}:${row.connection_id}:${row.external_id}`;
       items.push({ ref, kind: 'sale', row, skip: SKIP_STATUS.test(String(row.status || '').trim()) });
     }
-    const [ml] = await pool.query(`SELECT shipment_id, order_id, status, tracking_number, last_error, updated_at FROM mercado_livre_print_jobs
+    const [ml] = await pool.query(`SELECT shipment_id, order_id, pack_id, status, tracking_number, last_error, updated_at FROM mercado_livre_print_jobs
       WHERE updated_at > NOW() - INTERVAL 3 DAY AND status IN ('printed','intervention')`).catch(() => [[]]);
     for (const j of ml || []) {
       const err = j.status === 'intervention' ? String(j.last_error || 'Remessa não está pronta para imprimir no Mercado Livre.') : '';
-      items.push({ ref: `print:ml:${j.shipment_id}:${j.status}${err ? `:${hashOf(err)}` : ''}`, kind: 'print', print: {
+      items.push({ ref: `print:ml:${j.shipment_id}:${j.status}${err ? `:${hashOf(err)}` : ''}`, kind: 'print', lookup: ['mercado_livre', [j.order_id, j.pack_id]], print: {
         ok: j.status === 'printed', label: 'Mercado Livre', order: j.order_id || j.shipment_id, tracking: j.tracking_number, stage: 'Impressão', reason: err,
         instructions: err ? 'Abra a venda no Mercado Livre, resolva o que está no motivo e imprima de novo pelo painel.' : '' } });
     }
@@ -121,7 +152,7 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
       WHERE updated_at > NOW() - INTERVAL 3 DAY AND status IN ('printed','intervention')`).catch(() => [[]]);
     for (const j of tt || []) {
       const err = j.status === 'intervention' ? String(j.last_error || 'Falha na impressão.') : '';
-      items.push({ ref: `print:tiktok:${j.package_id}:${j.status}${err ? `:${hashOf(err)}` : ''}`, kind: 'print', print: {
+      items.push({ ref: `print:tiktok:${j.package_id}:${j.status}${err ? `:${hashOf(err)}` : ''}`, kind: 'print', lookup: ['tiktok', [j.order_id]], print: {
         ok: j.status === 'printed', label: 'TikTok Shop', order: j.order_id, tracking: j.tracking_number, stage: 'Impressão', reason: err,
         instructions: err ? 'Abra o pedido no TikTok Shop, resolva o que está no motivo e imprima de novo pelo painel.' : '' } });
     }
@@ -148,7 +179,7 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
           if (now() - new Date(it.row.occurred_at).getTime() > MAX_AGE_MS) { await markSent(it.ref, it.kind); continue; }
           const links = await productLinks((sale.details?.items || []).map((i) => i.sku));
           text = saleMessage({ ...sale, external_id: sale.external_id || it.row.external_id }, { label: channelLabel(it.row.channel, it.row.connection_id, names), links });
-        } else text = printMessage(it.print);
+        } else text = printMessage({ ...it.print, summary: it.lookup ? await summaryFor(...it.lookup) : '' });
         try { await send(cfg.group_jid, text); await markSent(it.ref, it.kind); sent += 1; }
         catch (e) { logger.warn?.(`[marketplace-group] envio falhou (${it.ref}): ${e.message}`); break; }
         await new Promise((r) => setTimeout(r, delayMs));
@@ -170,7 +201,8 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
     if (await wasSent(ref)) return { ok: true, skipped: 'repetido' };
     const names = await shopeeNames();
     const label = body.label ? String(body.label).slice(0, 40) : channelLabel('shopee', String(body.connection || ''), names);
-    await send(cfg.group_jid, printMessage({ ok, label, order, tracking: String(body.tracking || '').trim().slice(0, 60), stage: body.stage, reason, instructions: body.instructions }));
+    const summary = await summaryFor('shopee', [order]);
+    await send(cfg.group_jid, printMessage({ summary, ok, label, order, tracking: String(body.tracking || '').trim().slice(0, 60), stage: body.stage, reason, instructions: body.instructions }));
     await markSent(ref, 'print', ok);
     return { ok: true };
   }
@@ -211,4 +243,4 @@ function createMarketplaceSalesGroup({ pool, evolution = {}, fetchImpl = globalT
   return { tick, printEvent, start, register, config, setConfig, saleMessage, printMessage, notice };
 }
 
-module.exports = { createMarketplaceSalesGroup, saleMessage, printMessage, channelLabel, SKIP_STATUS };
+module.exports = { createMarketplaceSalesGroup, saleMessage, printMessage, orderSummary, channelLabel, SKIP_STATUS };

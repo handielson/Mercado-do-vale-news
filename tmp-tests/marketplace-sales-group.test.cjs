@@ -10,6 +10,7 @@ function fakePool(state) {
     if (/INSERT INTO marketplace_group_config/.test(sql)) { state.cfg[args[0]] = args[1]; return [[]]; }
     if (/SELECT 1 FROM marketplace_group_sent/.test(sql)) return [state.sent.has(args[0]) ? [{ 1: 1 }] : []];
     if (/INSERT IGNORE INTO marketplace_group_sent/.test(sql)) { state.sent.add(args[0]); return [[]]; }
+    if (/FROM marketplace_sales_cache WHERE channel = \? AND external_id IN/.test(sql)) return [state.sales.filter((x) => x.channel === args[0] && args.slice(1).includes(x.external_id))];
     if (/FROM marketplace_sales_cache/.test(sql)) return [state.sales];
     if (/FROM mercado_livre_print_jobs/.test(sql)) return [state.ml || []];
     if (/FROM tiktok_shop_print_jobs/.test(sql)) return [[]];
@@ -67,4 +68,16 @@ test('rastreio da Shopee no aviso de etiqueta impressa', async () => {
   const g = createMarketplaceSalesGroup({ pool: fakePool(state), delayMs: 0, evolution: { url: 'https://e', key: 'k', instance: 'i' }, fetchImpl: async (u, o) => { sent.push(JSON.parse(o.body).text); return { ok: true }; } });
   await g.printEvent({ order: '2611X', ok: true, connection: 'primary', tracking: ' BR2611X9 ' });
   assert.match(sent[0], /Etiqueta impressa\* · Shopee MV/); assert.match(sent[0], /🚚 Rastreio: BR2611X9$/m);
+});
+
+test('aviso de etiqueta traz o resumo do pedido (cliente, itens, SKU, link)', async () => {
+  const state = { cfg: { group_jid: '1203@g.us', baseline_done: '1' }, sent: new Set(), sales: [],
+    ml: [{ shipment_id: 'S9', order_id: 'O9', pack_id: null, status: 'printed', last_error: null, tracking_number: 'BR9' }] };
+  state.sales.push({ ...sale('O9', 'paid'), channel: 'mercado_livre', occurred_at: new Date(Date.now() - 5 * 86400e3) });
+  const sent = [];
+  const g = createMarketplaceSalesGroup({ pool: fakePool(state), delayMs: 0, evolution: { url: 'https://e', key: 'k', instance: 'i' }, fetchImpl: async (u, o) => { sent.push(JSON.parse(o.body).text); return { ok: true }; } });
+  await g.tick();
+  const msg = sent.find((x) => /Etiqueta impressa/.test(x));
+  assert.match(msg, /👤 Maria · Petrolina\/PE/); assert.match(msg, /\*1x\* Capa A03 \(Rosa\)/); assert.match(msg, /SKU: CCSAGA03ROS/);
+  assert.match(msg, /mercadodovale\.com\.br\/produto\/capa-a03/); assert.match(msg, /Total: \*R\$\s?29,90\*/);
 });
