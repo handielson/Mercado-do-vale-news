@@ -858,6 +858,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--bot-focus-product-only') || process.argv.includes('--bot-focus-product-check')) {
+    await require('./scripts/deploy-bot-focus-product.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--bot-focus-product-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--shipping-secrets-only') || process.argv.includes('--shipping-secrets-check')) {
     await require('./scripts/deploy-shipping-secrets.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--shipping-secrets-check'),

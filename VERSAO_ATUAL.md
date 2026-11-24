@@ -1,3 +1,10 @@
+# v1.2.903-celular-em-foco
+
+Data: 24/11/2026. Branch: `main`. Status: **publicada** (API + site `20261124-144701-v1-2-903-celular-em-foco` + robô).
+Estrela no card escolhe o celular em foco; a lista do robô fecha indicando ele. Registro: `docs/versoes/2026-11-24-v1.2.903-celular-em-foco.md`.
+
+---
+
 # v1.2.902-vendas-celular
 
 Data: 24/11/2026. Branch: `main`. Status: **publicada** (site, release `20261124-124831-v1-2-902-vendas-celular`). API e robô sem mudança nesta versão.

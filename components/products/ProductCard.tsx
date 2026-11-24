@@ -1,7 +1,7 @@
 
 import { ProductConditionBadge } from '../catalog/ProductConditionBadge';
 import React, { useId, useState, useEffect, useRef , type ReactNode } from 'react';
-import { Barcode, ChevronDown, ChevronUp, Copy, Edit, Eye, EyeOff, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
+import { Star, Barcode, ChevronDown, ChevronUp, Copy, Edit, Eye, EyeOff, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -17,6 +17,7 @@ import { CatalogTitleEditor } from './CatalogTitleEditor';
 import { ProductCardActionsMenu, type ProductCardAction } from './ProductCardActionsMenu';
 import { ProductPublicationChannels } from './ProductPublicationChannels';
 import { getAuthSessionToken } from '../../services/authSession';
+import { botFocusProductService, useBotFocusProductId } from '../../services/botFocusProduct';
 import { buildVpsUrl } from '../../services/vpsProxyBase';
 import { uploadVideoWithProgress, pollSynologyUploadStatus } from '../../services/productVideoUpload';
 import { vpsApiService } from '../../services/vpsApiService';
@@ -299,6 +300,9 @@ function useNearViewport(ref: React.RefObject<HTMLElement | null>): boolean {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariants, familyStockSummary, forceDetailsExpanded = false, onEdit, onDelete, priceVariants, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
     const [detailsExpanded, setDetailsExpanded] = useState(false);
+    const botFocusProductId = useBotFocusProductId();
+    const isBotFocus = botFocusProductId === product.id;
+    const [focusSaving, setFocusSaving] = useState(false);
     const detailsId = useId();
     const showDetails = detailsExpanded || forceDetailsExpanded;
     // Consultas do card (vídeo, foto reserva) só quando ele chega perto da tela.
@@ -1231,6 +1235,35 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                     />
                 ) : (
                     <Package className="w-16 h-16 text-slate-300" />
+                )}
+
+                {/* bot-focus-product-v1: estrela = celular em foco do robô (um por vez; tocar de novo tira). */}
+                {!selectionMode && (
+                    <button
+                        type="button"
+                        onClick={async (event) => {
+                            event.stopPropagation();
+                            if (focusSaving) return;
+                            setFocusSaving(true);
+                            try {
+                                const focus = await botFocusProductService.toggle(product.id);
+                                toast.success(focus ? `⭐ ${product.name} é o celular em foco do robô` : 'Produto saiu do foco do robô');
+                            } catch (error) {
+                                toast.error(`Não consegui mudar o foco: ${(error as Error)?.message || error}`);
+                            } finally {
+                                setFocusSaving(false);
+                            }
+                        }}
+                        title={isBotFocus ? 'Em foco na lista do robô (tocar para tirar)' : 'Colocar em foco na lista do robô'}
+                        aria-label={isBotFocus ? 'Tirar do foco do robô' : 'Colocar em foco no robô'}
+                        aria-pressed={isBotFocus}
+                        className={cn(
+                            'absolute bottom-2 right-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border shadow-md transition-colors',
+                            isBotFocus ? 'border-amber-500 bg-amber-400 text-white' : 'border-slate-200 bg-white/90 text-slate-400 hover:text-amber-500'
+                        )}
+                    >
+                        {focusSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className="h-5 w-5" fill={isBotFocus ? 'currentColor' : 'none'} />}
+                    </button>
                 )}
 
                 {/* Badge "Produto Pai" - substitui o badge de estoque pra agregadores */}
