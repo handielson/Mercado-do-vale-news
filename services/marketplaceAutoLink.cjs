@@ -104,9 +104,10 @@ function createMarketplaceAutoLink({ pool, shopee, ml, resync, notify = async ()
     const [links] = await pool.query('SELECT item_id, variation_id FROM mercado_livre_products');
     const linked = new Set(links.map((l) => `${l.item_id}:${l.variation_id || ''}`));
     const skuAttr = (attrs = []) => String((attrs.find((a) => a.id === 'SELLER_SKU') || {}).value_name || '').trim();
-    for (let i = 0; i < ids.length; i += 20) {
-      const arr = await ml(`/items?ids=${ids.slice(i, i + 20).join(',')}&include_attributes=all`);
-      for (const { body: it } of arr || []) {
+    // A consulta de vários anúncios de uma vez (/items?ids=) foi desativada pelo ML para este app: um por um.
+    for (const id of ids) {
+      {
+        const it = await ml(`/items/${id}?include_attributes=all`);
         if (!it?.id) continue;
         const units = it.variations?.length
           ? it.variations.map((v) => ({ v: String(v.id), sku: skuAttr(v.attributes) || String(v.seller_custom_field || '') }))
@@ -123,7 +124,7 @@ function createMarketplaceAutoLink({ pool, shopee, ml, resync, notify = async ()
     }
   }
 
-  async function run() {
+  async function run({ only = '' } = {}) {
     if (running) return { skipped: 'rodando' };
     running = true;
     const started = Date.now();
@@ -134,7 +135,7 @@ function createMarketplaceAutoLink({ pool, shopee, ml, resync, notify = async ()
       const touched = new Set();
       const [conns] = await pool.query("SELECT id, display_name FROM shopee_shop_connections WHERE active = 1 AND authorization_status = 'connected'");
       const shops = [{ id: 'primary', name: 'Shopee MV' }, ...conns.map((c) => ({ id: String(c.id), name: c.display_name }))];
-      for (const s of shops) {
+      for (const s of only === 'ml' ? [] : shops) {
         const report = { ligado: 0, variacao_corrigida: 0, anuncio_extra: 0, sku_repetido: 0 };
         try { await linkShopee(s.id, bySku, touched, report); } catch (e) { report.erro = String(e.message || e).slice(0, 200); }
         out[s.name] = report;

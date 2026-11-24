@@ -31,7 +31,7 @@ function world() {
     if (path.endsWith('get_model_list')) return { response: { model: p.item_id === 200 ? [{ model_id: 21, model_sku: 'A21AZU' }, { model_id: 22, model_sku: 'A21ROS' }] : [{ model_id: 11, model_sku: 'A21AZU' }] } };
   };
   const ml = async (path) => path.includes('/search') ? (path.includes('scroll_id') ? { results: [] } : { results: ['MLB1'], scroll_id: 's' })
-    : [{ body: { id: 'MLB1', attributes: [{ id: 'SELLER_SKU', value_name: 'MLSKU' }] } }];
+    : { id: 'MLB1', attributes: [{ id: 'SELLER_SKU', value_name: 'MLSKU' }] };
   return { db, pool, shopee, ml };
 }
 

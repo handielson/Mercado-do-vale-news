@@ -25,6 +25,9 @@ const LOADER_NEW = `    \`SELECT product_id, connection_id, shopee_item_id, shop
 
 function patch(source) {
   let next = String(source).replace(/\r\n/g, '\n');
+  // v2: a rota aceita {only:'ml'} para rodar só o Mercado Livre.
+  const OLD_ROUTE = "fastify.post('/api/marketplace-auto-link/run', { preHandler: requireSyncKey }, async () => {\n  marketplaceAutoLinkVps.run()";
+  if (next.includes(MARK) && next.includes(OLD_ROUTE)) return next.replace(OLD_ROUTE, () => "fastify.post('/api/marketplace-auto-link/run', { preHandler: requireSyncKey }, async (request) => {\n  marketplaceAutoLinkVps.run({ only: request.body?.only === 'ml' ? 'ml' : '' })");
   if (next.includes(MARK)) return next;
   for (const [a, label] of [[ANCHOR, 'resync route'], [LOADER_OLD, 'shopee stock links loader']]) {
     const n = next.split(a).length - 1;
@@ -45,8 +48,8 @@ const marketplaceAutoLinkVps = require('./services/marketplaceAutoLink.cjs').cre
   notify: (text) => marketplaceSalesGroupVps.notice(text),
 });
 marketplaceAutoLinkVps.start();
-fastify.post('/api/marketplace-auto-link/run', { preHandler: requireSyncKey }, async () => {
-  marketplaceAutoLinkVps.run().catch((e) => console.warn('[auto-link]', e.message));
+fastify.post('/api/marketplace-auto-link/run', { preHandler: requireSyncKey }, async (request) => {
+  marketplaceAutoLinkVps.run({ only: request.body?.only === 'ml' ? 'ml' : '' }).catch((e) => console.warn('[auto-link]', e.message));
   return { ok: true, started: true };
 });
 ${ANCHOR}`);
