@@ -22,7 +22,7 @@ test('com celular em foco na lista: fecha com a indicação dele (número, memó
     product('p1', 'Poco C71', '4GB', '128GB', 'Azul', 90100)];
   const out = run(codeOf(patchWorkflow(w)), rows);
   const text = String(out.deterministicCatalogOutput || JSON.stringify(out));
-  assert.match(text, /⭐ \*Nossa indicação:\* \d+\. Redmi 15[^\n]*8GB\/256GB/);
+  assert.match(text, /⭐ \*Nossa indicação:\*(?: |\[\[BR\]\]\[\[BR\]\])\d+\. Redmi 15[^\n]*8GB\/256GB/);
   assert.match(text, /R\$\s?1\.349,00 à vista no PIX/);
   assert.match(text, /💳 Cartão: 12x de/);
   assert.doesNotMatch(text, /Qual modelo voce quer ver em mais detalhes/);
