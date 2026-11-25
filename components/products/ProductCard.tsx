@@ -398,6 +398,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
             depositName: item.deposit?.name || 'Deposito sem nome',
             locationName: item.location?.name || '-',
             locationCode: item.location?.code || null,
+            variationLabel: (item as ProductStockLocation & { variationLabel?: string }).variationLabel || null,
             quantity: Number(item.quantity || 0),
             reserved: Number(item.reserved_quantity || 0),
             fallbackStoreStockLocation: false,
@@ -408,6 +409,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                 depositName: 'Loja Principal',
                 locationName: 'Estoque Geral',
                 locationCode: 'LOJA',
+                variationLabel: null,
                 quantity: currentStockQuantity,
                 reserved: 0,
                 fallbackStoreStockLocation: true,
@@ -736,8 +738,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
         setStockLocationError(null);
 
         try {
-            const rows = await stockLocationService.getProductStockDistribution(product.id);
-            setStockLocationRows(rows);
+            // family-stock-locations-v1: na família (pai), o estoque fica nas variações; mostra os locais de cada uma.
+            const familyVariants = (priceVariants || []).filter((variant) => variant?.id && String(variant.id) !== String(product.id));
+            if (familyVariants.length) {
+                const variantLabel = (variant: Product) => String(variant.name.match(/Cor:\s*([^,]+)/i)?.[1] || variant.sku || variant.name);
+                const perVariant = await Promise.all(familyVariants.map(async (variant) => {
+                    const variantRows = await stockLocationService.getProductStockDistribution(variant.id);
+                    return variantRows.map((row) => ({ ...row, variationLabel: variantLabel(variant) }));
+                }));
+                const ownRows = await stockLocationService.getProductStockDistribution(product.id).catch(() => []);
+                setStockLocationRows([...ownRows, ...perVariant.flat()].filter((row) => Number(row.quantity || 0) > 0 || Number(row.reserved_quantity || 0) > 0));
+            } else {
+                const rows = await stockLocationService.getProductStockDistribution(product.id);
+                setStockLocationRows(rows);
+            }
         } catch (error) {
             console.error('[ProductCard] Erro ao carregar locais de estoque:', error);
             setStockLocationRows([]);
@@ -2117,7 +2131,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, familyVariant
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
                                                         <p className="truncate text-sm font-bold text-slate-900">
-                                                            {item.depositName}
+                                                            {item.variationLabel ? `${item.variationLabel} · ` : ''}{item.depositName}
                                                         </p>
                                                         <p className="mt-0.5 truncate text-xs text-slate-500">
                                                             Local: {item.locationName}

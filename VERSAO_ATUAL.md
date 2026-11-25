@@ -1,3 +1,10 @@
+# v1.2.905-locais-familia
+
+Data: 25/11/2026. Branch: `main`. Status: **publicada** (site `20261125-104641-v1-2-905-locais-familia`). API sem mudança.
+Locais de estoque na família mostram cada variação; locais de 308 produtos acertados pelo Bling. Registro: `docs/versoes/2026-11-25-v1.2.905-locais-familia.md`.
+
+---
+
 # v1.2.904-layout-celular
 
 Data: 24/11/2026. Branch: `main`. Status: **publicada** (site `20261124-154723-v1-2-904-layout-celular`). API e robô sem mudança nesta versão.

@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.904-layout-celular",
-  "date": "2026-11-24",
+  "version": "v1.2.905-locais-familia",
+  "date": "2026-11-25",
   "status": "publicada",
   "branch": "main",
-  "tag": "v1.2.904-layout-celular",
-  "release_vps": "/var/www/mdv-site/releases/20261124-154723-v1-2-904-layout-celular",
+  "tag": "v1.2.905-locais-familia",
+  "release_vps": "/var/www/mdv-site/releases/20261125-104641-v1-2-905-locais-familia",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Painel no celular: tabelas largas rolam para o lado (antes cortadas), títulos com botões quebram linha; Config. do Catálogo não quebra mais com SEO vazio; Catálogo e PDV cabem na tela.",
+  "summary": "\"Onde está no estoque\" na família mostra os locais de cada variação (antes aparecia 0). Locais de 308 produtos acertados pelo saldo do Bling.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -31,16 +31,16 @@
   },
   "site_source_base": "a0bc9b4",
   "changed_files": [
-    "ver docs/versoes/2026-11-24-v1.2.904-layout-celular.md"
+    "ver docs/versoes/2026-11-25-v1.2.905-locais-familia.md"
   ],
   "validations": [
-    "varredura de 87 páginas do painel a 390 px",
-    "tsc sem erro nos arquivos alterados"
+    "tsc sem erro no ProductCard",
+    "reconciliação: 308 aplicados, 0 falhas, backup em /var/www/mdv-api/backups/stock-locations-reconcile-1795614356406.json"
   ],
   "site_release": {
     "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261124-154723-v1-2-904-layout-celular",
-    "previous": "/var/www/mdv-site/releases/20261124-144701-v1-2-903-celular-em-foco"
+    "release": "/var/www/mdv-site/releases/20261125-104641-v1-2-905-locais-familia",
+    "previous": "/var/www/mdv-site/releases/20261124-154723-v1-2-904-layout-celular"
   },
   "api_release": {
     "status": "sem mudança nesta versão",
@@ -99,7 +99,7 @@
       "note": "Publicação confirmada pelo operador e registrada sem reenvio. ID histórico não recuperado; nenhuma identificação fictícia gravada."
     }
   },
-  "pending_previous": "v1.2.899-frete-tokens-servidor publicada.",
+  "pending_previous": "v1.2.904-layout-celular publicada.",
   "print_agent_release": {
     "status": "publicada",
     "host": "Lenovo DESKTOP-TEH0T2E",
