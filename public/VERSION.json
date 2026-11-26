@@ -1,7 +1,7 @@
 {
   "version": "v1.2.916-cartao-lista",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.916-cartao-lista",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
@@ -110,8 +110,10 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "pendente",
-    "workflow": "SkrkB4vyKVDnQ68t"
+    "status": "publicada",
+    "workflow": "SkrkB4vyKVDnQ68t",
+    "fingerprint": "f7d4ea55b91372442707678b2b5890a3d86a235ed445c4196c8b71701b7438cc",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-26T19-14-10-640Z-de9c35b5.aes256gcm.json"
   },
   "db_release": {
     "status": "publicada",

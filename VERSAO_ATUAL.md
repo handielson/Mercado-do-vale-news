@@ -1,6 +1,6 @@
 # v1.2.916-cartao-lista
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente** (robô n8n).
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 26/11 ~16h14).
 Respostas de cartão do robô em lista com emojis, sem cartão virtual nem pagamento por link. Registro: `docs/versoes/2026-11-26-v1.2.916-cartao-lista.md`.
 
 ---
