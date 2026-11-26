@@ -1,10 +1,10 @@
 {
   "version": "v1.2.907-video-variacao-f5",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.907-video-variacao-f5",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Página do Produto: vídeo enviado pela variação não some mais ao dar F5 (a checagem não usa mais a resposta antiga guardada pelo navegador).",
   "gestao_mdv_android": {
@@ -36,11 +36,12 @@
   "validations": [
     "node --test tmp-tests/sku-video-upload-product-page.test.mjs",
     "tsc sem erro no SkuVideoUpload",
-    "vite build ok"
+    "vite build ok",
+    "produção: após F5, REAL0001-01 mostra \"Vídeo\" + \"Trocar\"; REAL0001-02 (sem vídeo) mostra \"Enviar vídeo\""
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5",
     "previous": "/var/www/mdv-site/releases/20261126-112721-v1-2-906-video-variacao"
   },
   "api_release": {
