@@ -1,7 +1,8 @@
 import { getAuthSessionToken } from './authSession';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
-type UploadResult = { ok?: boolean; uploadId?: string; name?: string; url?: string; status?: string; error?: string | null; detail?: string | null; debug?: unknown };
+export type CdnPurgeResult = { status: 'ok' | 'skipped' | 'error'; reason?: string };
+type UploadResult = { ok?: boolean; uploadId?: string; name?: string; url?: string; status?: string; error?: string | null; detail?: string | null; debug?: unknown; cdnPurge?: CdnPurgeResult | null };
 export class SynologyUploadError extends Error {
     debug?: unknown;
     uploadFailed: boolean;
@@ -63,6 +64,7 @@ export function productVideoFileName(sku: string): string {
 export async function uploadProductVideo(file: File, sku: string, options: {
     uploadId?: string; onAccepted?: (uploadId: string) => void;
     onProgress?: (progress: number, message: string) => void;
+    onCdnPurge?: (result: CdnPurgeResult | null) => void;
 } = {}): Promise<string> {
     validateProductVideo(file);
     const fileName = productVideoFileName(sku);
@@ -80,6 +82,7 @@ export async function uploadProductVideo(file: File, sku: string, options: {
     options.onProgress?.(92, `Gravando vídeo de ${code} no Synology...`);
     const status = await pollSynologyUploadStatus(uploadId, token);
     if (!status.url) throw new Error('O Synology não confirmou o endereço do vídeo.');
+    options.onCdnPurge?.(status.cdnPurge || null);
     options.onProgress?.(100, `Vídeo de ${code} enviado.`);
     return status.url;
 }

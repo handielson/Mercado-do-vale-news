@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Video, VideoOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { vpsApiService } from '../../services/vpsApiService';
-import { productVideoFileName, uploadProductVideo, validateProductVideo } from '../../services/productVideoUpload';
+import { productVideoFileName, uploadProductVideo, validateProductVideo, type CdnPurgeResult } from '../../services/productVideoUpload';
 
 // sku-video-upload-v1: envio do vídeo de cada variação direto da Página do Produto.
 // O arquivo é sempre gravado como <SKU>.mp4 no Synology (padrão lido pelo site e pelos marketplaces),
@@ -42,12 +42,22 @@ export const SkuVideoUpload: React.FC<{ sku?: string | null }> = ({ sku }) => {
         if (state.exists && !window.confirm(`Já existe um vídeo para ${code}. Substituir pelo arquivo "${file.name}"?`)) return;
         setState(s => ({ ...s, uploading: true, progress: 0, message: 'Enviando vídeo...' }));
         try {
-            const url = await uploadProductVideo(file, code, { onProgress: (progress, message) => setState(s => ({ ...s, progress, message })) });
+            let cdnPurge: CdnPurgeResult | null = null;
+            const url = await uploadProductVideo(file, code, {
+                onProgress: (progress, message) => setState(s => ({ ...s, progress, message })),
+                onCdnPurge: result => { cdnPurge = result; },
+            });
             const confirmed = await vpsApiService.checkVideoBySku(code, { noCache: true }).catch(() => null);
-            setState(s => ({ ...s, uploading: false, exists: true, url: confirmed?.url || url, progress: 100, message: '' }));
+            // ?v= abre o arquivo recém-gravado mesmo que alguma cópia antiga ainda esteja no CDN.
+            const freshUrl = `${(confirmed?.url || url).split('?')[0]}?v=${Date.now()}`;
+            setState(s => ({ ...s, uploading: false, exists: true, url: freshUrl, progress: 100, message: '' }));
             toast.success(`Vídeo de ${code} enviado`, {
                 description: file.name === target ? undefined : `"${file.name}" foi renomeado para ${target}`,
             });
+            const purge = cdnPurge as CdnPurgeResult | null;
+            if (purge && purge.status !== 'ok') {
+                toast.warning('O site pode mostrar o vídeo antigo por até 4h', { description: `Cache do Cloudflare não foi limpo: ${purge.reason || purge.status}` });
+            }
         } catch (error: any) {
             setState(s => ({ ...s, uploading: false, progress: 0, message: '' }));
             toast.error('Falha no envio do vídeo', { description: error?.message || 'Erro desconhecido' });

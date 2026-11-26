@@ -39638,6 +39638,7 @@ function serializeSynologyUploadStatus(job) {
     error: job.error || null,
     detail: job.detail || null,
     debug: job.debug || null,
+    cdnPurge: job.cdnPurge || null,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
@@ -39655,6 +39656,39 @@ fastify.get('/synology/upload-status', { preHandler: requireSyncKey }, async (re
 });
 
 // POST /synology/upload?folder=imagens|videos|arquivos
+// cdn-video-purge-v1: o Cloudflare guarda videos.mercadodovale.com.br/<SKU>.mp4 por 4h. Como a troca de vídeo
+// grava por cima do mesmo nome, sem limpar o cache o site seguiria mostrando o vídeo antigo.
+// Requer CLOUDFLARE_API_TOKEN (permissão Zone > Cache Purge) e CLOUDFLARE_ZONE_ID (ou Zone > Zone Read para descobrir).
+const CLOUDFLARE_PURGE_ZONE_NAME = 'mercadodovale.com.br';
+let cloudflarePurgeZoneIdCache = null;
+async function purgeCloudflareCdnUrls(urls) {
+  const token = String(process.env.CLOUDFLARE_API_TOKEN || '').trim();
+  const files = (urls || []).filter((url) => {
+    try { const host = new URL(url).hostname; return host === CLOUDFLARE_PURGE_ZONE_NAME || host.endsWith(`.${CLOUDFLARE_PURGE_ZONE_NAME}`); } catch { return false; }
+  });
+  if (!files.length) return { status: 'skipped', reason: 'url fora da zona do Cloudflare' };
+  if (!token) return { status: 'skipped', reason: 'CLOUDFLARE_API_TOKEN não configurado' };
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  try {
+    let zoneId = String(process.env.CLOUDFLARE_ZONE_ID || '').trim() || cloudflarePurgeZoneIdCache;
+    if (!zoneId) {
+      const zoneResp = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${CLOUDFLARE_PURGE_ZONE_NAME}`, { headers, signal: AbortSignal.timeout(8000) });
+      const zoneData = await zoneResp.json().catch(() => null);
+      zoneId = zoneData?.result?.[0]?.id || null;
+      if (!zoneId) return { status: 'error', reason: 'zona não encontrada; configure CLOUDFLARE_ZONE_ID' };
+      cloudflarePurgeZoneIdCache = zoneId;
+    }
+    const resp = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
+      method: 'POST', headers, body: JSON.stringify({ files }), signal: AbortSignal.timeout(8000),
+    });
+    const data = await resp.json().catch(() => null);
+    if (resp.ok && data?.success) return { status: 'ok', files };
+    return { status: 'error', reason: (data?.errors || []).map((e) => `${e.code}: ${e.message}`).join('; ') || `HTTP ${resp.status}` };
+  } catch (err) {
+    return { status: 'error', reason: err.message };
+  }
+}
+
 fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
   const folder = req.query.folder;
   const access = req.customerAccess || {};
@@ -39768,7 +39802,10 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async
             videoExistenceCache.set(videoCacheKey, { exists: true, url: cdnUrl, cachedAt: Date.now() });
           }
         }
+        const cdnPurge = folder === 'videos' ? await purgeCloudflareCdnUrls([cdnUrl]) : { status: 'skipped', reason: 'pasta sem cache a limpar' };
+        if (cdnPurge.status === 'error') console.warn(`[synology] Upload OK, mas a limpeza do cache do Cloudflare falhou para ${cdnUrl}: ${cdnPurge.reason}`);
         updateSynologyUploadStatus(uploadJob.id, {
+          cdnPurge,
           status: 'success',
           progress: 100,
           message: 'Upload concluido no Synology',

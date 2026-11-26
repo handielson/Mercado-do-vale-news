@@ -1,3 +1,10 @@
+# v1.2.908-video-cdn-purge
+
+Data: 26/11/2026. Branch: `main`. Status: **pendente** (site + API).
+Trocar vídeo agora limpa o cache do Cloudflare: o site mostra o vídeo novo em segundos, não 4h depois. Registro: `docs/versoes/2026-11-26-v1.2.908-video-cdn-purge.md`.
+
+---
+
 # v1.2.907-video-variacao-f5
 
 Data: 26/11/2026. Branch: `main`. Status: **publicada** (site, 26/11 ~11h38).

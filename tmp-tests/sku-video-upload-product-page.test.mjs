@@ -29,3 +29,34 @@ test('Página do Produto oferece envio de vídeo por SKU usando o envio canônic
   assert.match(ui, /accept="video\/mp4,\.mp4"/);
   assert.match(ui, /foi renomeado para/);
 });
+
+// cdn-video-purge-v1: trocar o vídeo precisa limpar a cópia antiga do Cloudflare.
+function purgeHelper(fetchImpl, env = {}) {
+  const server = fs.readFileSync('vps_server.js', 'utf8');
+  const start = server.indexOf("const CLOUDFLARE_PURGE_ZONE_NAME");
+  const end = server.indexOf("fastify.post('/synology/upload'");
+  assert.ok(start > 0 && end > start, 'helper de purge do Cloudflare sumiu do vps_server.js');
+  const ctx = { process: { env }, fetch: fetchImpl, URL, AbortSignal, JSON, String };
+  vm.runInNewContext(`${server.slice(start, end)}; this.purge = purgeCloudflareCdnUrls;`, ctx);
+  return ctx.purge;
+}
+
+test('upload de vídeo limpa o cache do Cloudflare do <SKU>.mp4', async () => {
+  const calls = [];
+  const purge = purgeHelper(async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => ({ success: true }) }; }, { CLOUDFLARE_API_TOKEN: 't', CLOUDFLARE_ZONE_ID: 'z1' });
+  const result = await purge(['https://videos.mercadodovale.com.br/REAL0001-01.mp4']);
+  assert.equal(result.status, 'ok');
+  assert.equal(calls[0].url, 'https://api.cloudflare.com/client/v4/zones/z1/purge_cache');
+  assert.deepEqual(JSON.parse(calls[0].init.body), { files: ['https://videos.mercadodovale.com.br/REAL0001-01.mp4'] });
+  const server = fs.readFileSync('vps_server.js', 'utf8');
+  assert.match(server, /folder === 'videos' \? await purgeCloudflareCdnUrls\(\[cdnUrl\]\)/);
+  assert.match(server, /cdnPurge: job\.cdnPurge \|\| null/);
+});
+
+test('sem token ou fora da zona, a limpeza é pulada sem quebrar o upload', async () => {
+  const purge = purgeHelper(async () => { throw new Error('não deveria chamar'); });
+  assert.equal((await purge(['https://videos.mercadodovale.com.br/X.mp4'])).status, 'skipped');
+  assert.equal((await purge(['https://imagens.xiaomipetrolina.com.br/X.jpg'])).status, 'skipped');
+  const failing = purgeHelper(async () => { throw new Error('timeout'); }, { CLOUDFLARE_API_TOKEN: 't', CLOUDFLARE_ZONE_ID: 'z' });
+  assert.equal((await failing(['https://videos.mercadodovale.com.br/X.mp4'])).status, 'error');
+});
