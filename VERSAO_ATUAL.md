@@ -1,6 +1,6 @@
 # v1.2.910-robo-rajada-sem-repeticao
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente** (robô n8n).
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 26/11 ~14h24).
 Robô não repete a lista de celulares quando o cliente manda duas mensagens seguidas; 1.079 produtos ganharam o vídeo no cadastro. Registro: `docs/versoes/2026-11-26-v1.2.910-robo-rajada-sem-repeticao.md`.
 
 ---
