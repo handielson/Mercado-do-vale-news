@@ -36947,6 +36947,20 @@ fastify.delete('/battery-healths/:id', { preHandler: requireSyncKey }, async (re
 const videoExistenceCache = new Map();
 const VIDEO_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutos
 
+// video-sku-case-v1: o Synology diferencia maiúsculas. SKU "Mo-689-Z" grava Mo-689-Z.mp4, mas a checagem
+// procurava só MO-689-Z.mp4 e dizia que não havia vídeo. Tenta primeiro o nome exato do SKU.
+async function findExactCaseSkuVideoUrl(sku, ext) {
+  const exactSku = String(sku || '').trim().replace(/\s+/g, '');
+  if (!exactSku || exactSku === exactSku.toUpperCase()) return null;
+  const url = `https://videos.mercadodovale.com.br/${encodeURIComponent(`${exactSku}${ext}`)}`;
+  try {
+    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(3000) });
+    return resp.ok ? url : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // GET /public/check-video?sku=SKU — verifica existência via Synology FileStation
 fastify.get('/public/check-video', async (req, reply) => {
   const sku = req.query.sku;
@@ -36959,6 +36973,13 @@ fastify.get('/public/check-video', async (req, reply) => {
 
   // Retorna do cache se ainda válido
   const cached = videoExistenceCache.get(cleanSku);
+  if (!(cached && cached.exists && (Date.now() - cached.cachedAt) < VIDEO_CACHE_TTL_MS)) {
+    const exactCaseUrl = await findExactCaseSkuVideoUrl(sku, ext); // video-sku-case-v1
+    if (exactCaseUrl) {
+      videoExistenceCache.set(cleanSku, { exists: true, url: exactCaseUrl, cachedAt: Date.now() });
+      return reply.send({ exists: true, url: exactCaseUrl });
+    }
+  }
   if (cached && (Date.now() - cached.cachedAt) < VIDEO_CACHE_TTL_MS) {
     return reply.send({ exists: cached.exists, ...(cached.url ? { url: cached.url } : {}) });
   }
@@ -40097,6 +40118,8 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
     const cleanSku = sku.trim().replace(/\s+/g, '').toUpperCase();
     const fileName = `${cleanSku}${ext}`;
     const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
+    const exactCaseUrl = await findExactCaseSkuVideoUrl(sku, ext); // video-sku-case-v1
+    if (exactCaseUrl) return { exists: true, url: exactCaseUrl };
 
     try {
       const controller = new AbortController();

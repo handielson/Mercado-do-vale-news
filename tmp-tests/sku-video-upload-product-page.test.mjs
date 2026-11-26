@@ -86,3 +86,18 @@ test('vídeo enviado preenche o video_url do produto do SKU sem apagar vídeo ex
   const server = fs.readFileSync('vps_server.js', 'utf8');
   assert.match(server, /folder === 'videos' \? await linkUploadedVideoToProductSku\(fileName, cdnUrl\)/);
 });
+
+// video-sku-case-v1: SKU com minúsculas (Mo-689-Z) tem o arquivo Mo-689-Z.mp4; procurar só em MAIÚSCULAS dava "sem vídeo".
+test('checagem de vídeo acha o arquivo com o SKU exato antes de cair para MAIÚSCULAS', async () => {
+  const server = fs.readFileSync('vps_server.js', 'utf8');
+  const start = server.indexOf('async function findExactCaseSkuVideoUrl');
+  const end = server.indexOf('// GET /public/check-video?sku=SKU');
+  assert.ok(start > 0 && end > start, 'findExactCaseSkuVideoUrl sumiu');
+  const heads = [];
+  const ctx = { fetch: async (url) => { heads.push(url); return { ok: url.endsWith('/Mo-689-Z.mp4') }; }, AbortSignal, String, encodeURIComponent };
+  vm.runInNewContext(`${server.slice(start, end)}; this.find = findExactCaseSkuVideoUrl;`, ctx);
+  assert.equal(await ctx.find('Mo-689-Z', '.mp4'), 'https://videos.mercadodovale.com.br/Mo-689-Z.mp4');
+  assert.equal(await ctx.find('REAL0001-01', '.mp4'), null, 'SKU já em maiúsculas segue o caminho antigo');
+  assert.equal(heads.length, 1);
+  assert.equal((server.match(/await findExactCaseSkuVideoUrl\(sku, ext\); \/\/ video-sku-case-v1/g) || []).length, 2, '/check-video e /public/check-video');
+});

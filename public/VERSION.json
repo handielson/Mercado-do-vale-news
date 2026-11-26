@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.910-robo-rajada-sem-repeticao",
+  "version": "v1.2.911-video-sku-minusculas",
   "date": "2026-11-26",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.910-robo-rajada-sem-repeticao",
+  "tag": "v1.2.911-video-sku-minusculas",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô: mensagens seguidas do cliente não geram mais a lista de celulares duplicada. Dados: 1.079 produtos com vídeo no Synology ganharam o video_url.",
+  "summary": "Vídeo de SKU com letras minúsculas (ex.: Mo-689-Z) passa a ser encontrado; 12 produtos nessa situação ligados ao vídeo.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -32,11 +32,11 @@
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-26-v1.2.910-robo-rajada-sem-repeticao.md"
+    "ver docs/versoes/2026-11-26-v1.2.911-video-sku-minusculas.md"
   ],
   "validations": [
-    "MDV_N8N_SALES_SNAPSHOT=<ativo> node --test tmp-tests/n8n-burst-dedupe.test.cjs (6/6, inclui reprodução do bug)",
-    "scripts/n8n-sales-regression-gate.cjs --snapshot <candidato> (152/152)"
+    "node --test tmp-tests/sku-video-upload-product-page.test.mjs (6/6)",
+    "node --check vps_server.js"
   ],
   "site_release": {
     "status": "sem mudança nesta versão",
@@ -44,7 +44,7 @@
     "previous": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5"
   },
   "api_release": {
-    "status": "sem mudança nesta versão",
+    "status": "pendente",
     "service": "mdv-api"
   },
   "nginx_release": {
@@ -110,7 +110,7 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "publicada",
+    "status": "sem mudança nesta versão",
     "workflow": "SkrkB4vyKVDnQ68t",
     "fingerprint": "07990648748bffa756e4fd01beef02c31c7a598e2abfb38c186394a16c37193c",
     "backup": "/root/n8n-backups/meta-attendance-2026-11-26T17-24-16-599Z-38702a13.aes256gcm.json"
