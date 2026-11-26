@@ -1,7 +1,7 @@
 {
   "version": "v1.2.915-cartao-maquininha",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.915-cartao-maquininha",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
@@ -110,8 +110,10 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "pendente",
-    "workflow": "SkrkB4vyKVDnQ68t"
+    "status": "publicada",
+    "workflow": "SkrkB4vyKVDnQ68t",
+    "fingerprint": "4fceef2361aef6daa098cfd9e12f0eca091d05e8f433a9d5ff6ad2163ec92962",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-26T18-59-06-157Z-ee356cd2.aes256gcm.json"
   },
   "db_release": {
     "status": "publicada",
