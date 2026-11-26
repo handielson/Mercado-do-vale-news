@@ -41,6 +41,12 @@ async function getWindowsPrintInventory() {
   }
   return inventory;
 }
+// central-print-linux-v1: no CCE (Linux/CUPS) o inventário vem do printer-driver (nomes iguais aos do Windows) e o
+// papel não precisa ser preparado: o PDF já vem no tamanho da etiqueta.
+async function getLinuxPrintInventory() {
+  const printers = await require('./printer-driver.cjs').getPrinters();
+  return printers.map(p => ({ name: p.name, status: 'ready', customSize: true, papers: [] }));
+}
 function writeJournal(file, record) {
   const temp = `${file}.tmp`;
   const fd = fs.openSync(temp, 'w', 0o600);
@@ -54,7 +60,7 @@ async function prepareWindowsPaper(job) {
     { windowsHide: true, timeout: 30000, maxBuffer: 1024 * 1024 });
   return JSON.parse(stdout.replace(/^\uFEFF/, '').trim());
 }
-async function executeJob({ job, inventory, directory, request, print, report, preparePaper = prepareWindowsPaper }) {
+async function executeJob({ job, inventory, directory, request, print, report, preparePaper = process.platform === 'win32' ? prepareWindowsPaper : null }) {
   if (!/^[a-f0-9-]{36}$/i.test(job.id)) throw new Error('ID de trabalho inválido.');
   const journalFile = path.join(directory, `${job.id}.json`);
   const pdfFile = path.join(directory, `${job.id}.pdf`);
@@ -72,7 +78,7 @@ async function executeJob({ job, inventory, directory, request, print, report, p
     const buffer = await request(`/jobs/${job.id}/pdf`, null, { pdf: true, claim: job.claimToken });
     if (hash(buffer) !== job.pdf_hash) throw new Error('PDF recebido não confere com o documento solicitado.');
     await validatePdf(buffer.toString('base64'), { widthMm: Number(job.width_mm), heightMm: Number(job.height_mm), pages: job.pages });
-    if (!options.paperKind) {
+    if (!options.paperKind && preparePaper) {
       const prepared = await preparePaper(job);
       if (!prepared?.printer?.startsWith('MDV Central ') || Math.abs(prepared.widthMm - job.width_mm) > 0.1 || Math.abs(prepared.heightMm - job.height_mm) > 0.1) throw new Error('Configuração do papel não confirmada.');
       options.printer = prepared.printer;
@@ -95,7 +101,7 @@ async function executeJob({ job, inventory, directory, request, print, report, p
   if (fs.existsSync(pdfFile)) fs.unlinkSync(pdfFile);
 }
 function startCentralPrintAgent({ env = process.env, directory = path.join(__dirname, 'central-print-journal'),
-  inventoryReader = getWindowsPrintInventory, print = (...args) => require('./printer-driver.cjs').print(...args), requestFetch = global.fetch } = {}) {
+  inventoryReader = process.platform === 'win32' ? getWindowsPrintInventory : getLinuxPrintInventory, print = (...args) => require('./printer-driver.cjs').print(...args), requestFetch = global.fetch } = {}) {
   if (!env.MDV_PRINT_DEVICE_TOKEN || !env.MDV_PRINT_API_URL) return null;
   const base = new URL(env.MDV_PRINT_API_URL);
   if (base.protocol !== 'https:' || base.username || base.password || base.pathname !== '/' || base.search || base.hash) {
@@ -149,4 +155,4 @@ function startCentralPrintAgent({ env = process.env, directory = path.join(__dir
   const timer = setInterval(() => void tick(), 15000);
   return { stop: () => clearInterval(timer), tick };
 }
-module.exports = { startCentralPrintAgent, executeJob, getWindowsPrintInventory, writeJournal };
+module.exports = { startCentralPrintAgent, executeJob, getWindowsPrintInventory, getLinuxPrintInventory, writeJournal };

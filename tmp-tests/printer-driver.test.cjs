@@ -26,3 +26,28 @@ test('opções do comprovante do ML (tamanho personalizado, sem escala)', () => 
     assert.deepEqual(lpArgs('a.pdf', { printer: 'A4', scale: 'shrink' }), ['-d', 'A4', '-o', 'fit-to-page', '--', 'a.pdf']);
     assert.deepEqual(parseLpstat('\n'), []);
 });
+
+test('printer-driver-v2: nome do Windows vira fila do CUPS; Marklife vai raw convertida', async () => {
+    const calls = [];
+    const env = { MDV_CUPS_PRINTERS: 'P50 Printer=P50:marklife;ZDesigner ZD220-203dpi ZPL=Zebra' };
+    const exec = async (cmd, args) => { calls.push([cmd, args]); return { stdout: 'Zebra\nP50\nOutra\n' }; };
+    const d = createPrinterDriver({ platform: 'linux', exec, env, encodeMarklife: async () => Buffer.from('p50') });
+    await d.print('/tmp/x.pdf', { printer: 'ZDesigner ZD220-203dpi ZPL', paperSize: '4x6', scale: 'fit' });
+    assert.deepEqual(calls[0], ['lp', ['-d', 'Zebra', '-o', 'media=Custom.100x150mm', '-o', 'fit-to-page', '--', '/tmp/x.pdf']]);
+    await d.print('/tmp/y.pdf', { printer: 'P50 Printer', orientation: 'landscape', scale: 'noscale' });
+    assert.deepEqual(calls[1], ['lp', ['-d', 'P50', '-o', 'raw', '--', '/tmp/y.pdf.p50.bin']]);
+    assert.deepEqual((await d.getPrinters()).map((p) => p.name), ['P50 Printer', 'ZDesigner ZD220-203dpi ZPL', 'Outra']);
+});
+
+test('marklife-p50-v1: girada 180° e encostada à direita, com início/fim do driver do Windows', () => {
+    const { encodePage, parsePbm } = require('../scripts/marklife-p50.cjs');
+    // 16 x 2 pontos: só o primeiro ponto (canto de cima à esquerda) preto
+    const pbm = Buffer.concat([Buffer.from('P4\n16 2\n'), Buffer.from([0x80, 0, 0, 0])]);
+    const out = encodePage(parsePbm(pbm));
+    assert.equal(out.slice(0, 7).toString('hex'), '1f70010a1f1151');
+    assert.equal(out.slice(7, 15).toString('hex'), '1d76300030000200');
+    const img = out.slice(15, 15 + 96);
+    assert.equal(img[48 + 47], 0x01); // vira o último ponto da última linha (canto oposto, lado direito)
+    assert.equal(img.reduce((a, b) => a + b, 0), 1);
+    assert.equal(out.slice(-5).toString('hex'), '1d0c1f1150');
+});
