@@ -23,7 +23,9 @@ test('Página do Produto oferece envio de vídeo por SKU usando o envio canônic
   const ui = fs.readFileSync('components/products/SkuVideoUpload.tsx', 'utf8');
   assert.match(ui, /uploadProductVideo\(file, code/);
   assert.match(ui, /productVideoFileName\(code\)/);
-  assert.match(ui, /checkVideoBySku\(code, \{ noCache: true \}\)/);
+  // F5 logo após o envio não pode reaproveitar o "não existe" guardado pelo navegador.
+  assert.equal((ui.match(/checkVideoBySku\(code, \{ noCache: true \}\)/g) || []).length, 2);
+  assert.doesNotMatch(ui, /checkVideoBySku\(code\)/);
   assert.match(ui, /accept="video\/mp4,\.mp4"/);
   assert.match(ui, /foi renomeado para/);
 });

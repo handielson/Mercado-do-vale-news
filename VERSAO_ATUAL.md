@@ -1,3 +1,10 @@
+# v1.2.907-video-variacao-f5
+
+Data: 26/11/2026. Branch: `main`. Status: **pendente** (site).
+Página do Produto: o vídeo enviado pela variação não some mais ao dar F5. Registro: `docs/versoes/2026-11-26-v1.2.907-video-variacao-f5.md`.
+
+---
+
 # v1.2.906-video-variacao
 
 Data: 26/11/2026. Branch: `main`. Status: **publicada** (site, 26/11 ~11h27).

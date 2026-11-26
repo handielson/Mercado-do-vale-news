@@ -17,7 +17,9 @@ export const SkuVideoUpload: React.FC<{ sku?: string | null }> = ({ sku }) => {
     useEffect(() => {
         if (!code) return;
         let alive = true;
-        vpsApiService.checkVideoBySku(code)
+        // Sem cache: o /check-video responde com max-age=300 e o navegador devolveria o "não existe"
+        // de antes do envio ao dar F5, escondendo um vídeo que já está salvo no Synology.
+        vpsApiService.checkVideoBySku(code, { noCache: true })
             .then(info => { if (alive) setState(s => ({ ...s, checking: false, exists: Boolean(info?.exists), url: info?.url || null })); })
             .catch(() => { if (alive) setState(s => ({ ...s, checking: false })); });
         return () => { alive = false; };
