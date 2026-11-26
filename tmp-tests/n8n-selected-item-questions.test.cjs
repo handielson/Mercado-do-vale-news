@@ -99,7 +99,8 @@ test('Pagamento: juros do cartão com a resposta da equipe e aceite da PayJoy pe
     return ctx;
   };
   const plain = run({ source: { conversationIntent: 'juros_cartao' }, payjoyPendingV5: false, payjoyAcceptV5: false });
-  assert.match(plain.output, /^No cartão o valor é sem desconto\. 💳\|\|O preço à vista \(Pix ou dinheiro\) já vem com desconto/);
+  // texto atualizado depois por card-machine-wording-v1 e card-machine-list-v1 (lista com emojis).
+  assert.match(plain.output, /^(?:No cartão o valor é sem desconto\. 💳\|\|O preço à vista \(Pix ou dinheiro\) já vem com desconto|💳 \*Cartão de crédito\*\|\|✅ Em até 12x na maquininha)/);
   const accept = run({ source: { conversationIntent: 'juros_cartao' }, payjoyPendingV5: true, payjoyAcceptV5: true });
   assert.match(accept.output, /\|\|\|Claro! 😊 Você faz a análise diretamente com a PayJoy/);
   assert.deepEqual(accept.remembered, ['awaiting_result']);

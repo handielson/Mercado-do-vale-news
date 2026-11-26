@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.915-cartao-maquininha",
+  "version": "v1.2.916-cartao-lista",
   "date": "2026-11-26",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.915-cartao-maquininha",
+  "tag": "v1.2.916-cartao-lista",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô: cartão é 'na maquininha' e 'não aceitamos cartão virtual' (saiu o 'presencial').",
+  "summary": "Robô: respostas de cartão em lista com emojis; 'não aceitamos cartão virtual nem pagamento por link'.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -32,10 +32,10 @@
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-26-v1.2.915-cartao-maquininha.md"
+    "ver docs/versoes/2026-11-26-v1.2.916-cartao-lista.md"
   ],
   "validations": [
-    "MDV_N8N_SALES_SNAPSHOT=<ativo> node --test tmp-tests/n8n-card-machine-wording.test.cjs (1/1)",
+    "MDV_N8N_SALES_SNAPSHOT=<ativo> node --test tmp-tests/n8n-card-machine-list.test.cjs (1/1)",
     "scripts/n8n-sales-regression-gate.cjs --snapshot <candidato> (152/152)"
   ],
   "site_release": {
@@ -110,10 +110,8 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "publicada",
-    "workflow": "SkrkB4vyKVDnQ68t",
-    "fingerprint": "4fceef2361aef6daa098cfd9e12f0eca091d05e8f433a9d5ff6ad2163ec92962",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-26T18-59-06-157Z-ee356cd2.aes256gcm.json"
+    "status": "pendente",
+    "workflow": "SkrkB4vyKVDnQ68t"
   },
   "db_release": {
     "status": "publicada",
