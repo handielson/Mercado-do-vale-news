@@ -1,6 +1,7 @@
 import type { MarketplaceSale } from '../services/adminMarketplaceSalesService';
 import { formatMarketplaceStatus } from '../services/adminMarketplaceSalesService';
 import type { CompanySettings } from '../types/companySettings';
+import { RECEIPT_SEPARATOR_HTML } from './receiptSeparator';
 
 const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((Number(value) || 0) / 100);
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -18,7 +19,7 @@ export function printMarketplaceSaleReceipt(sale: MarketplaceSale, settings: Com
   <header>${logo ? `<img src="${escapeHtml(logo)}" alt="${escapeHtml(settings.company_name)}">` : ''}<h1>${escapeHtml(settings.company_name || 'Mercado do Vale')}</h1><p>COMPROVANTE DE PEDIDO</p></header>
   <p><strong>Canal:</strong> ${escapeHtml(sale.channel_label)}</p><p><strong>Pedido:</strong> ${escapeHtml(sale.display_id || sale.external_id)}</p><p><strong>Data:</strong> ${created.toLocaleString('pt-BR')}</p><p><strong>Situação:</strong> ${escapeHtml(formatMarketplaceStatus(sale.status))}</p><p><strong>Cliente:</strong> ${escapeHtml(sale.customer_name)}</p>
   <table><tbody>${itemRows || '<tr><td>Itens não informados pelo marketplace.</td><td></td></tr>'}</tbody></table><div class="total"><span>TOTAL</span><span>${money(sale.total_cents)}</span></div>
-  <div class="footer">Comprovante emitido pelo sistema Mercado do Vale.</div></main><script>window.onload=()=>setTimeout(()=>window.print(),150)</script></body></html>`;
+  <div class="footer">Comprovante emitido pelo sistema Mercado do Vale.</div></main><script>window.onload=()=>setTimeout(()=>window.print(),150)</script>${RECEIPT_SEPARATOR_HTML}</body></html>`;
   const win = window.open('', '_blank', 'width=420,height=720');
   if (!win) throw new Error('Permita pop-ups para imprimir o comprovante.');
   win.document.write(html);

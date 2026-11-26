@@ -5,6 +5,7 @@ import { companySettingsService } from '../services/companySettingsService';
 const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',')}`;
 
 import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
+import { RECEIPT_SEPARATOR_HTML } from './receiptSeparator';
 
 function escapeHtml(value: string): string {
     return String(value || '')
@@ -202,7 +203,7 @@ window.onload = () => {
     setTimeout(() => { window.print(); }, 300);
 };
 </script>
-</body>
+${RECEIPT_SEPARATOR_HTML}</body>
 </html>`;
 
     const pw = window.open('', '_blank');

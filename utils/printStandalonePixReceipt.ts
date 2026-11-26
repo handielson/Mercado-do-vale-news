@@ -1,4 +1,5 @@
 import type { StandalonePixPayment } from '../types/standalonePix';
+import { RECEIPT_SEPARATOR_HTML } from './receiptSeparator';
 
 const fmt = (value: number) => `R$ ${(Number(value || 0) / 100).toFixed(2).replace('.', ',')}`;
 
@@ -59,7 +60,7 @@ export function printStandalonePixReceipt(pix: StandalonePixPayment): void {
 <script>
 window.onload = () => window.print();
 </script>
-</body>
+${RECEIPT_SEPARATOR_HTML}</body>
 </html>`;
 
   const printWindow = window.open('', '_blank');

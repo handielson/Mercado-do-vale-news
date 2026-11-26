@@ -6,6 +6,7 @@ import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 import { buildPaymentPresentation } from './salePresentation';
 import { formatBrazilDate, formatBrazilTime } from './brazilDateTime';
 import { PAYJOY_SALE_NOTE, isPayJoySale } from './saleInformation.js';
+import { RECEIPT_SEPARATOR_HTML } from './receiptSeparator';
 
 const fmt = (v: number) => `R$ ${(v / 100).toFixed(2).replace('.', ',')}`;
 
@@ -308,7 +309,7 @@ window.onload = () => {
     window.print();
 };
 </script>
-</body>
+${RECEIPT_SEPARATOR_HTML}</body>
 </html>`;
 
     const pw = printWindow || window.open('', '_blank');

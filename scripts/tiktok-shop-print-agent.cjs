@@ -10,7 +10,7 @@ const { prepareMercadoLivreSummaryPrinter } = require('./mercado-livre-print-age
 
 async function listWindowsPrinters(run = promisify(execFile)) {
   // printer-driver-v2: no Linux (CCE) a lista vem do CUPS, com os mesmos nomes do Windows.
-  if (process.platform !== 'win32') return require('./printer-driver.cjs').getPrinters();
+  if (process.platform !== 'win32' && arguments.length === 0) return require('./printer-driver.cjs').getPrinters();
   const { stdout } = await run('powershell.exe', [
     '-NoProfile', '-NonInteractive', '-Command', 'Get-Printer | Select-Object -ExpandProperty Name',
   ], { timeout: 10000, windowsHide: true });

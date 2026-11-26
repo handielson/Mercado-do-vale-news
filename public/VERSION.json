@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.916-cartao-lista",
+  "version": "v1.2.917-separador-comprovante",
   "date": "2026-11-26",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.916-cartao-lista",
-  "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
+  "tag": "v1.2.917-separador-comprovante",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Robô: respostas de cartão em lista com emojis; 'não aceitamos cartão virtual nem pagamento por link'.",
+  "summary": "Comprovantes térmicos (PDV, marketplace, conta, Pix) terminam com o separador ----------------------------; agente de etiquetas TikTok lista impressoras do CUPS no CCE.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -32,16 +32,16 @@
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-26-v1.2.916-cartao-lista.md"
+    "ver docs/versoes/2026-11-26-v1.2.917-separador-comprovante.md"
   ],
   "validations": [
-    "MDV_N8N_SALES_SNAPSHOT=<ativo> node --test tmp-tests/n8n-card-machine-list.test.cjs (1/1)",
-    "scripts/n8n-sales-regression-gate.cjs --snapshot <candidato> (152/152)"
+    "node --test tmp-tests/receipt-separator.test.cjs (5/5)",
+    "node --test tmp-tests/tiktok-auto-print.test.cjs tmp-tests/printer-driver.test.cjs"
   ],
   "site_release": {
-    "status": "sem mudança nesta versão",
-    "release": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
-    "previous": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5"
+    "status": "pendente",
+    "release": "pendente",
+    "previous": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge"
   },
   "api_release": {
     "status": "sem mudança nesta versão",
@@ -103,11 +103,9 @@
   "pending_previous": "v1.2.904-layout-celular publicada.",
   "print_agent_release": {
     "status": "publicada",
-    "host": "Lenovo DESKTOP-TEH0T2E",
-    "service": "shopee-auto-print (PM2)",
-    "commit": "09c504b1",
-    "deployed_at": "2026-11-13T12:07Z",
-    "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
+    "host": "CCE cotacao-servidor (192.168.1.21)",
+    "service": "impressao-mdv (systemd --user, linger)",
+    "note": "Zebra (CUPS Custom.100x150mm) e P50 Marklife (parallel:/dev/usb/lp0, raster próprio) saíram do Lenovo; no Lenovo o PM2 shopee-auto-print está parado e a tarefa agendada desativada. Comprovante continua no Lenovo."
   },
   "n8n_release": {
     "status": "publicada",
