@@ -55,6 +55,8 @@ function createMercadoLivreRequest({ apiUrl, syncKey, requestFetch = global.fetc
 }
 
 async function prepareMercadoLivreSummaryPrinter(printer, widthMm = ML_SUMMARY_WIDTH_MM, heightMm = ML_SUMMARY_HEIGHT_MM) {
+    // printer-driver-v1: no Linux (CUPS) o papel do comprovante vai direto como tamanho personalizado.
+    if (process.platform !== 'win32') return { printer, media: `Custom.${widthMm}x${heightMm}mm`, orientation: 'portrait', scale: 'noscale' };
     const helper = [
         path.join(__dirname, 'central-print-runtime', 'central-print-paper.exe'),
         path.resolve(__dirname, '..', '..', 'scripts', 'central-print-runtime', 'central-print-paper.exe'),
@@ -154,7 +156,7 @@ async function executeMercadoLivreJob({ job, settings, request, print, directory
 function startMercadoLivrePrintAgent({ apiUrl, syncKey, getSettings, getStockLocations,
     directory = path.join(__dirname, 'Etiquetas de envio'), journalDirectory = path.join(__dirname, 'mercado_livre_printed'),
     request = createMercadoLivreRequest({ apiUrl, syncKey }),
-    print = (...args) => require('pdf-to-printer').print(...args), logger = console, intervalMs = 60000 } = {}) {
+    print = (...args) => require('./printer-driver.cjs').print(...args), logger = console, intervalMs = 60000 } = {}) {
     if (!syncKey) throw new Error('Chave da API ausente para impressao Mercado Livre.');
     let running = false;
     const tick = async () => {

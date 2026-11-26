@@ -494,7 +494,7 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, connectio
             occurredAt: Date.now(),
         });
         fs.writeFileSync(receiptPath, receipt);
-        const ptp = require('pdf-to-printer');
+        const ptp = require('./printer-driver.cjs');
         await ptp.print(receiptPath, {
             printer: summaryPrinter,
             scale: 'shrink',
@@ -538,7 +538,7 @@ async function runPrintFlowTest() {
         throw new Error('Selecione e salve as duas impressoras térmicas antes de executar o teste.');
     }
 
-    const ptp = require('pdf-to-printer');
+    const ptp = require('./printer-driver.cjs');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const labelPath = path.join(shippingLabelsDir, `TESTE_${stamp}_etiqueta-10x15.pdf`);
     const summaryPath = path.join(shippingLabelsDir, `TESTE_${stamp}_resumo-separacao-80mm.pdf`);
@@ -613,7 +613,7 @@ function normalizePrinterNames(printers) {
 
 async function getLocalPrinterNames() {
     try {
-        const ptp = require('pdf-to-printer');
+        const ptp = require('./printer-driver.cjs');
         return normalizePrinterNames(await ptp.getPrinters());
     } catch (pdfToPrinterError) {
         if (process.platform !== 'win32') throw pdfToPrinterError;
@@ -752,7 +752,7 @@ function startLocalServer() {
                 res.end(JSON.stringify({ error: 'Não foi possível listar as impressoras do Windows.' }));
             });
         } else if (req.url === '/') {
-            const ptp = require('pdf-to-printer');
+            const ptp = require('./printer-driver.cjs');
             ptp.getPrinters().then(printers => {
                 const list = printers.map(p => `<li>${p.deviceId || p.name || p}</li>`).join('');
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
@@ -820,7 +820,7 @@ function startLocalServer() {
                     if (!connection) throw new Error('Conta Shopee não conectada ou inválida.');
                     const isIndividual = connection.sellerType === 'individual';
                     console.log(`[MANUAL PRINT ${connection.displayName}] Disparado para ${orderSn} (tipo: ${docType})`);
-                    const ptp = require('pdf-to-printer');
+                    const ptp = require('./printer-driver.cjs');
                     const settings = await getCompanySettings();
 
                     if ((docType === 'both' || docType === 'awb') && settings.shopee_printer_thermal) {
@@ -989,7 +989,7 @@ async function legacyRunLoop() {
             return;
         }
 
-        const ptp = require('pdf-to-printer');
+        const ptp = require('./printer-driver.cjs');
         
         for (const order of orders) {
             const { order_sn } = order;
@@ -1243,7 +1243,7 @@ async function runLoop() {
             return;
         }
         const connections = await getShopeePrintConnections();
-        const ptp = require('pdf-to-printer');
+        const ptp = require('./printer-driver.cjs');
         for (const connection of connections) {
             if (connection.id === 'primary' && !settings.shopee_access_token) continue;
             try {

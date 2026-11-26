@@ -95,7 +95,7 @@ async function executeJob({ job, inventory, directory, request, print, report, p
   if (fs.existsSync(pdfFile)) fs.unlinkSync(pdfFile);
 }
 function startCentralPrintAgent({ env = process.env, directory = path.join(__dirname, 'central-print-journal'),
-  inventoryReader = getWindowsPrintInventory, print = (...args) => require('pdf-to-printer').print(...args), requestFetch = global.fetch } = {}) {
+  inventoryReader = getWindowsPrintInventory, print = (...args) => require('./printer-driver.cjs').print(...args), requestFetch = global.fetch } = {}) {
   if (!env.MDV_PRINT_DEVICE_TOKEN || !env.MDV_PRINT_API_URL) return null;
   const base = new URL(env.MDV_PRINT_API_URL);
   if (base.protocol !== 'https:' || base.username || base.password || base.pathname !== '/' || base.search || base.hash) {

@@ -42,7 +42,7 @@ async function run({ directory, physical = false, summaryOnly = false,
     };
     const print = async (file, options) => {
         if (physical) {
-            await require('pdf-to-printer').print(file, options);
+            await require('./printer-driver.cjs').print(file, options);
             physicalSubmissions++;
         }
     };

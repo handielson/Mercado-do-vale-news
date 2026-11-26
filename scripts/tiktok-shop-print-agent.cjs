@@ -123,7 +123,7 @@ async function executeTikTokPrintJob({ job, settings, request, print, getStockLo
 }
 
 function startTikTokPrintAgent({ apiUrl, syncKey, getSettings, getStockLocations,
-  request = requestFactory(apiUrl, syncKey), print = (...args) => require('pdf-to-printer').print(...args),
+  request = requestFactory(apiUrl, syncKey), print = (...args) => require('./printer-driver.cjs').print(...args),
   listPrinters = listWindowsPrinters,
   directory = path.join(__dirname, 'Etiquetas de envio'),
   journalDirectory = path.join(__dirname, 'tiktok_shop_printed'), logger = console, intervalMs = 60000 } = {}) {
