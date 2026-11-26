@@ -53,18 +53,25 @@ export const pollSynologyUploadStatus = async (uploadId: string, token: string |
     throw new Error('O Synology ainda não confirmou o upload. Tente salvar novamente para consultar o envio pendente.');
 };
 
+// O vídeo de uma variação sempre se chama <SKU>.mp4 — o nome original do arquivo é descartado.
+export function productVideoFileName(sku: string): string {
+    const code = String(sku || '').trim();
+    if (!code || /[\s/\\?#\u0000-\u001f]/u.test(code)) throw new Error('O SKU definitivo da variação não é válido para nomear o vídeo.');
+    return `${code}.mp4`;
+}
+
 export async function uploadProductVideo(file: File, sku: string, options: {
     uploadId?: string; onAccepted?: (uploadId: string) => void;
     onProgress?: (progress: number, message: string) => void;
 } = {}): Promise<string> {
     validateProductVideo(file);
-    const code = String(sku || '').trim();
-    if (!code || /[\s/\\?#\u0000-\u001f]/u.test(code)) throw new Error('O SKU definitivo da variação não é válido para nomear o vídeo.');
+    const fileName = productVideoFileName(sku);
+    const code = fileName.replace(/\.mp4$/, '');
     const token = await getAuthSessionToken();
     let uploadId = options.uploadId;
     if (!uploadId) {
         const form = new FormData();
-        form.append('file', file, `${code}.mp4`);
+        form.append('file', file, fileName);
         const result = await uploadVideoWithProgress(form, token, pct => options.onProgress?.(pct, `Enviando vídeo de ${code}: ${pct}%`));
         if (!result.ok || !result.uploadId) throw new Error('A VPS não confirmou o job de envio do vídeo.');
         uploadId = result.uploadId;

@@ -23,6 +23,7 @@ import { ProductConditionBadge } from '../../../components/catalog/ProductCondit
 import { productCondition, productConditionLabel } from '../../../utils/productCondition.js';
 import { ChannelFeesButton, SkuChannelPricing } from '../../../components/products/ChannelPricingPanel';
 import { ModelVersionFinancials, useModelVersionGroups } from '../../../components/products/ModelVersionFinancials';
+import { SkuVideoUpload } from '../../../components/products/SkuVideoUpload';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -720,6 +721,7 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
                 <Printer className="h-3.5 w-3.5" />
                 Etiqueta
             </button>}
+            <SkuVideoUpload sku={product.sku} />
         </div>
     </div>
 );

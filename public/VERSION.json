@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.905-locais-familia",
-  "date": "2026-11-25",
-  "status": "publicada",
+  "version": "v1.2.906-video-variacao",
+  "date": "2026-11-26",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.905-locais-familia",
-  "release_vps": "/var/www/mdv-site/releases/20261125-104641-v1-2-905-locais-familia",
+  "tag": "v1.2.906-video-variacao",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "\"Onde está no estoque\" na família mostra os locais de cada variação (antes aparecia 0). Locais de 308 produtos acertados pelo saldo do Bling.",
+  "summary": "Página do Produto: botão de vídeo em cada variação (enviar/ver/trocar). O arquivo é sempre salvo como <SKU>.mp4, mesmo que tenha outro nome.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -29,18 +29,19 @@
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque.",
     "debit_fee": "Taxa do débito está 0% no cadastro de taxas: digitar a taxa real da maquininha."
   },
-  "site_source_base": "a0bc9b4",
+  "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-25-v1.2.905-locais-familia.md"
+    "ver docs/versoes/2026-11-26-v1.2.906-video-variacao.md"
   ],
   "validations": [
-    "tsc sem erro no ProductCard",
-    "reconciliação: 308 aplicados, 0 falhas, backup em /var/www/mdv-api/backups/stock-locations-reconcile-1795614356406.json"
+    "node --test tmp-tests/sku-video-upload-product-page.test.mjs tmp-tests/variation-video-upload.test.mjs (9/9)",
+    "tsc sem erro nos arquivos alterados",
+    "vite build ok"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261125-104641-v1-2-905-locais-familia",
-    "previous": "/var/www/mdv-site/releases/20261124-154723-v1-2-904-layout-celular"
+    "status": "pendente",
+    "release": "pendente",
+    "previous": "/var/www/mdv-site/releases/20261125-104641-v1-2-905-locais-familia"
   },
   "api_release": {
     "status": "sem mudança nesta versão",

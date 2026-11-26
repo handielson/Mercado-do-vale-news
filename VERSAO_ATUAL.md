@@ -1,3 +1,10 @@
+# v1.2.906-video-variacao
+
+Data: 26/11/2026. Branch: `main`. Status: **pendente** (site).
+Página do Produto: cada variação ganhou o botão de vídeo (enviar, ver e trocar). O vídeo é sempre gravado como `<SKU>.mp4`, mesmo se o arquivo vier com outro nome. Registro: `docs/versoes/2026-11-26-v1.2.906-video-variacao.md`.
+
+---
+
 # v1.2.905-locais-familia
 
 Data: 25/11/2026. Branch: `main`. Status: **publicada** (site `20261125-104641-v1-2-905-locais-familia`). API sem mudança.
