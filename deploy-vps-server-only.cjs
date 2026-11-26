@@ -850,6 +850,14 @@ async function main() {
     });
     conn.end(); return;
   }
+  if (process.argv.includes('--stock-write-offs-only') || process.argv.includes('--stock-write-offs-check')) {
+    await require('./scripts/deploy-stock-write-offs.cjs').deploy({appDir,apiProc,exec,root:__dirname,
+      checkOnly:process.argv.includes('--stock-write-offs-check'),
+      read: remote => withSftp(sftp => readRemoteText(sftp, remote)),
+      write: (remote, content) => withSftp(sftp => writeRemoteText(sftp, remote, content)),
+    });
+    conn.end(); return;
+  }
   if (process.argv.includes('--bling-stock-inbox-only') || process.argv.includes('--bling-stock-inbox-check')) {
     await require('./scripts/deploy-bling-stock-inbox.cjs').deploy({appDir,apiProc,exec,root:__dirname,
       checkOnly:process.argv.includes('--bling-stock-inbox-check'),

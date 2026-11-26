@@ -1,3 +1,10 @@
+# v1.2.918-baixa-estoque
+
+Data: 26/11/2026. Branch: `main`. Status: **pendente**.
+Baixa de estoque com saída no Bling (motivo e responsável nas observações). Registro: `docs/versoes/2026-11-26-v1.2.918-baixa-estoque.md`.
+
+---
+
 # v1.2.917-separador-comprovante
 
 Data: 26/11/2026. Branch: `main`. Status: **publicada** (site, 26/11 ~17h15).

@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.917-separador-comprovante",
+  "version": "v1.2.918-baixa-estoque",
   "date": "2026-11-26",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.917-separador-comprovante",
-  "release_vps": "/var/www/mdv-site/releases/20261126-171500-v1-2-917-separador-comprovante",
+  "tag": "v1.2.918-baixa-estoque",
+  "release_vps": "pendente",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Comprovantes térmicos (PDV, marketplace, conta, Pix) terminam com o separador ----------------------------; agente de etiquetas TikTok lista impressoras do CUPS no CCE.",
+  "summary": "Baixa de estoque (Produtos & Estoque → Baixa de estoque): avaria/descarte, uso na loja, brinde, perda, outro; saída no Bling com tipo, motivo e responsável nas observações.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -32,20 +32,20 @@
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-26-v1.2.917-separador-comprovante.md"
+    "ver docs/versoes/2026-11-26-v1.2.918-baixa-estoque.md"
   ],
   "validations": [
-    "node --test tmp-tests/receipt-separator.test.cjs (5/5)",
-    "node --test tmp-tests/tiktok-auto-print.test.cjs tmp-tests/printer-driver.test.cjs"
+    "node --test tmp-tests/stock-write-offs.test.cjs (8/8)"
   ],
   "site_release": {
-    "status": "publicada",
-    "release": "/var/www/mdv-site/releases/20261126-171500-v1-2-917-separador-comprovante",
-    "previous": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge"
+    "status": "pendente",
+    "release": "pendente",
+    "previous": "/var/www/mdv-site/releases/20261126-171500-v1-2-917-separador-comprovante"
   },
   "api_release": {
-    "status": "sem mudança nesta versão",
-    "service": "mdv-api"
+    "status": "publicada",
+    "service": "mdv-api",
+    "note": "stock-write-off-v1 (services/stockWriteOffs.cjs + rotas /stock-write-offs); backup /var/www/mdv-api/backups/stock-write-offs-1795733388301"
   },
   "nginx_release": {
     "status": "publicada",

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, X, Camera, ChevronDown, FilePenLine, Warehouse, ListChecks, BadgePercent, Wallet, ShieldCheck, Percent, Layers, ShoppingBasket, Music2, Handshake, Send, Landmark, UserCog, Calculator, Tv, Cloud, CloudCog, PackagePlus, RotateCcw } from 'lucide-react';
+import { PackageMinus, LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode, AlertTriangle, Wrench, PanelLeftClose, PanelLeftOpen, Menu as MenuIcon, X, Camera, ChevronDown, FilePenLine, Warehouse, ListChecks, BadgePercent, Wallet, ShieldCheck, Percent, Layers, ShoppingBasket, Music2, Handshake, Send, Landmark, UserCog, Calculator, Tv, Cloud, CloudCog, PackagePlus, RotateCcw } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -160,6 +160,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/products/storefronts', icon: <Globe size={18} />, label: 'Publicação nos sites', keywords: 'precos canais lojas publicar' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
         { to: '/admin/aparelhos', icon: <Smartphone size={18} />, label: 'Aparelhos', keywords: 'imei serial historico aparelho celular devolucao' },
+        { to: '/admin/estoque/baixas', icon: <PackageMinus size={18} />, label: 'Baixa de estoque', keywords: 'baixa avaria defeito lixo descarte uso na loja brinde perda retirada' },
         { to: '/admin/inventory/locations', icon: <Warehouse size={18} />, label: 'Locais de Estoque', keywords: 'depositos locais prateleira caixa balcao almoxarifado' },
         { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },
         { to: '/admin/inventory/print-list', icon: <ListChecks size={18} />, label: 'Lista de Impressão', keywords: 'lista de impressao separacao caixa imprimir ean sku conferencia' },

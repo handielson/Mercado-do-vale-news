@@ -103,6 +103,7 @@ const OnlineOrdersPage = lazy(() => import('../pages/admin/orders/OnlineOrdersPa
 const SerializedUnitsPage = lazy(() => import('../pages/admin/inventory/SerializedUnitsPage'));
 const UnitHistoryPage = lazy(() => import('../pages/admin/inventory/UnitHistoryPage'));
 const UnitTransferPage = lazy(() => import('../pages/admin/inventory/UnitTransferPage'));
+const StockWriteOffsPage = lazy(() => import('../pages/admin/inventory/StockWriteOffsPage'));
 const SEODashboardPage = lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
 const SEOBlacklistPage = lazy(() => import('../pages/admin/settings/SEOBlacklistPage').then(module => ({ default: module.SEOBlacklistPage })));
 const ReviewsPage = lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
@@ -517,6 +518,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><UnitHistoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/estoque/baixas",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><StockWriteOffsPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
