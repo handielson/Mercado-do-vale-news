@@ -1,10 +1,10 @@
 {
   "version": "v1.2.918-baixa-estoque",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.918-baixa-estoque",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261126-200500-v1-2-918-baixa-estoque",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Baixa de estoque (Produtos & Estoque → Baixa de estoque): avaria/descarte, uso na loja, brinde, perda, outro; saída no Bling com tipo, motivo e responsável nas observações.",
   "gestao_mdv_android": {
@@ -38,8 +38,8 @@
     "node --test tmp-tests/stock-write-offs.test.cjs (8/8)"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261126-200500-v1-2-918-baixa-estoque",
     "previous": "/var/www/mdv-site/releases/20261126-171500-v1-2-917-separador-comprovante"
   },
   "api_release": {
@@ -49,7 +49,7 @@
   },
   "nginx_release": {
     "status": "publicada",
-    "note": "print3d-site-production.conf (3dmv + gcode3d antigo) removido do nginx; backup em /root/backups-nginx/saida-3dmv-*.tgz"
+    "note": "rota /admin/estoque/baixas no bloco SPA de /etc/nginx/sites-available/mdv-site-production.conf (backup *.backup.*-baixas)"
   },
   "evolution_release": {
     "status": "publicada",
