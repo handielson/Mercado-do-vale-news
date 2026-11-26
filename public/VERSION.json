@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.912-kit-herda-video",
+  "version": "v1.2.913-robo-video-leve",
   "date": "2026-11-26",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.912-kit-herda-video",
+  "tag": "v1.2.913-robo-video-leve",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Kit de um produto só (ex.: 2CCRG6100 = 2× CCRG6100) herda automaticamente o vídeo do produto; checagem por SKU aceita o vídeo ligado no cadastro.",
+  "summary": "Robô: envio de vídeo não pesa mais a execução (Evolution devolvia o vídeo inteiro) e mensagem igual enviada nos últimos 5 min não é repetida por respostas paralelas.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -32,11 +32,11 @@
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-26-v1.2.912-kit-herda-video.md"
+    "ver docs/versoes/2026-11-26-v1.2.913-robo-video-leve.md"
   ],
   "validations": [
-    "node --test tmp-tests/sku-video-upload-product-page.test.mjs (8/8)",
-    "node --check vps_server.js"
+    "MDV_N8N_SALES_SNAPSHOT=<ativo> node --test tmp-tests/n8n-media-slim-dedupe.test.cjs (4/4, reproduz o bug)",
+    "scripts/n8n-sales-regression-gate.cjs --snapshot <candidato> (152/152)"
   ],
   "site_release": {
     "status": "sem mudança nesta versão",
@@ -44,9 +44,8 @@
     "previous": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5"
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "note": "patch sobre server.js de produção (backup backups/server.js.antes-v1.2.912-*); sync inicial: 5 kits com vídeo; /check-video?sku=2CCRG6100 => CCRG6100.mp4"
+    "status": "sem mudança nesta versão",
+    "service": "mdv-api"
   },
   "nginx_release": {
     "status": "publicada",
@@ -111,10 +110,8 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "sem mudança nesta versão",
-    "workflow": "SkrkB4vyKVDnQ68t",
-    "fingerprint": "07990648748bffa756e4fd01beef02c31c7a598e2abfb38c186394a16c37193c",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-26T17-24-16-599Z-38702a13.aes256gcm.json"
+    "status": "pendente",
+    "workflow": "SkrkB4vyKVDnQ68t"
   },
   "db_release": {
     "status": "publicada",
