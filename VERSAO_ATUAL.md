@@ -1,6 +1,6 @@
 # v1.2.917-separador-comprovante
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente**.
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (site, 26/11 ~17h15).
 Comprovantes térmicos terminam com o separador "----------------------------"; agente TikTok lista impressoras do CUPS no CCE. Registro: `docs/versoes/2026-11-26-v1.2.917-separador-comprovante.md`.
 
 ---

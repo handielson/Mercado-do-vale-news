@@ -1,10 +1,10 @@
 {
   "version": "v1.2.917-separador-comprovante",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.917-separador-comprovante",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261126-171500-v1-2-917-separador-comprovante",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Comprovantes térmicos (PDV, marketplace, conta, Pix) terminam com o separador ----------------------------; agente de etiquetas TikTok lista impressoras do CUPS no CCE.",
   "gestao_mdv_android": {
@@ -39,8 +39,8 @@
     "node --test tmp-tests/tiktok-auto-print.test.cjs tmp-tests/printer-driver.test.cjs"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261126-171500-v1-2-917-separador-comprovante",
     "previous": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge"
   },
   "api_release": {
