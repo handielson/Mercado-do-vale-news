@@ -28,7 +28,6 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque.",
     "debit_fee": "Taxa do débito está 0% no cadastro de taxas: digitar a taxa real da maquininha.",
-    "cloudflare_purge_token": "Criar token do Cloudflare (Cache Purge + Zone Read em mercadodovale.com.br) e pôr CLOUDFLARE_API_TOKEN no /var/www/mdv-api/.env",
     "server_js_fora_do_git": "server.js de produção tem bot-focus-product-v1, marketplace-sales-group-v1, bling-stock-inbox-v2, shopee-g-stock-v1, marketplace-auto-link-v1 que não estão no vps_server.js do git"
   },
   "site_source_base": "e9aef0b",
@@ -38,7 +37,8 @@
   "validations": [
     "node --test tmp-tests/sku-video-upload-product-page.test.mjs tmp-tests/variation-video-upload.test.mjs (11/11)",
     "node --check vps_server.js",
-    "tsc sem erro novo"
+    "tsc sem erro novo",
+    "token Cloudflare verificado (active, lê a zona); purge manual de REAL0001-01.mp4 ok, CDN passou a entregar o arquivo de 11h41"
   ],
   "site_release": {
     "status": "publicada",
@@ -48,7 +48,7 @@
   "api_release": {
     "status": "publicada",
     "service": "mdv-api",
-    "note": "patch sobre o server.js de produção; backup em /var/www/mdv-api/backups/server.js.antes-v1.2.908-*. Limpeza do cache fica inativa até CLOUDFLARE_API_TOKEN entrar no .env"
+    "note": "patch sobre o server.js de produção; backup em /var/www/mdv-api/backups/server.js.antes-v1.2.908-*. CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE_ID no .env desde 26/11 12h05 (token 'mdv-limpar-cache-video', sem expiração)"
   },
   "nginx_release": {
     "status": "publicada",
