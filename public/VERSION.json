@@ -1,7 +1,7 @@
 {
   "version": "v1.2.913-robo-video-leve",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.913-robo-video-leve",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
@@ -28,7 +28,8 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque.",
     "debit_fee": "Taxa do débito está 0% no cadastro de taxas: digitar a taxa real da maquininha.",
-    "server_js_fora_do_git": "server.js de produção tem bot-focus-product-v1, marketplace-sales-group-v1, bling-stock-inbox-v2, shopee-g-stock-v1, marketplace-auto-link-v1 que não estão no vps_server.js do git"
+    "server_js_fora_do_git": "server.js de produção tem bot-focus-product-v1, marketplace-sales-group-v1, bling-stock-inbox-v2, shopee-g-stock-v1, marketplace-auto-link-v1 que não estão no vps_server.js do git",
+    "robo_intencao": "Conversas 558781242854 e 558791545841 (26/11): 'Quanto tem de ram' depois do card virou lista completa; 'Aí não é o pro' virou não encontrado + lista; 'Tem juros a maquineta?' + 'Quero' respondeu só o 'Quero' (PayJoy). Falta regra de intenção e a política de juros do cartão."
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
@@ -110,8 +111,10 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "pendente",
-    "workflow": "SkrkB4vyKVDnQ68t"
+    "status": "publicada",
+    "workflow": "SkrkB4vyKVDnQ68t",
+    "fingerprint": "50f7836823f6d92c1b1ea17aeb9472d89125a159af3cf59b1f0fa5be2bf2096f",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-26T18-34-59-430Z-6b7d890a.aes256gcm.json"
   },
   "db_release": {
     "status": "publicada",
