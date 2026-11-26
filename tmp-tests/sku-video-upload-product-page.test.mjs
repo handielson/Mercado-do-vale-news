@@ -60,3 +60,29 @@ test('sem token ou fora da zona, a limpeza é pulada sem quebrar o upload', asyn
   const failing = purgeHelper(async () => { throw new Error('timeout'); }, { CLOUDFLARE_API_TOKEN: 't', CLOUDFLARE_ZONE_ID: 'z' });
   assert.equal((await failing(['https://videos.mercadodovale.com.br/X.mp4'])).status, 'error');
 });
+
+// product-video-url-link-v1: o robô só manda vídeo quando o produto tem video_url.
+function linkHelper(pool) {
+  const server = fs.readFileSync('vps_server.js', 'utf8');
+  const start = server.indexOf('async function linkUploadedVideoToProductSku');
+  const end = server.indexOf('// cdn-video-purge-v1: o Cloudflare guarda');
+  assert.ok(start > 0 && end > start, 'ligação do vídeo ao produto sumiu do vps_server.js');
+  const ctx = { pool, path: { parse: (f) => ({ name: String(f).replace(/\.[^.]+$/, '') }) }, String, Number };
+  vm.runInNewContext(`${server.slice(start, end)}; this.link = linkUploadedVideoToProductSku;`, ctx);
+  return ctx.link;
+}
+
+test('vídeo enviado preenche o video_url do produto do SKU sem apagar vídeo externo', async () => {
+  const queries = [];
+  const link = linkHelper({ query: async (sql, params) => { queries.push({ sql, params }); return [{ affectedRows: 1 }]; } });
+  const url = 'https://videos.mercadodovale.com.br/REAL0001-01.mp4';
+  assert.deepEqual({ ...(await link('REAL0001-01.mp4', url)) }, { status: 'ok', updated: 1 });
+  assert.match(queries[0].sql, /UPDATE products SET video_url = \?/);
+  assert.match(queries[0].sql, /video_url IS NULL OR TRIM\(video_url\) = '' OR video_url LIKE 'https:\/\/videos\.mercadodovale\.com\.br\/%'/);
+  assert.deepEqual([...queries[0].params], [url, 'REAL0001-01', url]);
+  assert.equal((await link('X.mp4', 'https://outro.host/X.mp4')).status, 'skipped');
+  const failing = linkHelper({ query: async () => { throw new Error('db off'); } });
+  assert.equal((await failing('A.mp4', 'https://videos.mercadodovale.com.br/A.mp4')).status, 'error');
+  const server = fs.readFileSync('vps_server.js', 'utf8');
+  assert.match(server, /folder === 'videos' \? await linkUploadedVideoToProductSku\(fileName, cdnUrl\)/);
+});

@@ -1,3 +1,10 @@
+# v1.2.909-video-no-produto
+
+Data: 26/11/2026. Branch: `main`. Status: **pendente** (API).
+O vídeo enviado pelo admin passa a ficar ligado ao produto (`video_url`); o robô manda o vídeo depois da foto no "celular em foco". Registro: `docs/versoes/2026-11-26-v1.2.909-video-no-produto.md`.
+
+---
+
 # v1.2.908-video-cdn-purge
 
 Data: 26/11/2026. Branch: `main`. Status: **publicada** (site + API, 26/11 ~11h51). Limpeza do cache do Cloudflare ativa (token no `.env` da API).

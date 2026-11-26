@@ -39639,6 +39639,7 @@ function serializeSynologyUploadStatus(job) {
     detail: job.detail || null,
     debug: job.debug || null,
     cdnPurge: job.cdnPurge || null,
+    productVideoLink: job.productVideoLink || null,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
@@ -39656,6 +39657,26 @@ fastify.get('/synology/upload-status', { preHandler: requireSyncKey }, async (re
 });
 
 // POST /synology/upload?folder=imagens|videos|arquivos
+// product-video-url-link-v1: o vídeo enviado (<SKU>.mp4) é gravado no video_url do produto daquele SKU.
+// O robô (celular em foco) e outros leitores usam video_url; sem isso o vídeo só existia pelo nome no Synology.
+// Não sobrescreve vídeo externo cadastrado à mão (só preenche vazio ou troca um link do próprio Synology).
+async function linkUploadedVideoToProductSku(fileName, cdnUrl) {
+  const sku = String(path.parse(String(fileName || '')).name || '').trim();
+  if (!sku || !/^https:\/\/videos\.mercadodovale\.com\.br\//.test(String(cdnUrl || ''))) return { status: 'skipped', updated: 0 };
+  try {
+    const [result] = await pool.query(
+      `UPDATE products SET video_url = ?
+        WHERE UPPER(REPLACE(TRIM(sku), ' ', '')) = UPPER(?)
+          AND (video_url IS NULL OR TRIM(video_url) = '' OR video_url LIKE 'https://videos.mercadodovale.com.br/%')
+          AND (video_url IS NULL OR video_url <> ?)`,
+      [cdnUrl, sku.replace(/\s+/g, ''), cdnUrl],
+    );
+    return { status: 'ok', updated: Number(result?.affectedRows || 0) };
+  } catch (err) {
+    return { status: 'error', updated: 0, reason: err.message };
+  }
+}
+
 // cdn-video-purge-v1: o Cloudflare guarda videos.mercadodovale.com.br/<SKU>.mp4 por 4h. Como a troca de vídeo
 // grava por cima do mesmo nome, sem limpar o cache o site seguiria mostrando o vídeo antigo.
 // Requer CLOUDFLARE_API_TOKEN (permissão Zone > Cache Purge) e CLOUDFLARE_ZONE_ID (ou Zone > Zone Read para descobrir).
@@ -39803,9 +39824,12 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async
           }
         }
         const cdnPurge = folder === 'videos' ? await purgeCloudflareCdnUrls([cdnUrl]) : { status: 'skipped', reason: 'pasta sem cache a limpar' };
+        const productVideoLink = folder === 'videos' ? await linkUploadedVideoToProductSku(fileName, cdnUrl) : null;
+        if (productVideoLink?.status === 'error') console.warn(`[synology] Vídeo ${fileName} enviado, mas não foi ligado ao produto: ${productVideoLink.reason}`);
         if (cdnPurge.status === 'error') console.warn(`[synology] Upload OK, mas a limpeza do cache do Cloudflare falhou para ${cdnUrl}: ${cdnPurge.reason}`);
         updateSynologyUploadStatus(uploadJob.id, {
           cdnPurge,
+          productVideoLink,
           status: 'success',
           progress: 100,
           message: 'Upload concluido no Synology',
