@@ -1,7 +1,7 @@
 {
   "version": "v1.2.912-kit-herda-video",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.912-kit-herda-video",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
@@ -44,8 +44,9 @@
     "previous": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5"
   },
   "api_release": {
-    "status": "pendente",
-    "service": "mdv-api"
+    "status": "publicada",
+    "service": "mdv-api",
+    "note": "patch sobre server.js de produção (backup backups/server.js.antes-v1.2.912-*); sync inicial: 5 kits com vídeo; /check-video?sku=2CCRG6100 => CCRG6100.mp4"
   },
   "nginx_release": {
     "status": "publicada",
