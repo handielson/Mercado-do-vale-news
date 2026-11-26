@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.909-video-no-produto",
+  "version": "v1.2.910-robo-rajada-sem-repeticao",
   "date": "2026-11-26",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.909-video-no-produto",
+  "tag": "v1.2.910-robo-rajada-sem-repeticao",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Vídeo enviado (<SKU>.mp4) passa a ser gravado no video_url do produto; o robô (celular em foco) volta a mandar o vídeo depois da foto.",
+  "summary": "Robô: mensagens seguidas do cliente não geram mais a lista de celulares duplicada. Dados: 1.079 produtos com vídeo no Synology ganharam o video_url.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -28,17 +28,15 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque.",
     "debit_fee": "Taxa do débito está 0% no cadastro de taxas: digitar a taxa real da maquininha.",
-    "server_js_fora_do_git": "server.js de produção tem bot-focus-product-v1, marketplace-sales-group-v1, bling-stock-inbox-v2, shopee-g-stock-v1, marketplace-auto-link-v1 que não estão no vps_server.js do git",
-    "video_url_backfill": "1.080 produtos têm <SKU>.mp4 no Synology mas video_url vazio (levantamento 26/11); aguardando ok do dono para preencher"
+    "server_js_fora_do_git": "server.js de produção tem bot-focus-product-v1, marketplace-sales-group-v1, bling-stock-inbox-v2, shopee-g-stock-v1, marketplace-auto-link-v1 que não estão no vps_server.js do git"
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-26-v1.2.909-video-no-produto.md"
+    "ver docs/versoes/2026-11-26-v1.2.910-robo-rajada-sem-repeticao.md"
   ],
   "validations": [
-    "node --test tmp-tests/sku-video-upload-product-page.test.mjs (5/5)",
-    "node --check vps_server.js",
-    "REAL0001-01.video_url preenchido em produção"
+    "MDV_N8N_SALES_SNAPSHOT=<ativo> node --test tmp-tests/n8n-burst-dedupe.test.cjs (6/6, inclui reprodução do bug)",
+    "scripts/n8n-sales-regression-gate.cjs --snapshot <candidato> (152/152)"
   ],
   "site_release": {
     "status": "sem mudança nesta versão",
@@ -46,9 +44,8 @@
     "previous": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5"
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "note": "patch sobre o server.js de produção (backup /var/www/mdv-api/backups/server.js.antes-v1.2.909-*), /status 200"
+    "status": "sem mudança nesta versão",
+    "service": "mdv-api"
   },
   "nginx_release": {
     "status": "publicada",
@@ -113,13 +110,8 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "publicada",
-    "workflow": "SkrkB4vyKVDnQ68t",
-    "before": "8c35f78780a7622d1c6e6f0b194931ec8ceafebb78762970cdfd263cd360d275",
-    "after": "9b04dc999c017e4f1443974cca77e3875a5166510b0622bccac593539f43b44d",
-    "applied_at": "2026-11-22T20:40Z",
-    "backup": "/root/n8n-backups/meta-attendance-2026-11-22T20-39-05-117Z-48638680.aes256gcm.json",
-    "note": "model-waiting-stock-v1 v2 (emojis) no prompt do Especialista - Vendas."
+    "status": "pendente",
+    "workflow": "SkrkB4vyKVDnQ68t"
   },
   "db_release": {
     "status": "publicada",
