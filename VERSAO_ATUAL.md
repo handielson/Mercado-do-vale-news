@@ -1,6 +1,6 @@
 # v1.2.908-video-cdn-purge
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente** (site + API).
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (site + API, 26/11 ~11h51). Limpeza do cache ativa quando o token do Cloudflare entrar no `.env` da API.
 Trocar vídeo agora limpa o cache do Cloudflare: o site mostra o vídeo novo em segundos, não 4h depois. Registro: `docs/versoes/2026-11-26-v1.2.908-video-cdn-purge.md`.
 
 ---
