@@ -1,7 +1,7 @@
 {
   "version": "v1.2.909-video-no-produto",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.909-video-no-produto",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
@@ -28,7 +28,8 @@
     "store_coordinates": "Cadastrar company_settings.address_lat/address_lng da loja para o robô mandar o pino nativo na retirada (hoje sai o link do Maps).",
     "ncm_bling": "412 de 3.129 produtos ativos do Bling com NCM vazio/inválido/extinto (150 com estoque). Lista na Sheet https://claude.ai/artifact/6NDwmUX2uZtJuG89TrUGZo; corrigir no cadastro do Bling, começando pelos com estoque.",
     "debit_fee": "Taxa do débito está 0% no cadastro de taxas: digitar a taxa real da maquininha.",
-    "server_js_fora_do_git": "server.js de produção tem bot-focus-product-v1, marketplace-sales-group-v1, bling-stock-inbox-v2, shopee-g-stock-v1, marketplace-auto-link-v1 que não estão no vps_server.js do git"
+    "server_js_fora_do_git": "server.js de produção tem bot-focus-product-v1, marketplace-sales-group-v1, bling-stock-inbox-v2, shopee-g-stock-v1, marketplace-auto-link-v1 que não estão no vps_server.js do git",
+    "video_url_backfill": "1.080 produtos têm <SKU>.mp4 no Synology mas video_url vazio (levantamento 26/11); aguardando ok do dono para preencher"
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
@@ -36,7 +37,8 @@
   ],
   "validations": [
     "node --test tmp-tests/sku-video-upload-product-page.test.mjs (5/5)",
-    "node --check vps_server.js"
+    "node --check vps_server.js",
+    "REAL0001-01.video_url preenchido em produção"
   ],
   "site_release": {
     "status": "sem mudança nesta versão",
@@ -44,8 +46,9 @@
     "previous": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5"
   },
   "api_release": {
-    "status": "pendente",
-    "service": "mdv-api"
+    "status": "publicada",
+    "service": "mdv-api",
+    "note": "patch sobre o server.js de produção (backup /var/www/mdv-api/backups/server.js.antes-v1.2.909-*), /status 200"
   },
   "nginx_release": {
     "status": "publicada",

@@ -1,6 +1,6 @@
 # v1.2.909-video-no-produto
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente** (API).
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (API, 26/11 ~14h25).
 O vídeo enviado pelo admin passa a ficar ligado ao produto (`video_url`); o robô manda o vídeo depois da foto no "celular em foco". Registro: `docs/versoes/2026-11-26-v1.2.909-video-no-produto.md`.
 
 ---
