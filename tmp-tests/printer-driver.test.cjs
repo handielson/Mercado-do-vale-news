@@ -51,3 +51,25 @@ test('marklife-p50-v1: girada 180° e encostada à direita, com início/fim do d
     assert.equal(img.reduce((a, b) => a + b, 0), 1);
     assert.equal(out.slice(-5).toString('hex'), '1d0c1f1150');
 });
+
+test('printer-driver-v3: impressora adiada guarda o trabalho e imprime quando ganha fila', async () => {
+  const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+  const { createPrinterDriver } = require('../scripts/printer-driver.cjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pend-'));
+  const pdf = path.join(dir, 'resumo.pdf'); fs.writeFileSync(pdf, '%PDF-1.4 teste');
+  const calls = [];
+  const env = { MDV_CUPS_PRINTERS: 'ZDesigner ZD220-203dpi ZPL=Zebra', MDV_CUPS_DEFER: 'Comprovante', MDV_PRINT_PENDING_DIR: path.join(dir, 'pend') };
+  const exec = async (cmd, args) => { calls.push([cmd, ...args]); return { stdout: cmd === 'lpstat' ? 'Zebra\nP50\n' : '' }; };
+  const d = createPrinterDriver({ platform: 'linux', exec, env });
+  assert.ok((await d.getPrinters()).some((p) => p.name === 'Comprovante'));
+  await d.print(pdf, { printer: 'Comprovante', media: 'Custom.80x120mm' });
+  assert.strictEqual(calls.filter((c) => c[0] === 'lp').length, 0);
+  assert.strictEqual(fs.readdirSync(env.MDV_PRINT_PENDING_DIR).length, 2);
+  env.MDV_CUPS_PRINTERS += ';Comprovante=Recibo';
+  await d.getPrinters();
+  const lp = calls.filter((c) => c[0] === 'lp');
+  assert.strictEqual(lp.length, 1);
+  assert.deepStrictEqual(lp[0].slice(1, 5), ['-d', 'Recibo', '-o', 'media=Custom.80x120mm']);
+  assert.strictEqual(fs.readdirSync(env.MDV_PRINT_PENDING_DIR).length, 0);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

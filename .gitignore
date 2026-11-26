@@ -103,3 +103,6 @@ scripts/central-print-journal/
 
 # MCP clients keep credentials only in private local configuration.
 /.cursor/mcp.json
+
+# printer-driver-v3: trabalhos guardados até a impressora existir no servidor
+scripts/impressao_pendente/
