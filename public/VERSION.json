@@ -1,10 +1,10 @@
 {
   "version": "v1.2.906-video-variacao",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.906-video-variacao",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20261126-112721-v1-2-906-video-variacao",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
   "summary": "Página do Produto: botão de vídeo em cada variação (enviar/ver/trocar). O arquivo é sempre salvo como <SKU>.mp4, mesmo que tenha outro nome.",
   "gestao_mdv_android": {
@@ -36,11 +36,12 @@
   "validations": [
     "node --test tmp-tests/sku-video-upload-product-page.test.mjs tmp-tests/variation-video-upload.test.mjs (9/9)",
     "tsc sem erro nos arquivos alterados",
-    "vite build ok"
+    "vite build ok",
+    "produção: /VERSION.json = v1.2.906 e botão \"Enviar vídeo\" visível na Página do Produto"
   ],
   "site_release": {
-    "status": "pendente",
-    "release": "pendente",
+    "status": "publicada",
+    "release": "/var/www/mdv-site/releases/20261126-112721-v1-2-906-video-variacao",
     "previous": "/var/www/mdv-site/releases/20261125-104641-v1-2-905-locais-familia"
   },
   "api_release": {

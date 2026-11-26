@@ -1,6 +1,6 @@
 # v1.2.906-video-variacao
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente** (site).
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (site, 26/11 ~11h27).
 Página do Produto: cada variação ganhou o botão de vídeo (enviar, ver e trocar). O vídeo é sempre gravado como `<SKU>.mp4`, mesmo se o arquivo vier com outro nome. Registro: `docs/versoes/2026-11-26-v1.2.906-video-variacao.md`.
 
 ---
