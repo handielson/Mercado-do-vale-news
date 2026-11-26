@@ -99,5 +99,38 @@ test('checagem de vídeo acha o arquivo com o SKU exato antes de cair para MAIÚ
   assert.equal(await ctx.find('Mo-689-Z', '.mp4'), 'https://videos.mercadodovale.com.br/Mo-689-Z.mp4');
   assert.equal(await ctx.find('REAL0001-01', '.mp4'), null, 'SKU já em maiúsculas segue o caminho antigo');
   assert.equal(heads.length, 1);
-  assert.equal((server.match(/await findExactCaseSkuVideoUrl\(sku, ext\); \/\/ video-sku-case-v1/g) || []).length, 2, '/check-video e /public/check-video');
+  assert.equal((server.match(/await findExactCaseSkuVideoUrl\(sku, ext\)/g) || []).length, 2, '/check-video e /public/check-video');
+});
+
+// kit-video-inherit-v1: kit de um produto só (2CCRG6100 = 2× CCRG6100) herda o vídeo do produto.
+function kitHelpers(pool, fetchImpl = async () => ({ ok: true })) {
+  const server = fs.readFileSync('vps_server.js', 'utf8');
+  const start = server.indexOf('async function syncSingleProductKitVideos');
+  const end = server.indexOf('// video-sku-case-v1: o Synology diferencia maiúsculas.');
+  assert.ok(start > 0 && end > start, 'helpers do kit sumiram');
+  const ctx = { pool, fetch: fetchImpl, AbortSignal, String, Number, console: { log() {}, warn() {} } };
+  vm.runInNewContext(`${server.slice(start, end)}; this.sync = syncSingleProductKitVideos; this.linked = findLinkedProductVideoUrl;`, ctx);
+  return ctx;
+}
+
+test('kit de um produto só herda o vídeo sem sobrescrever vídeo próprio do kit', async () => {
+  const sqls = [];
+  const { sync } = kitHelpers({ query: async (sql) => { sqls.push(sql); return [{ affectedRows: 5 }]; } });
+  assert.deepEqual({ ...(await sync()) }, { status: 'ok', updated: 5 });
+  assert.match(sqls[0], /HAVING COUNT\(DISTINCT child_product_id\) = 1/);
+  assert.match(sqls[0], /WHERE \(k\.video_url IS NULL OR TRIM\(k\.video_url\) = ''\)/);
+  const failing = kitHelpers({ query: async () => { throw new Error('db off'); } });
+  assert.equal((await failing.sync()).status, 'error');
+});
+
+test('checagem por SKU aceita o vídeo ligado no cadastro quando o arquivo existe', async () => {
+  const url = 'https://videos.mercadodovale.com.br/CCRG6100.mp4';
+  const ok = kitHelpers({ query: async () => [[{ video_url: url }]] }, async () => ({ ok: true }));
+  assert.equal(await ok.linked('2CCRG6100'), url);
+  const missingFile = kitHelpers({ query: async () => [[{ video_url: url }]] }, async () => ({ ok: false }));
+  assert.equal(await missingFile.linked('2CCRG6100'), null);
+  const server = fs.readFileSync('vps_server.js', 'utf8');
+  assert.equal((server.match(/await syncSingleProductKitVideos\(\); \/\/ kit-video-inherit-v1/g) || []).length, 3, 'POST/PUT /combos e upload');
+  assert.match(server, /setInterval\(\(\) => void syncSingleProductKitVideos\(\), 60 \* 60 \* 1000\)/);
+  assert.equal((server.match(/await findLinkedProductVideoUrl\(sku\)/g) || []).length, 2, '/check-video e /public/check-video');
 });

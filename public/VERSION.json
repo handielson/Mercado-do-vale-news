@@ -1,12 +1,12 @@
 {
-  "version": "v1.2.911-video-sku-minusculas",
+  "version": "v1.2.912-kit-herda-video",
   "date": "2026-11-26",
-  "status": "publicada",
+  "status": "pendente",
   "branch": "main",
-  "tag": "v1.2.911-video-sku-minusculas",
+  "tag": "v1.2.912-kit-herda-video",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
   "release_print3d_vps": "/var/www/print3d-site/releases/20261014-220101-gcode3d-domain-verified",
-  "summary": "Vídeo de SKU com letras minúsculas (ex.: Mo-689-Z) passa a ser encontrado; 12 produtos nessa situação ligados ao vídeo.",
+  "summary": "Kit de um produto só (ex.: 2CCRG6100 = 2× CCRG6100) herda automaticamente o vídeo do produto; checagem por SKU aceita o vídeo ligado no cadastro.",
   "gestao_mdv_android": {
     "version_name": "0.14.0",
     "version_code": 67
@@ -32,10 +32,10 @@
   },
   "site_source_base": "e9aef0b",
   "changed_files": [
-    "ver docs/versoes/2026-11-26-v1.2.911-video-sku-minusculas.md"
+    "ver docs/versoes/2026-11-26-v1.2.912-kit-herda-video.md"
   ],
   "validations": [
-    "node --test tmp-tests/sku-video-upload-product-page.test.mjs (6/6)",
+    "node --test tmp-tests/sku-video-upload-product-page.test.mjs (8/8)",
     "node --check vps_server.js"
   ],
   "site_release": {
@@ -44,9 +44,8 @@
     "previous": "/var/www/mdv-site/releases/20261126-113751-v1-2-907-video-variacao-f5"
   },
   "api_release": {
-    "status": "publicada",
-    "service": "mdv-api",
-    "note": "patch sobre server.js de produção (backup backups/server.js.antes-v1.2.911-*); /check-video?sku=Mo-689-Z => exists true"
+    "status": "pendente",
+    "service": "mdv-api"
   },
   "nginx_release": {
     "status": "publicada",

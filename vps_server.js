@@ -29666,6 +29666,7 @@ fastify.post('/combos', { preHandler: requireSyncKey }, async (req, reply) => {
     }
 
     await connection.commit();
+    await syncSingleProductKitVideos(); // kit-video-inherit-v1
     reply.code(201).send({ ok: true, id });
   } catch (err) {
     await connection.rollback();
@@ -29742,6 +29743,7 @@ fastify.put('/combos/:id', { preHandler: requireSyncKey }, async (req, reply) =>
     }
 
     await connection.commit();
+    await syncSingleProductKitVideos(); // kit-video-inherit-v1
     reply.send({ ok: true, id: comboId });
   } catch (err) {
     await connection.rollback();
@@ -36947,6 +36949,53 @@ fastify.delete('/battery-healths/:id', { preHandler: requireSyncKey }, async (re
 const videoExistenceCache = new Map();
 const VIDEO_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutos
 
+// kit-video-inherit-v1: kit de um produto só (ex.: 2CCRG6100 = 2× CCRG6100) herda o vídeo do produto.
+// Só preenche kit sem vídeo; vídeo próprio do kit (enviado com o SKU do kit) nunca é trocado.
+// Kits com produtos diferentes (capa + película) não herdam: não há um vídeo que represente o kit.
+async function syncSingleProductKitVideos() {
+  try {
+    const [result] = await pool.query(
+      `UPDATE products k
+         JOIN (SELECT combo_product_id, MIN(child_product_id) AS child_id
+                 FROM product_combos
+                GROUP BY combo_product_id
+               HAVING COUNT(DISTINCT child_product_id) = 1) single_kit ON single_kit.combo_product_id = k.id
+         JOIN products c ON c.id = single_kit.child_id
+          SET k.video_url = TRIM(c.video_url)
+        WHERE (k.video_url IS NULL OR TRIM(k.video_url) = '')
+          AND c.video_url IS NOT NULL AND TRIM(c.video_url) <> ''`,
+    );
+    const updated = Number(result?.affectedRows || 0);
+    if (updated) console.log(`[kit-video-inherit-v1] ${updated} kit(s) receberam o vídeo do produto`);
+    return { status: 'ok', updated };
+  } catch (err) {
+    console.warn('[kit-video-inherit-v1] falhou:', err.message);
+    return { status: 'error', updated: 0, reason: err.message };
+  }
+}
+
+// kit-video-inherit-v1: a checagem por SKU também aceita o vídeo ligado no cadastro (kit herdado,
+// SKU com espaço/barra que virou outro nome de arquivo), confirmando que o arquivo existe.
+async function findLinkedProductVideoUrl(sku) {
+  const exactSku = String(sku || '').trim();
+  if (!exactSku) return null;
+  try {
+    const [rows] = await pool.query(
+      `SELECT video_url FROM products
+        WHERE (sku = ? OR UPPER(REPLACE(TRIM(sku), ' ', '')) = UPPER(REPLACE(?, ' ', '')))
+          AND video_url LIKE 'https://videos.mercadodovale.com.br/%'
+        LIMIT 1`,
+      [exactSku, exactSku],
+    );
+    const url = String(rows?.[0]?.video_url || '').trim();
+    if (!url) return null;
+    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(3000) });
+    return resp.ok ? url : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // video-sku-case-v1: o Synology diferencia maiúsculas. SKU "Mo-689-Z" grava Mo-689-Z.mp4, mas a checagem
 // procurava só MO-689-Z.mp4 e dizia que não havia vídeo. Tenta primeiro o nome exato do SKU.
 async function findExactCaseSkuVideoUrl(sku, ext) {
@@ -36974,7 +37023,7 @@ fastify.get('/public/check-video', async (req, reply) => {
   // Retorna do cache se ainda válido
   const cached = videoExistenceCache.get(cleanSku);
   if (!(cached && cached.exists && (Date.now() - cached.cachedAt) < VIDEO_CACHE_TTL_MS)) {
-    const exactCaseUrl = await findExactCaseSkuVideoUrl(sku, ext); // video-sku-case-v1
+    const exactCaseUrl = await findExactCaseSkuVideoUrl(sku, ext) || await findLinkedProductVideoUrl(sku); // video-sku-case-v1, kit-video-inherit-v1
     if (exactCaseUrl) {
       videoExistenceCache.set(cleanSku, { exists: true, url: exactCaseUrl, cachedAt: Date.now() });
       return reply.send({ exists: true, url: exactCaseUrl });
@@ -39846,6 +39895,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrCustomer }, async
         }
         const cdnPurge = folder === 'videos' ? await purgeCloudflareCdnUrls([cdnUrl]) : { status: 'skipped', reason: 'pasta sem cache a limpar' };
         const productVideoLink = folder === 'videos' ? await linkUploadedVideoToProductSku(fileName, cdnUrl) : null;
+        if (productVideoLink?.updated) await syncSingleProductKitVideos(); // kit-video-inherit-v1
         if (productVideoLink?.status === 'error') console.warn(`[synology] Vídeo ${fileName} enviado, mas não foi ligado ao produto: ${productVideoLink.reason}`);
         if (cdnPurge.status === 'error') console.warn(`[synology] Upload OK, mas a limpeza do cache do Cloudflare falhou para ${cdnUrl}: ${cdnPurge.reason}`);
         updateSynologyUploadStatus(uploadJob.id, {
@@ -40130,7 +40180,8 @@ fastify.get('/check-video', { config: { rateLimit: { max: 180, timeWindow: '1 mi
         return { exists: true, url: canonicalUrl };
       }
       if (headResp.status === 404) {
-        return { exists: false, url: null };
+        const linkedUrl = await findLinkedProductVideoUrl(sku); // kit-video-inherit-v1
+        return linkedUrl ? { exists: true, url: linkedUrl } : { exists: false, url: null };
       }
     } catch (headErr) {
       console.warn('[check-video] HEAD direto falhou, tentando Synology curto:', headErr.message);
@@ -43953,6 +44004,9 @@ runMigrations().then(async () => {
   };
   setTimeout(() => void enqueueAllTikTokStockLinks('startup_reconciliation'), 2 * 60 * 1000).unref?.();
   setInterval(() => void enqueueAllTikTokStockLinks('hourly_reconciliation'), 60 * 60 * 1000).unref?.();
+  // kit-video-inherit-v1: kits criados pelo Bling ou por outra tela também herdam o vídeo (a cada hora).
+  setTimeout(() => void syncSingleProductKitVideos(), 90 * 1000).unref?.();
+  setInterval(() => void syncSingleProductKitVideos(), 60 * 60 * 1000).unref?.();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);

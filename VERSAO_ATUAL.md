@@ -1,3 +1,10 @@
+# v1.2.912-kit-herda-video
+
+Data: 26/11/2026. Branch: `main`. Status: **pendente** (API).
+Kit de um produto só herda o vídeo do produto automaticamente. Registro: `docs/versoes/2026-11-26-v1.2.912-kit-herda-video.md`.
+
+---
+
 # v1.2.911-video-sku-minusculas
 
 Data: 26/11/2026. Branch: `main`. Status: **publicada** (API, 26/11 ~14h45).
