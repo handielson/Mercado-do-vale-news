@@ -1,6 +1,6 @@
 # v1.2.914-robo-pergunta-do-aparelho
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente** (robô n8n).
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (robô n8n, 26/11 ~15h50).
 Robô responde RAM/versão do aparelho mostrado no card e juros do cartão, sem mandar a lista. Registro: `docs/versoes/2026-11-26-v1.2.914-robo-pergunta-do-aparelho.md`.
 
 ---

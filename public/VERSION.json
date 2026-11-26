@@ -1,7 +1,7 @@
 {
   "version": "v1.2.914-robo-pergunta-do-aparelho",
   "date": "2026-11-26",
-  "status": "pendente",
+  "status": "publicada",
   "branch": "main",
   "tag": "v1.2.914-robo-pergunta-do-aparelho",
   "release_vps": "/var/www/mdv-site/releases/20261126-115129-v1-2-908-video-cdn-purge",
@@ -111,8 +111,10 @@
     "note": "git pull --ff-only + npm install --omit=dev + pm2 restart/save; primeiro ciclo já registra \"nova tentativa automática em 5 minutos\"."
   },
   "n8n_release": {
-    "status": "pendente",
-    "workflow": "SkrkB4vyKVDnQ68t"
+    "status": "publicada",
+    "workflow": "SkrkB4vyKVDnQ68t",
+    "fingerprint": "1d54027c203fc36ca912d62d2f175bcb91bdfaea8330a6b7097432071607a6cb",
+    "backup": "/root/n8n-backups/meta-attendance-2026-11-26T18-49-56-233Z-bb549ea2.aes256gcm.json"
   },
   "db_release": {
     "status": "publicada",
