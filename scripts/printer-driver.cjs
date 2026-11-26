@@ -5,7 +5,8 @@
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 
-const PAPER = { '4x6': 'w288h432', A4: 'A4', a4: 'A4' };
+// Etiqueta de envio: o rolo da loja é 100 x 150 mm (o 4x6 de 101,6 x 152,4 cortava a borda de baixo na Zebra ZD220).
+const PAPER = { '4x6': 'Custom.100x150mm', A4: 'A4', a4: 'A4' };
 
 function lpArgs(file, options = {}) {
     const args = [];

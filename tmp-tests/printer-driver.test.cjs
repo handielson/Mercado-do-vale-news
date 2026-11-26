@@ -16,7 +16,7 @@ test('Linux manda para o CUPS (lp) com papel 4x6 e ajuste', async () => {
     const calls = [];
     const d = createPrinterDriver({ platform: 'linux', exec: async (cmd, args) => { calls.push([cmd, args]); return { stdout: 'Zebra\nEpson_P50\n' }; } });
     await d.print('/tmp/et.pdf', { printer: 'Zebra', paperSize: '4x6', scale: 'fit' });
-    assert.deepEqual(calls[0], ['lp', ['-d', 'Zebra', '-o', 'media=w288h432', '-o', 'fit-to-page', '--', '/tmp/et.pdf']]);
+    assert.deepEqual(calls[0], ['lp', ['-d', 'Zebra', '-o', 'media=Custom.100x150mm', '-o', 'fit-to-page', '--', '/tmp/et.pdf']]);
     assert.deepEqual(await d.getPrinters(), [{ deviceId: 'Zebra', name: 'Zebra' }, { deviceId: 'Epson_P50', name: 'Epson_P50' }]);
 });
 
