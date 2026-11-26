@@ -1,6 +1,6 @@
 # v1.2.911-video-sku-minusculas
 
-Data: 26/11/2026. Branch: `main`. Status: **pendente** (API).
+Data: 26/11/2026. Branch: `main`. Status: **publicada** (API, 26/11 ~14h45).
 Vídeos de SKU com minúsculas voltam a ser encontrados; auditoria dos 576 produtos sem vídeo. Registro: `docs/versoes/2026-11-26-v1.2.911-video-sku-minusculas.md`.
 
 ---
