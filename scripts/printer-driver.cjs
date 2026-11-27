@@ -56,7 +56,39 @@ function createPrinterDriver({ platform = process.platform, exec = promisify(exe
     // O trabalho é guardado em MDV_PRINT_PENDING_DIR e sai sozinho quando a impressora ganhar fila no MDV_CUPS_PRINTERS.
     const deferred = () => String(env.MDV_CUPS_DEFER || '').split(/[;,]/).map((n) => n.trim()).filter(Boolean);
     const pendingDir = () => env.MDV_PRINT_PENDING_DIR || path.join(__dirname, 'impressao_pendente');
-    const isDeferred = (name) => deferred().includes(String(name || '')) && !map()[name];
+    const isDeferred = (name) => deferred().includes(String(name || '')) && !map()[name] && !remotes()[name];
+    // printer-driver-v4: impressora "remota" (MDV_REMOTE_PRINTERS) fica em outro computador da loja (ex. Comprovante no Lenovo).
+    // "Comprovante=Lenovo@192.168.1.30:C:/ProgramData/MercadoDoVale/comprovante-entrada": o PDF e as opções vão por scp
+    // (chave MDV_REMOTE_PRINT_KEY) e o comprovante-entrada.cjs de lá imprime. Sem conexão, guarda e reenvia depois.
+    const remotes = () => {
+        const out = {};
+        for (const part of String(env.MDV_REMOTE_PRINTERS || '').split(';').map((p) => p.trim()).filter(Boolean)) {
+            const eq = part.indexOf('=');
+            const m = eq > 0 ? /^([^@:\s]+@[^:\s]+):(.+)$/.exec(part.slice(eq + 1).trim()) : null;
+            if (m) out[part.slice(0, eq).trim()] = { host: m[1], dir: m[2].replace(/\/+$/, '') };
+        }
+        return out;
+    };
+    const sendRemote = async (file, options, target) => {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const ssh = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new'];
+        if (env.MDV_REMOTE_PRINT_KEY) ssh.unshift('-i', env.MDV_REMOTE_PRINT_KEY);
+        const meta = `${file}.${id}.json`;
+        fs.writeFileSync(meta, JSON.stringify({ options, file: path.basename(String(file)), at: new Date().toISOString() }));
+        try {
+            // o .json vai por último: lá ele é o sinal de que o PDF chegou inteiro.
+            await exec('scp', [...ssh, '-q', String(file), `${target.host}:${target.dir}/${id}.pdf`], { timeout: 60000 });
+            await exec('scp', [...ssh, '-q', meta, `${target.host}:${target.dir}/${id}.json`], { timeout: 60000 });
+        } finally { fs.rmSync(meta, { force: true }); }
+    };
+    const stash = (file, options, why) => {
+        const dir = pendingDir();
+        fs.mkdirSync(dir, { recursive: true });
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        fs.copyFileSync(file, path.join(dir, `${id}.pdf`));
+        fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({ options, file: path.basename(String(file)), at: new Date().toISOString() }));
+        console.warn(`[IMPRESSORA] ${options.printer}: ${why}; ${path.basename(String(file))} guardado para imprimir depois.`);
+    };
     let flushing = false;
     const flush = async () => {
         const dir = pendingDir();
@@ -77,6 +109,8 @@ function createPrinterDriver({ platform = process.platform, exec = promisify(exe
         return sent;
     };
     const printNow = async (file, options = {}) => {
+        const remoto = remotes()[options.printer];
+        if (remoto) return sendRemote(file, options, remoto);
         const alvo = map()[options.printer];
         const opts = alvo ? { ...options, printer: alvo.queue } : options;
         if (alvo?.kind === 'marklife') {
@@ -93,16 +127,12 @@ function createPrinterDriver({ platform = process.platform, exec = promisify(exe
         pendingDir,
         flush,
         async print(file, options = {}) {
-            if (isDeferred(options.printer)) {
-                const dir = pendingDir();
-                fs.mkdirSync(dir, { recursive: true });
-                const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                fs.copyFileSync(file, path.join(dir, `${id}.pdf`));
-                fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({ options, file: path.basename(String(file)), at: new Date().toISOString() }));
-                console.warn(`[IMPRESSORA] ${options.printer} ainda não está neste servidor: ${path.basename(String(file))} guardado para imprimir depois.`);
+            if (isDeferred(options.printer)) return stash(file, options, 'ainda não está neste servidor');
+            await flush().catch((e) => console.warn('[IMPRESSORA] pendentes:', e.message));
+            if (remotes()[options.printer]) {
+                try { await printNow(file, options); } catch (e) { stash(file, options, `sem conexão com ${remotes()[options.printer].host} (${String(e.message).split('\n')[0].slice(0, 120)})`); }
                 return;
             }
-            await flush().catch((e) => console.warn('[IMPRESSORA] pendentes:', e.message));
             await printNow(file, options);
         },
         // nomes iguais aos do Windows para as filas mapeadas; as outras filas do CUPS com o próprio nome
@@ -114,7 +144,8 @@ function createPrinterDriver({ platform = process.platform, exec = promisify(exe
             const nomes = Object.entries(m).filter(([, v]) => filas.includes(v.queue)).map(([nome]) => nome);
             const soltas = filas.filter((f) => !Object.values(m).some((v) => v.queue === f));
             const adiadas = deferred().filter((n) => isDeferred(n));
-            return [...nomes, ...soltas, ...adiadas].map((name) => ({ deviceId: name, name }));
+            const remotas = Object.keys(remotes()).filter((n) => !nomes.includes(n) && !adiadas.includes(n));
+            return [...nomes, ...soltas, ...adiadas, ...remotas].map((name) => ({ deviceId: name, name }));
         },
         async getDefaultPrinter() {
             const { stdout } = await exec('lpstat', ['-d'], { timeout: 15000 }).catch(() => ({ stdout: '' }));

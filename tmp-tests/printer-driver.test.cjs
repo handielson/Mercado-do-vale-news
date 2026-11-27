@@ -73,3 +73,28 @@ test('printer-driver-v3: impressora adiada guarda o trabalho e imprime quando ga
   assert.strictEqual(fs.readdirSync(env.MDV_PRINT_PENDING_DIR).length, 0);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('printer-driver-v4: impressora remota manda PDF e depois o .json por scp; sem conexão guarda e reenvia', async () => {
+  const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+  const { createPrinterDriver } = require('../scripts/printer-driver.cjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rem-'));
+  const pdf = path.join(dir, 'resumo.pdf'); fs.writeFileSync(pdf, '%PDF-1.4 teste');
+  const calls = []; let offline = true;
+  const env = { MDV_CUPS_PRINTERS: 'ZDesigner ZD220-203dpi ZPL=Zebra', MDV_REMOTE_PRINTERS: 'Comprovante=Lenovo@192.168.1.30:C:/ProgramData/MercadoDoVale/comprovante-entrada',
+    MDV_REMOTE_PRINT_KEY: '/k', MDV_PRINT_PENDING_DIR: path.join(dir, 'pend') };
+  const exec = async (cmd, args) => { calls.push([cmd, ...args]); if (cmd === 'scp' && offline) throw new Error('ssh: connect timed out'); return { stdout: cmd === 'lpstat' ? 'Zebra\n' : '' }; };
+  const d = createPrinterDriver({ platform: 'linux', exec, env });
+  assert.ok((await d.getPrinters()).some((p) => p.name === 'Comprovante'));
+  await d.print(pdf, { printer: 'Comprovante', media: 'Custom.90x100mm' });
+  assert.strictEqual(fs.readdirSync(env.MDV_PRINT_PENDING_DIR).length, 2);
+  offline = false; calls.length = 0;
+  await d.getPrinters();
+  const scp = calls.filter((c) => c[0] === 'scp');
+  assert.strictEqual(scp.length, 2);
+  assert.match(scp[0].at(-1), /^Lenovo@192\.168\.1\.30:C:\/ProgramData\/MercadoDoVale\/comprovante-entrada\/.+\.pdf$/);
+  assert.match(scp[1].at(-1), /\.json$/);
+  assert.ok(scp[0].includes('/k'));
+  assert.strictEqual(fs.readdirSync(env.MDV_PRINT_PENDING_DIR).length, 0);
+  assert.strictEqual(calls.filter((c) => c[0] === 'lp').length, 0);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
